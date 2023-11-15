@@ -1,0 +1,99 @@
+# workflow params
+num_predict_batch_process: 4
+num_gen_winning_prob_cal_data_processes: 12
+predict_batch_size: 8
+game_loop_thread_multiple: 2.3
+eval_task_num_games: 1000
+update_model_bb_per_100_thres: 5.
+is_mcts_use_batch: True
+# train process params
+first_train_data_step: 50
+train_per_step: 2
+eval_model_per_step: 5000
+log_step_num: 200
+
+# game params
+num_mcts_simulation_per_step: 200
+mcts_tau: 1.
+
+# model params
+num_bins: 11
+model_param_dict:
+    n_observation: 5
+    n_actions: 4
+    num_output_class: 21
+    device: 'cuda:0'
+    embedding_dim: 16
+    positional_embedding_dim: 8
+    num_layers: 1
+    historical_action_sequence_length: 16
+    epsilon: 0.05
+    epsilon_max: 0.8
+    gamma: 0.9
+    batch_size: 16
+    learning_rate: 0.0003
+    num_bins: 11
+    save_train_data: True
+
+# simulation params
+simulation_recurrent_params:
+  0:
+    -
+      -
+        - 1
+        - 0
+        - False
+      -
+        - 1
+        - 0
+        - False
+      -
+        - 1
+        - 0
+        - True
+      -
+        - 4
+        - 5
+        - True
+    - 98000
+  1:
+    -
+      -
+        - 1
+        - 0
+        - True
+      -
+        - 1
+        - 0
+        - True
+      -
+        - 2
+        - 45
+        - True
+    - 97290
+  2:
+    -
+      -
+        - 1
+        - 0
+        - True
+      -
+        - 1
+        - 0
+        - False
+      -
+        - 1
+        - 0
+        - True
+    - 45540
+  3:
+    -
+      -
+        - 1
+        - 0
+        - False
+      -
+        - 1
+        - 0
+        - True
+    - 990

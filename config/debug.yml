@@ -1,0 +1,54 @@
+# workflow params
+num_predict_batch_process: 2
+num_gen_winning_prob_cal_data_processes: 4
+predict_batch_size: 4
+game_loop_thread_multiple: 2.5
+eval_task_num_games: 10
+# train process params
+first_train_data_step: 10
+train_per_step: 1
+eval_model_per_step: 100
+log_step_num: 5
+
+# game params
+num_mcts_simulation_per_step: 20
+
+# model params
+num_bins: 11
+model_param_dict:
+    device: 'cpu'
+    embedding_dim: 16
+    positional_embedding_dim: 8
+    num_layers: 1
+    batch_size: 4
+
+# simulation params
+simulation_recurrent_params:
+  0:
+    -
+      -
+        - 7
+        - 100
+        - True
+    - 100
+  1:
+    -
+      -
+        - 4
+        - 100
+        - True
+    - 100
+  2:
+    -
+      -
+        - 3
+        - 100
+        - True
+    - 100
+  3:
+    -
+      -
+        - 2
+        - 100
+        - True
+    - 100
