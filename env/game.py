@@ -282,8 +282,13 @@ class GameEnv(object):
         self.card_play_init(seed=seed)
 
         # no more than one ONBOARD player after blind bet
-        next_player_name = self.get_next_player_name(self.acting_player_name)
-        if self.acting_player_name is None or next_player_name is None:
+        # 盲注导致allin的情况，不好整合训练数据，暂时认为和模型训练无关，所以直接结束游戏。
+        # 这是一个corner case，有bug
+        num_player_onboard = 0
+        for player in self.players.values():
+            if player.status == PlayerStatus.ONBOARD:
+                num_player_onboard += 1
+        if num_player_onboard <= 1:
             self.finish_game()
             self.reset()
 
@@ -466,9 +471,6 @@ class GameEnv(object):
             self.acting_player_name = self.get_next_player_name(self.acting_player_name)
             self.game_infoset = self.update_get_infoset()
 
-        # todo: debug error
-        if self.players[self.acting_player_name].status == PlayerStatus.ALLIN and not self.game_over:
-            logging.error(self.players)
         return current_round, acting_player_name
 
     @staticmethod
