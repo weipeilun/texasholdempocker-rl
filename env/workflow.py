@@ -446,7 +446,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, model, game_eval_data_list_
                     observation = observation_
                 else:
                     game_finished_reward_queue.put((game_id, reward))
-                    logging.info(f'Evaluation for game {game_id}, eval_game_loop_thread id:{thread_name}')
+                    logging.info(f'Evaluation finished for game {game_id}, eval_game_loop_thread id:{thread_name}')
                     break
 
             game_id = None

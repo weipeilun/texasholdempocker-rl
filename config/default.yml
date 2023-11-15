@@ -6,6 +6,7 @@ game_loop_thread_multiple: 2.3
 eval_task_num_games: 1000
 update_model_bb_per_100_thres: 5.
 is_mcts_use_batch: True
+
 # train process params
 first_train_data_step: 50
 train_per_step: 2
@@ -15,7 +16,7 @@ log_step_num: 100
 # game params
 small_blind: 25
 big_blind: 50
-num_mcts_simulation_per_step: 500
+num_mcts_simulation_per_step: 3000
 mcts_c_puct: 10.
 mcts_tau: 1.
 
@@ -26,9 +27,9 @@ model_param_dict:
     n_actions: 4
     num_output_class: 21
     device: 'cuda:0'
-    embedding_dim: 16
-    positional_embedding_dim: 8
-    num_layers: 1
+    embedding_dim: 256
+    positional_embedding_dim: 128
+    num_layers: 4
     historical_action_sequence_length: 16
     epsilon: 0.05
     epsilon_max: 0.8
