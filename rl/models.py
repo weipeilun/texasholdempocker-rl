@@ -53,58 +53,6 @@ class EnvEmbedding(nn.Module):
             current_start_idx += num_dims
         self.field_embedding = nn.Embedding(num_embeddings=num_starters + sum(item[1] for item in field_dim_list), embedding_dim=embedding_dim)
 
-        self.figure = nn.Embedding(num_embeddings=len(CardFigure) + 1, embedding_dim=embedding_dim)
-        self.decor = nn.Embedding(num_embeddings=len(CardDecor) + 1, embedding_dim=embedding_dim)
-
-        # all 5 rounds + settle round + `not a round`
-        self.game_round = nn.Embedding(num_embeddings=5 + 1 + 1, embedding_dim=embedding_dim)
-
-        # all players + `not a player`
-        self.player_role = nn.Embedding(num_embeddings=MAX_PLAYER_NUMBER + 1, embedding_dim=embedding_dim)
-        self.player_status = nn.Embedding(num_embeddings=len(PlayerStatus), embedding_dim=embedding_dim)
-        self.player_action = nn.Embedding(num_embeddings=len(PlayerActions), embedding_dim=embedding_dim)
-
-        self.player_values1 = nn.Embedding(num_embeddings=num_bins + 1, embedding_dim=embedding_dim)
-        self.player_values2 = nn.Embedding(num_embeddings=num_bins + 1, embedding_dim=embedding_dim)
-        self.player_values3 = nn.Embedding(num_embeddings=num_bins + 1, embedding_dim=embedding_dim)
-        self.player_values4 = nn.Embedding(num_embeddings=num_bins + 1, embedding_dim=embedding_dim)
-        self.player_values5 = nn.Embedding(num_embeddings=num_bins + 2, embedding_dim=embedding_dim)
-        self.player_values6 = nn.Embedding(num_embeddings=num_bins + 2, embedding_dim=embedding_dim)
-        self.player_values_list = [
-            self.player_values1,
-            self.player_values2,
-            self.player_values3,
-            self.player_values4,
-            self.player_values5,
-            self.player_values6,
-        ]
-
-        self.default_player_status_idx = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * (len(PlayerStatus) - 1)), requires_grad=False)
-        self.default_player_field_idx1 = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * num_bins), requires_grad=False)
-        self.default_player_field_idx2 = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * num_bins), requires_grad=False)
-        self.default_player_field_idx3 = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * num_bins), requires_grad=False)
-        self.default_player_field_idx4 = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * num_bins), requires_grad=False)
-        self.default_player_field_idx5 = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * (num_bins + 1)), requires_grad=False)
-        self.default_player_field_idx6 = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * (num_bins + 1)), requires_grad=False)
-        self.default_player_field_idx_list = [
-            self.default_player_field_idx1,
-            self.default_player_field_idx2,
-            self.default_player_field_idx3,
-            self.default_player_field_idx4,
-            self.default_player_field_idx5,
-            self.default_player_field_idx6,
-        ]
-
-        self.default_game_round_idx = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * 6), requires_grad=False)
-        self.default_player_role_idx = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * MAX_PLAYER_NUMBER), requires_grad=False)
-        self.default_player_action_idx = nn.Parameter((torch.ones((1, ), dtype=torch.int32) * (len(PlayerActions) - 1)), requires_grad=False)
-        self.player_action_value_idx = nn.Parameter(torch.arange(4, 10), requires_grad=False)
-        # 补位的value以0值初始，可训练
-        self.default_player_action_values = nn.Parameter(torch.zeros((self.player_action_value_idx.shape[0], 1), dtype=torch.float32))
-
-        self.starter_embedding = nn.Embedding(num_embeddings=num_starters, embedding_dim=embedding_dim)
-        self.starter_embedding_idx = nn.Parameter(torch.arange(num_starters).unsqueeze(0), requires_grad=False)
-
         card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
         num_segment_diff_by_card = len(card_segments) * 2 - max(card_segments) - 1
 
