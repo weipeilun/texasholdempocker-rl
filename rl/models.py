@@ -18,11 +18,40 @@ class EnvEmbedding(nn.Module):
         self.do_position_embedding = do_position_embedding
         self.positional_embedding_dim = positional_embedding_dim
         self.embedding_sequence_len = embedding_sequence_len
+        self.num_starters = num_starters
         self.num_bins = num_bins
         self.num_player_fields = num_player_fields
         self.device = device
 
         assert self.embedding_dim > 0 and self.historical_action_sequence_length > 0, ValueError(f'embedding_dim({self.embedding_dim}) and historical_action_sequence_length({self.historical_action_sequence_length}) must greater than 0.')
+
+        # starters
+        # all 5 rounds + settle round + `not a round`
+        # all players + `not a player`
+        # figures
+        # decors
+        # player status
+        # bins of player status values
+        field_dim_list = [(1, 5 + 1 + 1),
+                              (1, MAX_PLAYER_NUMBER + 1),
+                              (7 * 2, len(CardFigure) + 1),
+                              (7 * 2, len(CardDecor) + 1),
+                              (2, len(PlayerStatus)),
+                              (2, num_bins + 1),
+                              (2, num_bins + 1),
+                              (2, num_bins + 1),
+                              (2, num_bins + 1),
+                              (2, num_bins + 2),
+                              (2, num_bins + 2)
+                              ]
+        self.starter_idx_list = list(range(num_starters))
+        current_start_idx = num_starters
+        self.field_start_idx_list = list()
+        for num_fields, num_dims in field_dim_list:
+            for _ in range(num_fields):
+                self.field_start_idx_list.append(current_start_idx)
+            current_start_idx += num_dims
+        self.field_embedding = nn.Embedding(num_embeddings=num_starters + sum(item[1] for item in field_dim_list), embedding_dim=embedding_dim)
 
         self.figure = nn.Embedding(num_embeddings=len(CardFigure) + 1, embedding_dim=embedding_dim)
         self.decor = nn.Embedding(num_embeddings=len(CardDecor) + 1, embedding_dim=embedding_dim)
@@ -80,15 +109,18 @@ class EnvEmbedding(nn.Module):
         num_segment_diff_by_card = len(card_segments) * 2 - max(card_segments) - 1
 
         if self.do_position_embedding and self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_sequence_length > 0:
-            self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len, embedding_dim=self.positional_embedding_dim)
-            self.position_embedding_idx = nn.Parameter(torch.arange(num_starters + self.embedding_sequence_len).unsqueeze(0), requires_grad=False)
+            self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - len(card_segments), embedding_dim=self.positional_embedding_dim)
+            position_embedding_idx_1 = torch.arange(num_starters + 2, dtype=torch.int64)
+            position_embedding_idx_2 = torch.arange(len(card_segments)).unsqueeze(1).repeat(2, 1).reshape(2 * len(card_segments)) + num_starters + 2
+            position_embedding_idx_3 = torch.arange(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64) + num_starters + 2 + len(card_segments)
+            self.position_embedding_idx = nn.Parameter(torch.cat([position_embedding_idx_1, position_embedding_idx_2, position_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
 
             self.segment_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1), embedding_dim=self.positional_embedding_dim)
             # 此处的segment组成：starters, round, role, figure * 7 * 2, decor * 7 * 2, player_status(num_player_fields) * num_player, (append_segments)
             segment_embedding_idx_ordinary_1 = torch.arange(num_starters + 2)
             segment_embedding_idx_ordinary_2 = torch.tensor(card_segments) + num_starters + 2
             segment_embedding_idx_ordinary_3 = torch.tensor(card_segments) + num_starters + 2
-            segment_embedding_idx_players = torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * num_player_fields - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1) - num_append_segments).unsqueeze(1).repeat(1, num_player_fields).reshape((MAX_PLAYER_NUMBER * num_player_fields, ))
+            segment_embedding_idx_players = torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * num_player_fields - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1) - num_append_segments).repeat(num_player_fields)
             segment_embedding_idx_list = [segment_embedding_idx_ordinary_1, segment_embedding_idx_ordinary_2, segment_embedding_idx_ordinary_3, segment_embedding_idx_players]
             if num_append_segments > 0:
                 segment_embedding_idx_list.append(torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1) - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1)))
@@ -97,7 +129,7 @@ class EnvEmbedding(nn.Module):
             # 加入card_embedding是因为segment_embedding无法编码牌的点数和花色的对应关系
             self.card_embedding = nn.Embedding(num_embeddings=len(card_segments) + 1, embedding_dim=self.positional_embedding_dim)
             card_embedding_idx_1 = torch.zeros(num_starters + 2, dtype=torch.int64)
-            card_embedding_idx_2 = torch.arange(len(card_segments)).repeat(2) + 1
+            card_embedding_idx_2 = torch.arange(2).unsqueeze(1).repeat(1, len(card_segments)).reshape(2 * len(card_segments)) + 1
             card_embedding_idx_3 = torch.zeros(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64)
             self.card_embedding_idx = nn.Parameter(torch.cat([card_embedding_idx_1, card_embedding_idx_2, card_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
             #
@@ -111,18 +143,14 @@ class EnvEmbedding(nn.Module):
             # self.segment_embedding_idx = nn.Parameter(torch.cat([segment_embedding_idx_ordinary, segment_embedding_idx_players, segment_embedding_idx_historical_actions], dim=1), requires_grad=False)
 
     def forward(self, x):
-        current_round_list = list()
-        current_player_role_list = list()
-        all_figure_list = list()
-        all_decor_list = list()
-        current_all_player_status_list = list()
-        # all_historical_player_action_list = list()
+        game_status_list = list()
 
         for item in x:
             # current_round, current_player_role, cards, current_all_player_status, all_historical_player_action = item
             current_round, current_player_role, cards, sorted_cards, current_all_player_status = item
-            current_round_list.append([current_round])
-            current_player_role_list.append([current_player_role])
+            sorted_item_list = list()
+            sorted_item_list.append(current_round)
+            sorted_item_list.append(current_player_role)
 
             all_figure, all_decor = list(), list()
             for card_representation_list in cards:
@@ -132,70 +160,23 @@ class EnvEmbedding(nn.Module):
             for card_representation in sorted_cards:
                 all_figure.append(card_representation[0])
                 all_decor.append(card_representation[1])
-            all_figure_list.append(all_figure)
-            all_decor_list.append(all_decor)
+            sorted_item_list.extend(all_figure)
+            sorted_item_list.extend(all_decor)
 
-            player_status_list = []
-            current_all_player_status_len = len(current_all_player_status)
-            for i in range(MAX_PLAYER_NUMBER):
-                if i < current_all_player_status_len:
-                    current_player_status = current_all_player_status[i]
-                    current_player_status_embedding = self.player_status(torch.tensor([current_player_status[0]]).to(self.device))
-                    current_player_value_embedding = [player_values(torch.tensor([bin_value]).to(self.device)) for player_values, bin_value in zip(self.player_values_list, current_player_status[1:])]
-                    current_player_embedding = torch.cat([current_player_status_embedding] + current_player_value_embedding, dim=0)
-                    player_status_list.append(current_player_embedding)
-                else:
-                    current_player_status_embedding = self.player_status(self.default_player_status_idx).to(self.device)
-                    current_player_value_embedding = [player_values(bin_value) for player_values, bin_value in zip(self.player_values_list, self.default_player_field_idx_list)]
-                    current_player_embedding = torch.cat([current_player_status_embedding, current_player_value_embedding], dim=-2)
-                    player_status_list.append(current_player_embedding)
-            current_all_player_status_list.append(torch.stack(player_status_list))
+            for i in range(self.num_player_fields):
+                for j in range(MAX_PLAYER_NUMBER):
+                    sorted_item_list.append(current_all_player_status[j][i])
 
-            # historical_player_action_list = []
-            # if len(all_historical_player_action) > self.historical_action_sequence_length:
-            #     all_historical_player_action = all_historical_player_action[-self.historical_action_sequence_length:]
-            # padding_length = self.historical_action_sequence_length - len(all_historical_player_action)
-            # for historical_player_action in all_historical_player_action:
-            #     historical_round_embedding = self.game_round(torch.tensor([historical_player_action[0]]).to(self.device))
-            #     historical_role_embedding = self.player_role(torch.tensor([historical_player_action[1]]).to(self.device))
-            #     historical_action_embedding = self.player_action(torch.tensor([historical_player_action[2]]).to(self.device))
-            #     historical_action_value_embedding = torch.mul(self.player_values(self.player_action_value_idx), torch.tensor(historical_player_action[3:]).unsqueeze(-1).to(self.device))
-            #     historical_player_action_embedding = torch.cat(
-            #         [historical_round_embedding, historical_role_embedding, historical_action_embedding,
-            #          historical_action_value_embedding], dim=-2)
-            #     historical_player_action_list.append(historical_player_action_embedding)
-            # for _ in range(padding_length):
-            #     historical_round_embedding = self.game_round(self.default_game_round_idx)
-            #     historical_role_embedding = self.player_role(self.default_player_role_idx)
-            #     historical_action_embedding = self.player_action(self.default_player_action_idx)
-            #     historical_action_value_embedding = torch.mul(self.player_values(self.player_action_value_idx), self.default_player_action_values)
-            #     historical_player_action_embedding = torch.cat(
-            #         [historical_round_embedding, historical_role_embedding, historical_action_embedding,
-            #          historical_action_value_embedding], dim=-2)
-            #     historical_player_action_list.append(historical_player_action_embedding)
-            # all_historical_player_action_list.append(torch.stack(historical_player_action_list))
+            # 把每个字段的相对idx映射成embedding的绝对idx
+            game_status = self.starter_idx_list.copy()
+            for dim_start_idx, item_idx in zip(self.field_start_idx_list, sorted_item_list):
+                    game_status.append(dim_start_idx + item_idx)
+            game_status_list.append(game_status)
         batch_size = len(x)
 
-        starter_embedding = self.starter_embedding(self.starter_embedding_idx.repeat(batch_size, 1))
-
-        current_round_embedding = self.game_round(torch.tensor(current_round_list).to(self.device))
-        current_player_role_embedding = self.player_role(torch.tensor(current_player_role_list).to(self.device))
-
-        all_figure_arr = torch.tensor(all_figure_list).to(self.device)
-        all_decor_arr = torch.tensor(all_decor_list).to(self.device)
-        card_figure_embedding = self.figure(all_figure_arr)
-        card_decor_embedding = self.decor(all_decor_arr)
-
-        current_all_player_status_embedding = torch.stack(current_all_player_status_list).reshape((-1, MAX_PLAYER_NUMBER * self.num_player_fields, self.embedding_dim)).to(self.device)
-        # historical_player_action_embedding = torch.stack(all_historical_player_action_list).reshape((-1, self.historical_action_sequence_length * 9, self.embedding_dim)).to(self.device)
-
-        game_status_embedding = torch.cat([
-            starter_embedding,
-            current_round_embedding, current_player_role_embedding,
-            card_figure_embedding, card_decor_embedding,
-            current_all_player_status_embedding,
-            # historical_player_action_embedding
-        ], dim=-2)
+        game_status_array = np.array(game_status_list)
+        game_status_tensor = torch.tensor(game_status_array).to(self.device)
+        game_status_embedding = self.field_embedding(game_status_tensor)
 
         if self.do_position_embedding and self.embedding_sequence_len > 0:
             position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))

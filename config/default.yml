@@ -16,8 +16,8 @@ log_step_num: 100
 # game params
 small_blind: 25
 big_blind: 50
-num_mcts_simulation_per_step: 3000
-mcts_c_puct: 10.
+num_mcts_simulation_per_step: 2000
+mcts_c_puct: 7.
 mcts_tau: 1.
 
 # model params
