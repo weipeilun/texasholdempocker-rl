@@ -1,9 +1,9 @@
 # workflow params
-num_predict_batch_process: 4
-num_gen_winning_prob_cal_data_processes: 12
+num_predict_batch_process: 2
+num_gen_winning_prob_cal_data_processes: 4
 predict_batch_size: 4
 game_loop_thread_multiple: 2.5
-num_train_eval_process: 10
+num_train_eval_process: 5
 eval_task_num_games: 1000
 update_model_bb_per_100_thres: 5.
 
