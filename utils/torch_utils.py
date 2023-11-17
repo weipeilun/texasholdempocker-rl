@@ -4,5 +4,5 @@ def get_state_dict_from_model(model):
     for key, state_tensor in state_dict.items():
         if not state_tensor.requires_grad:
             continue
-        new_state_dict[key] = state_tensor.clone().cpu()
+        new_state_dict[key] = state_tensor.detach().cpu()
     return state_dict
