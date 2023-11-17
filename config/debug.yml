@@ -3,7 +3,9 @@ num_predict_batch_process: 2
 num_gen_winning_prob_cal_data_processes: 4
 predict_batch_size: 4
 game_loop_thread_multiple: 2.5
+num_train_eval_process: 5
 eval_task_num_games: 10
+
 # train process params
 first_train_data_step: 10
 train_per_step: 1

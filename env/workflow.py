@@ -317,10 +317,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             time.sleep(0.1)
 
 
-# 游戏对弈（主进程）
-def train_game_loop_thread(game_id_seed_signal_queue, model, game_train_data_list_dict, game_finished_signal_queue, winning_probability_generating_task_queue, model_predict_in_queue, model_predict_out_queue, num_bins, small_blind, big_blind, env_info_dict, num_mcts_simulation_per_step, is_mcts_use_batch, mcts_c_puct, mcts_tau, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, pid, thread_name):
-    mcts_pid = pid if is_mcts_use_batch else None
-
+# 游戏对弈（train_eval_process进程）
+def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, model_predict_in_queue, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, pid, thread_name):
     env = Env(winning_probability_generating_task_queue, num_bins, num_players=MAX_PLAYER_NUMBER, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue, model_predict_in_queue)
 
@@ -342,12 +340,6 @@ def train_game_loop_thread(game_id_seed_signal_queue, model, game_train_data_lis
             except Empty:
                 continue
 
-        game_info_dict = dict()
-        game_train_data_list = list()
-        # 此处保证game_id唯一，env_info_dict, game_train_data_queue_dict不用加锁
-        env_info_dict[game_id] = game_info_dict
-        game_train_data_list_dict[game_id] = game_train_data_list
-
         observation, info = env.reset(game_id, seed=seed)
 
         while True:
@@ -356,7 +348,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, model, game_train_data_lis
                 break
 
             t0 = time.time()
-            mcts = MCTS(model, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, pid=mcts_pid, thread_name=thread_name)
+            mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, pid=pid, thread_name=thread_name)
             action_probs = mcts.simulate(observation=observation, env=env)
             # 用于接收中断信号
             if action_probs is None:
@@ -368,7 +360,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, model, game_train_data_lis
             # logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, train_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
-            game_train_data_list.append(([observation, action_probs], info))
+            game_train_data_queue.put((game_id, ([observation, action_probs], info)))
 
             if not terminated:
                 observation = observation_
@@ -379,10 +371,8 @@ def train_game_loop_thread(game_id_seed_signal_queue, model, game_train_data_lis
     env.close()
 
 
-# 游戏对弈（主进程）
-def eval_game_loop_thread(game_id_seed_signal_queue, model, game_eval_data_list_dict, game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, is_mcts_use_batch, mcts_c_puct, pid, thread_name):
-    assert is_mcts_use_batch, "eval_game_loop_thread only support is_mcts_use_batch=True"
-
+# 游戏对弈（train_eval_process进程）
+def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, pid, thread_name):
     env = Env(None, num_bins, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue_best, model_predict_in_queue_new)
 
@@ -415,10 +405,6 @@ def eval_game_loop_thread(game_id_seed_signal_queue, model, game_eval_data_list_
                 continue
 
         if game_id is not None and seed is not None:
-            game_eval_data_list = list()
-            # 此处保证game_id唯一, game_train_data_queue_dict不用加锁
-            game_eval_data_list_dict[game_id] = game_eval_data_list
-
             observation, info = env.reset(game_id, seed=seed)
 
             while True:
@@ -428,7 +414,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, model, game_eval_data_list_
 
                 t0 = time.time()
                 # 在eval时不使用dirichlet_noice以增加随机性，设置tau为0即在play步骤中丢弃随机性使用argmax
-                mcts = MCTS(model, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, pid=pid, thread_name=thread_name)
+                mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, pid=pid, thread_name=thread_name)
                 action_probs = mcts.simulate(observation=observation, env=env)
                 # 用于接收中断信号
                 if action_probs is None:
@@ -440,7 +426,6 @@ def eval_game_loop_thread(game_id_seed_signal_queue, model, game_eval_data_list_
                 logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, eval_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
 
                 observation_, reward, terminated, info = env.step(action)
-                game_eval_data_list.append(([observation, action_probs], info))
 
                 if not terminated:
                     observation = observation_
@@ -454,8 +439,22 @@ def eval_game_loop_thread(game_id_seed_signal_queue, model, game_eval_data_list_
     env.close()
 
 
+# train_eval_process进程，用于把cpu敏感任务分发到多个进程，避免单个进程打满
+def train_eval_process(train_eval_thread_param_list, pid):
+    for train_thread_param, eval_thread_param in train_eval_thread_param_list:
+        Thread(target=train_game_loop_thread, args=train_thread_param, daemon=True).start()
+        Thread(target=eval_game_loop_thread, args=eval_thread_param, daemon=True).start()
+
+    while True:
+        if interrupt.interrupt_callback():
+            logging.info(f"train_eval_process_{pid} detect interrupt")
+            break
+        time.sleep(1.)
+
+
+
 # 游戏流程控制（主进程），防止生产者生产过多任务，导致任务队列过长
-def train_game_control_thread(game_id_signal_queue, game_finalized_signal_queue, num_game_loop_thread):
+def train_game_control_thread(game_id_signal_queue, game_finalized_signal_queue, env_info_dict, num_game_loop_thread):
     game_id = 0
     seed = 10
 
@@ -464,6 +463,11 @@ def train_game_control_thread(game_id_signal_queue, game_finalized_signal_queue,
     for _ in range(num_game_loop_thread + 2):
         game_id += 1
         seed += 1
+
+        # 此处保证game_id唯一，env_info_dict, game_train_data_queue_dict不用加锁
+        game_info_dict = dict()
+        env_info_dict[game_id] = game_info_dict
+
         game_id_signal_queue.put((game_id, seed))
 
     while True:
@@ -480,6 +484,11 @@ def train_game_control_thread(game_id_signal_queue, game_finalized_signal_queue,
                 _ = game_finalized_signal_queue.get(block=True, timeout=0.1)
                 game_id += 1
                 seed += 1
+
+                # 此处保证game_id唯一，env_info_dict, game_train_data_queue_dict不用加锁
+                game_info_dict = dict()
+                env_info_dict[game_id] = game_info_dict
+
                 game_id_signal_queue.put((game_id, seed))
             except Empty:
                 continue
@@ -495,13 +504,30 @@ def eval_task_begin(seed, game_id_signal_queue, eval_task_num_games=1000):
 
 
 # train流程结尾，模拟数据存入buffer（主进程）
-def train_gather_result_thread(game_train_data_list_dict, game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, model, step_counter):
+def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, model, step_counter):
     finished_game_id_dict = dict()
+    game_train_data_list_dict = dict()
 
     while True:
         if interrupt.interrupt_callback():
             logging.info("train_gather_result_thread detect interrupt")
             break
+
+        while True:
+            try:
+                if interrupt.interrupt_callback():
+                    logging.info("train_gather_result_thread detect interrupt")
+                    break
+
+                game_id, finished_game_info = game_train_data_queue.get(block=False)
+                if game_id in game_train_data_list_dict:
+                    game_train_data_list = game_train_data_list_dict[game_id]
+                else:
+                    game_train_data_list = list()
+                    game_train_data_list_dict[game_id] = game_train_data_list
+                game_train_data_list.append(finished_game_info)
+            except Empty:
+                break
 
         while True:
             try:
@@ -516,27 +542,28 @@ def train_gather_result_thread(game_train_data_list_dict, game_finished_signal_q
 
         finalized_game_id_set = set()
         for finished_game_id, num_total_games in finished_game_id_dict.items():
-            game_train_data_list = game_train_data_list_dict[finished_game_id]
-            game_info_dict = env_info_dict[finished_game_id]
+            if finished_game_id in game_train_data_list_dict and finished_game_id in env_info_dict:
+                game_train_data_list = game_train_data_list_dict[finished_game_id]
+                game_info_dict = env_info_dict[finished_game_id]
 
-            game_train_data_not_finished_list = list()
-            for game_train_data in game_train_data_list:
-                train_data_list, step_info = game_train_data
+                game_train_data_not_finished_list = list()
+                for game_train_data in game_train_data_list:
+                    train_data_list, step_info = game_train_data
 
-                round_num = step_info[KEY_ROUND_NUM]
-                player_name = step_info[KEY_ACTED_PLAYER_NAME]
-                if player_name in game_info_dict and round_num in game_info_dict[player_name]:
-                    winning_prob = game_info_dict[player_name][round_num]
-                    model.store_transition(*train_data_list, winning_prob)
-                    step_counter.increment()
+                    round_num = step_info[KEY_ROUND_NUM]
+                    player_name = step_info[KEY_ACTED_PLAYER_NAME]
+                    if player_name in game_info_dict and round_num in game_info_dict[player_name]:
+                        winning_prob = game_info_dict[player_name][round_num]
+                        model.store_transition(*train_data_list, winning_prob)
+                        step_counter.increment()
+                    else:
+                        game_train_data_not_finished_list.append(game_train_data)
+
+                if len(game_train_data_not_finished_list) == 0:
+                    finalized_game_id_set.add(finished_game_id)
+                    logging.info('Game %s finished, generated %d data' % (finished_game_id, num_total_games))
                 else:
-                    game_train_data_not_finished_list.append(game_train_data)
-
-            if len(game_train_data_not_finished_list) == 0:
-                finalized_game_id_set.add(finished_game_id)
-                logging.info('Game %s finished, generated %d data' % (finished_game_id, num_total_games))
-            else:
-                game_train_data_list_dict[finished_game_id] = game_train_data_not_finished_list
+                    game_train_data_list_dict[finished_game_id] = game_train_data_not_finished_list
 
         # 清掉这局的数据cache
         for finalized_game_id in finalized_game_id_set:

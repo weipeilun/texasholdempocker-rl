@@ -10,8 +10,8 @@ from env.constants import *
 
 
 class MCTS:
-    def __init__(self, model, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, pid=None, thread_name=None):
-        self.model = model
+    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, pid=None, thread_name=None):
+        self.n_actions = n_actions
         self.is_root = is_root
         self.player_name_predict_in_queue_dict = player_name_predict_in_queue_dict
         self.predict_out_queue = predict_out_queue
@@ -28,7 +28,6 @@ class MCTS:
 
         self.children = None
 
-        self.n_actions = self.model.num_output_class
         num_bins_for_raise_call = self.n_actions - 2
         self.num_small_range_bins = math.ceil(num_bins_for_raise_call / 2)
         self.num_big_range_bins = num_bins_for_raise_call - self.num_small_range_bins
@@ -45,12 +44,12 @@ class MCTS:
     def simulate(self, observation, env):
         self.children = list()
         for _ in range(self.n_actions):
-            self.children.append(MCTS(self.model, is_root=False, player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict, predict_out_queue=self.predict_out_queue, apply_dirichlet_noice=False, workflow_lock=self.workflow_lock, workflow_signal_queue=self.workflow_signal_queue, workflow_ack_signal_queue=self.workflow_ack_signal_queue, n_simulation=self.n_simulation, c_puct=self.c_puct, tau=self.tau, dirichlet_noice_epsilon=self.dirichlet_noice_epsilon, pid=self.pid, thread_name=self.thread_name))
+            self.children.append(MCTS(self.n_actions, is_root=False, player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict, predict_out_queue=self.predict_out_queue, apply_dirichlet_noice=False, workflow_lock=self.workflow_lock, workflow_signal_queue=self.workflow_signal_queue, workflow_ack_signal_queue=self.workflow_ack_signal_queue, n_simulation=self.n_simulation, c_puct=self.c_puct, tau=self.tau, dirichlet_noice_epsilon=self.dirichlet_noice_epsilon, pid=self.pid, thread_name=self.thread_name))
         self.children_w_array = np.zeros(self.n_actions)
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
 
-        p_array, _ = self.predict(observation, self.model, env._acting_player_name)
+        p_array, _ = self.predict(observation, env._acting_player_name)
         if self.is_root and self.apply_dirichlet_noice:
             dirichlet_noise = np.random.dirichlet(p_array)
             p_array = (1 - self.dirichlet_noice_epsilon) * p_array + self.dirichlet_noice_epsilon * dirichlet_noise
@@ -149,12 +148,12 @@ class MCTS:
         if self.children is None:
             self.children = list()
             for _ in range(self.n_actions):
-                self.children.append(MCTS(self.model, is_root=False, player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict, predict_out_queue=self.predict_out_queue, apply_dirichlet_noice=False, workflow_lock=self.workflow_lock, workflow_signal_queue=self.workflow_signal_queue, workflow_ack_signal_queue=self.workflow_ack_signal_queue, n_simulation=self.n_simulation, c_puct=self.c_puct, tau=self.tau, dirichlet_noice_epsilon=self.dirichlet_noice_epsilon, pid=self.pid, thread_name=self.thread_name))
+                self.children.append(MCTS(self.n_actions, is_root=False, player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict, predict_out_queue=self.predict_out_queue, apply_dirichlet_noice=False, workflow_lock=self.workflow_lock, workflow_signal_queue=self.workflow_signal_queue, workflow_ack_signal_queue=self.workflow_ack_signal_queue, n_simulation=self.n_simulation, c_puct=self.c_puct, tau=self.tau, dirichlet_noice_epsilon=self.dirichlet_noice_epsilon, pid=self.pid, thread_name=self.thread_name))
             self.children_w_array = np.zeros(self.n_actions)
             self.children_n_array = np.zeros(self.n_actions)
             self.children_q_array = np.zeros(self.n_actions)
 
-        p_array, _ = self.predict(observation, self.model, env._acting_player_name)
+        p_array, _ = self.predict(observation, env._acting_player_name)
         action_bin, action = self._choose_action(p_array)
 
         observation_, reward, terminated, info = env.step(action)
@@ -169,37 +168,30 @@ class MCTS:
 
         return player_action_reward
 
-    def predict(self, observation, model, player_name_to_act):
-        # 此处支持多线程下的批量预测
-        if self.pid is None:
-            model.eval()
-            with torch.no_grad():
-                action_probs_tensor, player_result_value_tensor = model([observation])
-            p_array = action_probs_tensor.cpu().numpy()[0]
-            player_result_value = player_result_value_tensor.cpu().numpy()[0]
-        else:
-            p_array = self.default_action_probs
-            player_result_value = self.default_player_result_value
-            # 这个锁用于控制workflow的状态切换
-            if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
-                try:
-                    workflow_status = self.workflow_signal_queue.get(block=False)
-                    self.workflow_ack_signal_queue.put(workflow_status)
+    def predict(self, observation, player_name_to_act):
+        # 仅支持多线程下的批量预测
+        p_array = self.default_action_probs
+        player_result_value = self.default_player_result_value
+        # 这个锁用于控制workflow的状态切换
+        if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
+            try:
+                workflow_status = self.workflow_signal_queue.get(block=False)
+                self.workflow_ack_signal_queue.put(workflow_status)
 
-                    with self.workflow_lock:
-                        self.workflow_lock.wait()
-                except Empty:
-                    pass
+                with self.workflow_lock:
+                    self.workflow_lock.wait()
+            except Empty:
+                pass
 
-            self.player_name_predict_in_queue_dict[player_name_to_act].put((observation, self.pid))
-            while True:
-                if interrupt.interrupt_callback():
-                    logging.info(f"MCTS.predict{self.pid} detect interrupt")
-                    break
+        self.player_name_predict_in_queue_dict[player_name_to_act].put((observation, self.pid))
+        while True:
+            if interrupt.interrupt_callback():
+                logging.info(f"MCTS.predict{self.pid} detect interrupt")
+                break
 
-                try:
-                    p_array, player_result_value = self.predict_out_queue.get(block=True, timeout=0.01)
-                    break
-                except Empty:
-                    continue
+            try:
+                p_array, player_result_value = self.predict_out_queue.get(block=True, timeout=0.01)
+                break
+            except Empty:
+                continue
         return p_array, player_result_value

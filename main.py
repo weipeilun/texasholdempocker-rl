@@ -1,9 +1,8 @@
-from threading import Lock, Condition
 from env.workflow import *
 from tools.param_parser import *
 from tools import counter
 from queue import Queue
-from torch.multiprocessing import Manager, Process
+from torch.multiprocessing import Manager, Process, Condition
 
 
 if __name__ == '__main__':
@@ -51,66 +50,81 @@ if __name__ == '__main__':
     predict_batch_size = params['predict_batch_size']
     num_game_loop_thread = int(predict_batch_size * params['game_loop_thread_multiple'])
     assert num_game_loop_thread % 2 == 0, 'num_game_loop_thread must be even'
+    # train_eval进程数
+    num_train_eval_process = params['num_train_eval_process']
+    num_train_eval_thread = num_game_loop_thread * num_predict_batch_process
+    assert num_train_eval_thread % num_train_eval_process == 0, 'num_game_loop_thread must be multiple of num_train_eval_process'
+    num_game_loop_thread_per_process = num_train_eval_thread // num_train_eval_process
+    # game params
     num_mcts_simulation_per_step = params['num_mcts_simulation_per_step']
     mcts_c_puct = params['mcts_c_puct']
     mcts_tau = params['mcts_tau']
-    is_mcts_use_batch = params['is_mcts_use_batch']
     game_id_counter = counter.Counter()
     workflow_lock = Condition()
     workflow_game_loop_signal_queue_list = list()
     workflow_game_loop_ack_signal_queue_list = list()
     # train thread参数
-    game_train_data_list_dict = dict()
-    train_game_finished_signal_queue = Queue()
-    train_game_id_signal_queue = Queue()
+    game_train_data_queue = Manager().Queue()
+    train_game_finished_signal_queue = Manager().Queue()
+    train_game_id_signal_queue = Manager().Queue()
     # eval thread参数
-    game_eval_data_list_dict = dict()
-    eval_game_finished_reward_queue = Queue()
-    eval_game_id_signal_queue = Queue()
+    eval_game_finished_reward_queue = Manager().Queue()
+    eval_game_id_signal_queue = Manager().Queue()
     eval_workflow_signal_queue_list = list()
     eval_workflow_ack_signal_queue_list = list()
     # in_queue, (out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval)
     model_predict_batch_queue_info_list = [(Manager().Queue(), (list(), dict(), dict())) for _ in range(num_predict_batch_process)]
     # 相同thread_id，分train和eval线程
+    train_eval_thread_param_list = list()
     for pid in range(num_predict_batch_process):
         for tid in range(num_game_loop_thread):
             thread_id = pid * num_game_loop_thread + tid
             thread_name = f'{pid}_{tid}'
             batch_out_queue = Manager().Queue()
 
-            workflow_game_loop_signal_queue = Queue()
+            workflow_game_loop_signal_queue = Manager().Queue()
             workflow_game_loop_signal_queue_list.append(workflow_game_loop_signal_queue)
-            workflow_game_loop_ack_signal_queue = Queue()
+            workflow_game_loop_ack_signal_queue = Manager().Queue()
             workflow_game_loop_ack_signal_queue_list.append(workflow_game_loop_ack_signal_queue)
             
-            eval_workflow_signal_queue = Queue()
-            eval_workflow_ack_signal_queue = Queue()
+            eval_workflow_signal_queue = Manager().Queue()
+            eval_workflow_ack_signal_queue = Manager().Queue()
             eval_workflow_signal_queue_list.append(eval_workflow_signal_queue)
             eval_workflow_ack_signal_queue_list.append(eval_workflow_ack_signal_queue)
 
             batch_queue_info_train = map_train_thread_to_queue_info_train(thread_id, model_predict_batch_queue_info_list)
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_train[1][0], batch_queue_info_train[1][1], batch_queue_info_train[1][2])
-            Thread(target=train_game_loop_thread, args=(train_game_id_signal_queue, model, game_train_data_list_dict, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, env_info_dict, num_mcts_simulation_per_step, is_mcts_use_batch, mcts_c_puct, mcts_tau, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, thread_id, thread_name), daemon=True).start()
+            train_thread_param = (train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, thread_id, thread_name)
+            # Thread(target=train_game_loop_thread, args=(train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, thread_id, thread_name), daemon=True).start()
 
             batch_queue_info_eval_best, batch_queue_info_eval_new = map_train_thread_to_queue_info_eval(thread_id, model_predict_batch_queue_info_list)
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_best[1][0], batch_queue_info_eval_best[1][2], batch_queue_info_eval_best[1][1])
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_new[1][0], batch_queue_info_eval_new[1][2], batch_queue_info_eval_new[1][1])
-            Thread(target=eval_game_loop_thread, args=(eval_game_id_signal_queue, model, game_eval_data_list_dict, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, is_mcts_use_batch, mcts_c_puct, thread_id, thread_name), daemon=True).start()
+            eval_thread_param = (eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, thread_id, thread_name)
+            # Thread(target=eval_game_loop_thread, args=(eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, is_mcts_use_batch, mcts_c_puct, thread_id, thread_name), daemon=True).start()
+
+            train_eval_thread_param_list.append((train_thread_param, eval_thread_param))
+            logging.info(f'Finished init params for train and eval thread {thread_id}')
+
+    for pid in range(num_train_eval_process):
+        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], pid), daemon=True).start()
+    logging.info('All train_eval_process inited.')
 
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
     for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, (model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval))) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, model_predict_batch_queue_info_list)):
         Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level), daemon=True).start()
+    logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
     load_model_and_synchronize(model, model_last_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
 
     # control game simulation thread, to prevent excess task produced by producer
     game_finalized_signal_queue = Queue()
-    Thread(target=train_game_control_thread, args=(train_game_id_signal_queue, game_finalized_signal_queue, num_game_loop_thread * num_predict_batch_process), daemon=True).start()
+    Thread(target=train_game_control_thread, args=(train_game_id_signal_queue, game_finalized_signal_queue, env_info_dict, num_game_loop_thread * num_predict_batch_process), daemon=True).start()
 
     # gather train result and save to buffer
     step_counter = counter.Counter()
-    Thread(target=train_gather_result_thread, args=(game_train_data_list_dict, train_game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, model, step_counter), daemon=True).start()
+    Thread(target=train_gather_result_thread, args=(game_train_data_queue, train_game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, model, step_counter), daemon=True).start()
 
     # init training thread to separate cpu/gpu time
     is_save_model = True
