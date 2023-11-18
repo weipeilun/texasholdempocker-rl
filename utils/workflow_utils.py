@@ -45,6 +45,7 @@ def receive_and_check_all_ack(target_ack_status, workflow_ack_queue_list):
                     logging.error(f"Workflow ack from queue {idx} error, expect {target_ack_status.name}, but get {ack_status.name}")
                     return False
                 else:
+                    logging.info(f"Workflow received ack {target_ack_status.name} from queue {idx}.")
                     break
             except Empty:
                 continue
