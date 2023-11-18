@@ -18,16 +18,10 @@ def save_model(model, path):
     logging.info(f'model saved to {path}')
 
 
-def save_model_by_state_dict(model_state_dict, path):
-    models_dict = get_model_dict_by_state_dict(model_state_dict)
-    torch.save(models_dict, path)
-    logging.info(f'model saved to {path}')
-
-
 def get_model_dict_by_state_dict(model_state_dict):
-    models_dict = dict()
-    models_dict['model'] = model_state_dict
-    return models_dict
+    model_dict = dict()
+    model_dict['model'] = model_state_dict
+    return model_dict
 
 
 def load_model_and_synchronize(model, model_path, update_model_param_queue_list, workflow_ack_queue_list):
@@ -259,8 +253,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
             pass
 
         try:
-            model_state_dict = update_model_param_queue.get(block=False)
-            model_dict = get_model_dict_by_state_dict(model_state_dict)
+            model_dict = update_model_param_queue.get(block=False)
             model.load_state_dict(model_dict)
             workflow_ack_queue.put(workflow_status)
             logging.info(f'predict_batch_process_{pid} model updated')

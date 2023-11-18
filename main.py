@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     workflow_status = WorkflowStatus.DEFAULT
     best_model_state_dict = get_state_dict_from_model(model)
-    new_model_state_dict = None
+    new_model_dict = None
     best_model_update_state_queue_list, new_model_update_state_queue_list = get_best_new_queues_for_eval(update_model_param_queue_list)
     best_model_workflow_queue_list, new_model_workflow_queue_list = get_best_new_queues_for_eval(workflow_queue_list)
     best_model_workflow_ack_queue_list, new_model_workflow_ack_queue_list = get_best_new_queues_for_eval(workflow_ack_queue_list)
@@ -160,12 +160,15 @@ if __name__ == '__main__':
             # 接收新的eval任务，停掉train任务中的MCTS模拟过程
             try:
                 new_model_state_dict = eval_model_queue.get(block=False)
+                new_model_dict = get_model_dict_by_state_dict(new_model_state_dict)
                 eval_task_id += 1
 
                 workflow_status = switch_workflow_default(WorkflowStatus.TRAIN_FINISH_WAIT, workflow_queue_list, workflow_ack_queue_list)
                 logging.info(f"Main thread switched workflow to {workflow_status.name}")
 
-                save_model_by_state_dict(new_model_state_dict, model_eval_snapshot_path_format % eval_task_id)
+                new_model_path = model_eval_snapshot_path_format % eval_task_id
+                torch.save(new_model_dict, new_model_path)
+                logging.info(f'model saved to {new_model_path}')
             except Empty:
                 time.sleep(1.)
         elif workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
@@ -177,7 +180,7 @@ if __name__ == '__main__':
         elif workflow_status == WorkflowStatus.REGISTERING_EVAL_MODEL:
             # 负责新模型推理的batch predict进程注册新模型
             for new_model_update_state_queue in new_model_update_state_queue_list:
-                new_model_update_state_queue.put(new_model_state_dict)
+                new_model_update_state_queue.put(new_model_dict)
             if not receive_and_check_all_ack(workflow_status, new_model_workflow_ack_queue_list):
                 exit(-1)
 
@@ -229,13 +232,15 @@ if __name__ == '__main__':
             # batch predict切换模型，继续开始train任务
             if is_update_old_model:
                 # 在此处切换新旧模型pointer
-                save_model_by_state_dict(new_model_state_dict, model_best_checkpoint_path)
+                torch.save(new_model_dict, model_best_checkpoint_path)
+                logging.info(f'model saved to {model_best_checkpoint_path}')
+
                 for best_model_update_state_queue in best_model_update_state_queue_list:
-                    best_model_update_state_queue.put(new_model_state_dict)
+                    best_model_update_state_queue.put(new_model_dict)
                 if not receive_and_check_all_ack(workflow_status, best_model_workflow_ack_queue_list):
                     exit(-1)
 
-                best_model_state_dict = new_model_state_dict
+                best_model_state_dict = new_model_dict
             else:
                 for new_model_update_state_queue in new_model_update_state_queue_list:
                     new_model_update_state_queue.put(best_model_state_dict)
