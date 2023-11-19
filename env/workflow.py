@@ -18,10 +18,11 @@ def save_model(model, path):
     logging.info(f'model saved to {path}')
 
 
-def get_model_dict_by_state_dict(model_state_dict):
-    model_dict = dict()
-    model_dict['model'] = model_state_dict
-    return model_dict
+def save_model_by_state_dict(model_state_dict, path):
+    models_dict = dict()
+    models_dict['model'] = model_state_dict
+    torch.save(models_dict, path)
+    logging.info(f'model saved to {path}')
 
 
 def load_model_and_synchronize(model, model_path, update_model_param_queue_list, workflow_ack_queue_list):
