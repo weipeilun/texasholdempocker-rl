@@ -1,7 +1,7 @@
 # train process params
 first_train_data_step: 100
 train_per_step: 2
-eval_model_per_step: 500
+eval_model_per_step: 5000
 log_step_num: 200
 
 # game params

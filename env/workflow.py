@@ -234,8 +234,8 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
     def predict_and_send(predict_send_model, predict_send_batch_list, predict_send_pid_list, predict_send_send_in_queue, predict_send_workflow_status):
         with torch.no_grad():
             action_probs_tensor, player_result_value_tensor = predict_send_model(predict_send_batch_list)
-        action_probs_list = action_probs_tensor.cpu().numpy()
-        player_result_value_list = player_result_value_tensor.cpu().numpy()
+            action_probs_list = action_probs_tensor.cpu().numpy()
+            player_result_value_list = player_result_value_tensor.cpu().numpy()
 
         predict_send_send_in_queue.put((action_probs_list, player_result_value_list, predict_send_pid_list, predict_send_workflow_status))
 
