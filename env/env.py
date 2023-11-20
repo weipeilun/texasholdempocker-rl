@@ -10,7 +10,7 @@ class Env:
     """
     Doudizhu multi-agent wrapper
     """
-    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=7, game_env=None, ignore_all_async_tasks=False):
+    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=10, game_env=None, ignore_all_async_tasks=False):
         """
         Here, we use dummy agents.
         This is because, in the orignial game, the players
@@ -490,7 +490,10 @@ class Env:
                                                                player_value_left_to_player_bin,
                                                                call_min_value_to_game_init_value_bin,
                                                                call_min_value_to_player_init_value_bin,
-                                                               call_min_value_to_player_value_left_bin)
+                                                               call_min_value_to_player_value_left_bin,
+                                                               raise_min_value_to_game_init_value_bin,
+                                                               raise_min_value_to_player_init_value_bin,
+                                                               raise_min_value_to_player_value_left_bin)
         return all_player_current_status_list
 
 

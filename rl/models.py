@@ -10,7 +10,7 @@ from env.constants import *
 
 
 class EnvEmbedding(nn.Module):
-    def __init__(self, embedding_dim, historical_action_sequence_length, num_bins, do_position_embedding=False, positional_embedding_dim=128, embedding_sequence_len=-1, num_starters=1, num_player_fields=7, num_append_segments=0, device='cpu'):
+    def __init__(self, embedding_dim, historical_action_sequence_length, num_bins, do_position_embedding=False, positional_embedding_dim=128, embedding_sequence_len=-1, num_starters=1, num_player_fields=10, num_append_segments=0, device='cpu'):
         super().__init__()
 
         self.embedding_dim = embedding_dim
@@ -40,6 +40,9 @@ class EnvEmbedding(nn.Module):
                               (2, num_bins + 1),
                               (2, num_bins + 1),
                               (2, num_bins + 1),
+                              (2, num_bins + 1),
+                              (2, num_bins + 2),
+                              (2, num_bins + 2),
                               (2, num_bins + 1),
                               (2, num_bins + 2),
                               (2, num_bins + 2)
@@ -279,7 +282,7 @@ class TransformerActorModel(nn.Module):
                  positional_embedding_dim=128,
                  num_layers=6,
                  historical_action_sequence_length=56,
-                 num_player_fields=7,
+                 num_player_fields=10,
                  device='cpu'
                  ):
         super().__init__()
@@ -333,7 +336,7 @@ class TransformerCriticalModel(nn.Module):
                  positional_embedding_dim=128,
                  num_layers=6,
                  historical_action_sequence_length=56,
-                 num_player_fields=7,
+                 num_player_fields=10,
                  device='cpu'
                  ):
         super().__init__()
@@ -395,7 +398,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                  positional_embedding_dim=128,
                  num_layers=6,
                  historical_action_sequence_length=56,
-                 num_player_fields=7,
+                 num_player_fields=10,
                  device='cpu'
                  ):
         super().__init__()

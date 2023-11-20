@@ -27,7 +27,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  epsilon_max=0.9,
                  epsilon_delta_per_step=0.00001,
                  num_bins=10,
-                 num_player_fields=7,
+                 num_player_fields=10,
                  save_train_data=False
                  ):
         super(AlphaGoZero, self).__init__()
