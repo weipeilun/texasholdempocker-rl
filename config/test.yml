@@ -1,0 +1,6 @@
+# model params
+model_param_dict:
+    device: 'cpu'
+
+# checkpoints
+model_test_checkpoint_path: models/last.pth

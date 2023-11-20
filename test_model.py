@@ -1,11 +1,8 @@
-import logging
-import os
-from threading import Thread
-from multiprocessing import Manager, Process
-from rl.AlphaGoZero import AlphaGoZero
 from env.workflow import *
+from tools.param_parser import *
 from tools import counter
 from queue import Queue
+from torch.multiprocessing import Manager, Process, Condition
 
 
 if __name__ == '__main__':
@@ -15,72 +12,102 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
+    params = parse_params()
+
+    torch.multiprocessing.set_start_method('spawn')
+
+    num_predict_batch_process = params['num_predict_batch_process']
+    update_model_param_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+    workflow_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+    workflow_ack_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+
+    # 游戏设置
+    small_blind = params['small_blind']
+    big_blind = params['big_blind']
+    update_model_bb_per_100_thres = params['update_model_bb_per_100_thres']
+
     # 用户所有连续特征分桶embedding
-    num_bins = 11
-    # 模型输出值分桶数
-    num_value_bins_for_raise_call = 19
-    num_model_output_class = num_value_bins_for_raise_call + 2
-    model = AlphaGoZero(n_observation=5,
-                 n_actions=4,
-                 num_output_class=num_model_output_class,
-                 # device='cuda:0',
-                 device='cpu',
-                 embedding_dim=128,
-                 positional_embedding_dim=64,
-                 num_layers=4,
-                 historical_action_sequence_length=16,
-                 epsilon=0.05,
-                 epsilon_max=0.8,
-                 gamma=0.9,
-                 batch_size=16,
-                 learning_rate=3e-4,
-                 num_bins=num_bins,
-                 save_train_data=True
-                 )
-    model_path = 'models/deep_q_network.pth_cp'
-    if os.path.exists(model_path):
-        checkpoint = torch.load(model_path, map_location='cpu')
-        model.load_state_dict(checkpoint['model'])
-        logging.info(f'model loaded from {model_path}')
+    num_bins = params['num_bins']
+    model_param_dict = params['model_param_dict']
+    model_test_checkpoint_path = params['model_test_checkpoint_path']
+    model = AlphaGoZero(**model_param_dict)
 
     # init generate winning probability calculating data processes
-    num_gen_winning_prob_cal_data_processes = 4
+    num_gen_winning_prob_cal_data_processes = params['num_gen_winning_prob_cal_data_processes']
+    simulation_recurrent_param_dict = params['simulation_recurrent_params']
     env_info_dict = dict()
     winning_probability_generating_task_queue = Manager().Queue()
     game_result_out_queue = Manager().Queue()
     for pid in range(num_gen_winning_prob_cal_data_processes):
-        Process(target=simulate_processes, args=(winning_probability_generating_task_queue, game_result_out_queue, pid, log_level), daemon=True).start()
+        Process(target=simulate_processes, args=(winning_probability_generating_task_queue, game_result_out_queue, simulation_recurrent_param_dict, pid, log_level), daemon=True).start()
 
     # reward receiving thread
     Thread(target=receive_game_result_thread, args=(game_result_out_queue, env_info_dict), daemon=True).start()
 
-    # game simulation thread
-    # 保持线程数=batch_size * 3，可以保证瓶颈计算资源打满
-    predict_batch_size = 1
-    num_game_loop_thread = int(predict_batch_size * 2)
-    num_mcts_simulation_per_step = 3000
-    mcts_c_puct = 10.
-    mcts_tau = 1.
-    is_mcts_use_batch = False
+    # game simulation threads (train and evaluate)
+    # 必须保证线程数 > batch_size * 2，以在train中gpu基本打满，在eval中不死锁
+    predict_batch_size = params['predict_batch_size']
+    num_game_loop_thread = int(predict_batch_size * params['game_loop_thread_multiple'])
+    assert num_game_loop_thread % 2 == 0, 'num_game_loop_thread must be even'
+    # train_eval进程数
+    num_train_eval_process = params['num_train_eval_process']
+    num_train_eval_thread = num_game_loop_thread * num_predict_batch_process
+    assert num_train_eval_thread % num_train_eval_process == 0, 'num_game_loop_thread must be multiple of num_train_eval_process'
+    num_game_loop_thread_per_process = num_train_eval_thread // num_train_eval_process
+    # game params
+    num_mcts_simulation_per_step = params['num_mcts_simulation_per_step']
+    mcts_c_puct = params['mcts_c_puct']
+    mcts_tau = params['mcts_tau']
     game_id_counter = counter.Counter()
-    game_train_data_queue_dict = dict()
-    game_finished_signal_queue = Queue()
-    game_id_signal_queue = Queue()
-    model_predict_batch_in_queue = Queue()
-    model_predict_batch_out_queue_list = list()
-    for tid in range(num_game_loop_thread):
-        model_predict_batch_out_queue = Queue()
-        model_predict_batch_out_queue_list.append(model_predict_batch_out_queue)
-        Thread(target=game_loop_thread, args=(
-        game_id_signal_queue, model, game_train_data_queue_dict, game_finished_signal_queue,
-        winning_probability_generating_task_queue, model_predict_batch_in_queue, model_predict_batch_out_queue,
-        num_bins, env_info_dict, num_mcts_simulation_per_step, is_mcts_use_batch, mcts_c_puct, mcts_tau, tid, tid), daemon=True).start()
+    workflow_lock = Condition()
+    workflow_game_loop_signal_queue_list = list()
+    workflow_game_loop_ack_signal_queue_list = list()
+    # train thread参数
+    game_train_data_queue = Manager().Queue()
+    train_game_finished_signal_queue = Manager().Queue()
+    train_game_id_signal_queue = Manager().Queue()
+    # in_queue, (out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval)
+    model_predict_batch_queue_info_list = [(Manager().Queue(), (list(), dict(), dict())) for _ in range(num_predict_batch_process)]
+    # 相同thread_id，分train和eval线程
+    train_thread_param_list = list()
+    for pid in range(num_predict_batch_process):
+        for tid in range(num_game_loop_thread):
+            thread_id = pid * num_game_loop_thread + tid
+            thread_name = f'{pid}_{tid}'
+            batch_out_queue = Manager().Queue()
+
+            workflow_game_loop_signal_queue = Manager().Queue()
+            workflow_game_loop_signal_queue_list.append(workflow_game_loop_signal_queue)
+            workflow_game_loop_ack_signal_queue = Manager().Queue()
+            workflow_game_loop_ack_signal_queue_list.append(workflow_game_loop_ack_signal_queue)
+
+            batch_queue_info_train = map_train_thread_to_queue_info_train(thread_id, model_predict_batch_queue_info_list)
+            map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_train[1][0], batch_queue_info_train[1][1], batch_queue_info_train[1][2])
+            train_thread_param = (train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, thread_id, thread_name)
+
+            train_thread_param_list.append((train_thread_param, ))
+            logging.info(f'Finished init train thread {thread_id}')
+
+    is_init_eval_thread = False
+    for pid in range(num_train_eval_process):
+        Process(target=train_eval_process, args=(train_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_eval_thread, pid), daemon=True).start()
+    logging.info('All train_eval_process inited.')
+
+    # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
+    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, (model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval))) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, model_predict_batch_queue_info_list)):
+        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level), daemon=True).start()
+    logging.info('All predict_batch_process inited.')
+
+    # load model and synchronize to all predict_batch_process
+    load_model_and_synchronize(model, model_test_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
 
     # control game simulation thread, to prevent excess task produced by producer
     game_finalized_signal_queue = Queue()
-    Thread(target=train_game_control_thread, args=(game_id_signal_queue, game_finalized_signal_queue, num_game_loop_thread), daemon=True).start()
+    Thread(target=train_game_control_thread, args=(train_game_id_signal_queue, game_finalized_signal_queue, env_info_dict, num_game_loop_thread * num_predict_batch_process), daemon=True).start()
 
     finished_game_id = None
+    finished_game_id_dict = dict()
+    game_train_data_list_dict = dict()
     while True:
         if interrupt.interrupt_callback():
             logging.info("main loop detect interrupt")
@@ -89,52 +116,65 @@ if __name__ == '__main__':
         while True:
             try:
                 if interrupt.interrupt_callback():
-                    logging.info("main loop (game_finished_signal_queue) detect interrupt")
+                    logging.info("train_gather_result_thread detect interrupt")
                     break
 
-                finished_game_id = game_finished_signal_queue.get(block=True, timeout=1)
-                break
+                game_id, finished_game_info = game_train_data_queue.get(block=False)
+                if game_id in game_train_data_list_dict:
+                    game_train_data_list = game_train_data_list_dict[game_id]
+                else:
+                    game_train_data_list = list()
+                    game_train_data_list_dict[game_id] = game_train_data_list
+                game_train_data_list.append(finished_game_info)
             except Empty:
-                continue
-
-        game_train_data_queue = game_train_data_queue_dict.pop(finished_game_id)
-        game_info_dict = env_info_dict[finished_game_id]
-
-        is_need_to_break = False
-        while not game_train_data_queue.empty():
-            train_data_list, step_info = game_train_data_queue.get()
-
-            round_num = step_info[KEY_ROUND_NUM]
-            player_name = step_info[KEY_ACTED_PLAYER_NAME]
-            while player_name not in game_info_dict:
-                if interrupt.interrupt_callback():
-                    logging.info("main loop (game_info_dict[player_name]) detect interrupt")
-                    is_need_to_break = True
-                    break
-                time.sleep(1)
-            if is_need_to_break:
                 break
 
-            player_round_info_dict = game_info_dict[player_name]
-            while round_num not in player_round_info_dict:
+        while True:
+            try:
                 if interrupt.interrupt_callback():
-                    logging.info("main loop (player_round_info_dict[round_num]) detect interrupt")
-                    is_need_to_break = True
+                    logging.info("train_gather_result_thread detect interrupt")
                     break
-                time.sleep(1)
-            if is_need_to_break:
+
+                signal_finished_game_id = train_game_finished_signal_queue.get(block=False)
+                finished_game_id_dict[signal_finished_game_id] = len(game_train_data_list_dict[signal_finished_game_id])
+            except Empty:
                 break
 
-            observation, estimate_value_probs = train_data_list
-            estimate_winning_prob = player_round_info_dict[round_num]
+        finalized_game_id_set = set()
+        for finished_game_id, num_total_games in finished_game_id_dict.items():
+            if finished_game_id in game_train_data_list_dict and finished_game_id in env_info_dict:
+                game_train_data_list = game_train_data_list_dict[finished_game_id]
+                game_info_dict = env_info_dict[finished_game_id]
 
-            model_value_probs, model_winning_prob = model.cal_reward([observation])
+                game_train_data_not_finished_list = list()
+                for game_train_data in game_train_data_list:
+                    train_data_list, step_info = game_train_data
 
-            estimate_value_probs_str = ','.join('%.2f' % value for value in estimate_value_probs)
-            model_value_probs_str = ','.join('%.2f' % value for value in model_value_probs)
-            logging.info(f'observation={observation}\nestimate_value_probs={estimate_value_probs_str}\nmodel_value_probs={model_value_probs_str}\nestimate_winning_prob={estimate_winning_prob}\nmodel_winning_prob={model_winning_prob}\n')
+                    round_num = step_info[KEY_ROUND_NUM]
+                    player_name = step_info[KEY_ACTED_PLAYER_NAME]
+                    if player_name in game_info_dict and round_num in game_info_dict[player_name]:
+                        observation, estimate_value_probs = train_data_list
+                        estimate_winning_prob = game_info_dict[player_name][round_num]
+                        model_value_probs, model_winning_prob = model.cal_reward([observation])
+                        estimate_value_probs_str = ','.join('%.2f' % value for value in estimate_value_probs)
+                        model_value_probs_str = ','.join('%.2f' % value for value in model_value_probs)
+                        logging.info(f'observation={observation}\nestimate_value_probs={estimate_value_probs_str}\nmodel_value_probs={model_value_probs_str}\nestimate_winning_prob={estimate_winning_prob}\nmodel_winning_prob={model_winning_prob}\n')
+                    else:
+                        game_train_data_not_finished_list.append(game_train_data)
+
+                if len(game_train_data_not_finished_list) == 0:
+                    finalized_game_id_set.add(finished_game_id)
+                    logging.info('Game %s finished, generated %d data' % (finished_game_id, num_total_games))
+                else:
+                    game_train_data_list_dict[finished_game_id] = game_train_data_not_finished_list
 
         # 清掉这局的数据cache
-        del env_info_dict[finished_game_id]
-        game_finalized_signal_queue.put(finished_game_id)
+        for finalized_game_id in finalized_game_id_set:
+            # 清掉这局的数据cache
+            del game_train_data_list_dict[finalized_game_id]
+            del env_info_dict[finalized_game_id]
+            del finished_game_id_dict[finalized_game_id]
+            game_finalized_signal_queue.put(finalized_game_id)
+
+        time.sleep(1.)
 

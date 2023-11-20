@@ -3,12 +3,14 @@ import argparse
 
 
 def _update_concurrent(target_dict, new_dict):
-    for key, value in target_dict.items():
-        if key in new_dict:
+    for key, value in new_dict.items():
+        if key in target_dict:
             if isinstance(value, dict):
                 _update_concurrent(target_dict[key], new_dict[key])
             else:
                 target_dict[key] = new_dict[key]
+        else:
+            target_dict[key] = value
     return target_dict
 
 
@@ -24,11 +26,12 @@ def parse_params():
 
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, choices=['train', 'debug'], help='train/debug', required=True)
+    parser.add_argument('--mode', type=str, choices=['train', 'debug', 'test'], help='train/debug/test', required=True)
     args = parser.parse_args()
     task_param_path_dict = {
         'train': 'config/train.yml',
         'debug': 'config/debug.yml',
+        'test': 'config/test.yml',
     }
 
     default_params = yaml.load(open('config/default.yml', encoding="UTF-8"), Loader=yaml.FullLoader)

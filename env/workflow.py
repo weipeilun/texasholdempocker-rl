@@ -440,10 +440,11 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
 
 # train_eval_process进程，用于把cpu敏感任务分发到多个进程，避免单个进程打满
-def train_eval_process(train_eval_thread_param_list, pid):
-    for train_thread_param, eval_thread_param in train_eval_thread_param_list:
-        Thread(target=train_game_loop_thread, args=train_thread_param, daemon=True).start()
-        Thread(target=eval_game_loop_thread, args=eval_thread_param, daemon=True).start()
+def train_eval_process(train_eval_thread_param_list, is_init_eval_thread, pid):
+    for train_eval_thread_param in train_eval_thread_param_list:
+        Thread(target=train_game_loop_thread, args=train_eval_thread_param[0], daemon=True).start()
+        if is_init_eval_thread:
+            Thread(target=eval_game_loop_thread, args=train_eval_thread_param[1], daemon=True).start()
 
     while True:
         if interrupt.interrupt_callback():

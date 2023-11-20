@@ -95,19 +95,18 @@ if __name__ == '__main__':
             batch_queue_info_train = map_train_thread_to_queue_info_train(thread_id, model_predict_batch_queue_info_list)
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_train[1][0], batch_queue_info_train[1][1], batch_queue_info_train[1][2])
             train_thread_param = (train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, thread_id, thread_name)
-            # Thread(target=train_game_loop_thread, args=(train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, thread_id, thread_name), daemon=True).start()
 
             batch_queue_info_eval_best, batch_queue_info_eval_new = map_train_thread_to_queue_info_eval(thread_id, model_predict_batch_queue_info_list)
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_best[1][0], batch_queue_info_eval_best[1][2], batch_queue_info_eval_best[1][1])
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_new[1][0], batch_queue_info_eval_new[1][2], batch_queue_info_eval_new[1][1])
             eval_thread_param = (eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, thread_id, thread_name)
-            # Thread(target=eval_game_loop_thread, args=(eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, is_mcts_use_batch, mcts_c_puct, thread_id, thread_name), daemon=True).start()
 
             train_eval_thread_param_list.append((train_thread_param, eval_thread_param))
             logging.info(f'Finished init params for train and eval thread {thread_id}')
 
+    is_init_eval_thread = True
     for pid in range(num_train_eval_process):
-        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], pid), daemon=True).start()
+        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_eval_thread, pid), daemon=True).start()
     logging.info('All train_eval_process inited.')
 
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict

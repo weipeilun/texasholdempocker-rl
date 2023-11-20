@@ -16,7 +16,6 @@ log_step_num: 5
 num_mcts_simulation_per_step: 20
 
 # model params
-num_bins: 11
 model_param_dict:
     device: 'cpu'
     embedding_dim: 16

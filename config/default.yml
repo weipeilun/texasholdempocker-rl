@@ -8,10 +8,10 @@ eval_task_num_games: 1000
 update_model_bb_per_100_thres: 5.
 
 # train process params
-first_train_data_step: 50
+first_train_data_step: 100
 train_per_step: 2
-eval_model_per_step: 1000
-log_step_num: 100
+eval_model_per_step: 5000
+log_step_num: 200
 
 # game params
 small_blind: 25
