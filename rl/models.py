@@ -44,13 +44,14 @@ class EnvEmbedding(nn.Module):
                               (2, num_bins + 2),
                               (2, num_bins + 2)
                               ]
-        self.starter_idx_list = list(range(num_starters))
+        self.starter_idx_array = np.arange(0, num_starters, dtype=np.int32)
         current_start_idx = num_starters
-        self.field_start_idx_list = list()
+        field_start_idx_list = list()
         for num_fields, num_dims in field_dim_list:
             for _ in range(num_fields):
-                self.field_start_idx_list.append(current_start_idx)
+                field_start_idx_list.append(current_start_idx)
             current_start_idx += num_dims
+        self.field_start_idx_array = np.array(field_start_idx_list, dtype=np.int32)
         self.field_embedding = nn.Embedding(num_embeddings=num_starters + sum(item[1] for item in field_dim_list), embedding_dim=embedding_dim)
 
         card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
@@ -95,31 +96,10 @@ class EnvEmbedding(nn.Module):
 
         for item in x:
             # current_round, current_player_role, cards, current_all_player_status, all_historical_player_action = item
-            current_round, current_player_role, cards, sorted_cards, current_all_player_status = item
-            sorted_item_list = list()
-            sorted_item_list.append(current_round)
-            sorted_item_list.append(current_player_role)
-
-            all_figure, all_decor = list(), list()
-            for card_representation_list in cards:
-                for card_representation in card_representation_list:
-                    all_figure.append(card_representation[0])
-                    all_decor.append(card_representation[1])
-            for card_representation in sorted_cards:
-                all_figure.append(card_representation[0])
-                all_decor.append(card_representation[1])
-            sorted_item_list.extend(all_figure)
-            sorted_item_list.extend(all_decor)
-
-            for i in range(self.num_player_fields):
-                for j in range(MAX_PLAYER_NUMBER):
-                    sorted_item_list.append(current_all_player_status[j][i])
-
+            item_idx_modified_array = item + self.field_start_idx_array
             # 把每个字段的相对idx映射成embedding的绝对idx
-            game_status = self.starter_idx_list.copy()
-            for dim_start_idx, item_idx in zip(self.field_start_idx_list, sorted_item_list):
-                    game_status.append(dim_start_idx + item_idx)
-            game_status_list.append(game_status)
+            item_idx_abs_array = np.hstack((self.starter_idx_array, item_idx_modified_array))
+            game_status_list.append(item_idx_abs_array)
         batch_size = len(x)
 
         game_status_array = np.array(game_status_list)

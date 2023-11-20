@@ -10,7 +10,7 @@ class Env:
     """
     Doudizhu multi-agent wrapper
     """
-    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, game_env=None, ignore_all_async_tasks=False):
+    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=7, game_env=None, ignore_all_async_tasks=False):
         """
         Here, we use dummy agents.
         This is because, in the orignial game, the players
@@ -32,6 +32,8 @@ class Env:
         self.small_blind = small_blind
         self.big_blind = big_blind
 
+        self.num_player_fields = num_player_fields
+
         # Initialize the internal environment
         if game_env is None:
             self._env = GameEnv(self.num_players, self.init_value, small_blind=self.small_blind, big_blind=self.big_blind)
@@ -46,10 +48,16 @@ class Env:
         self.player_init_value_to_pool_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
         self.player_value_left_to_pool_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
         self.player_value_left_to_player_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval))
+
         self.call_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
         # 以下，因为call_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
         self.call_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
         self.call_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
+
+        self.raise_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
+        # 以下，因为raise_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
+        self.raise_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
+        self.raise_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
 
         self.game_id = None
 
@@ -335,6 +343,28 @@ class Env:
         """
         return self._env.game_over
 
+    def _map_obs_idx_to_model_index(self, current_round, current_player_role, cards, sorted_cards, current_all_player_status):
+        sorted_item_list = list()
+        sorted_item_list.append(current_round)
+        sorted_item_list.append(current_player_role)
+
+        all_figure, all_decor = list(), list()
+        for card_representation_list in cards:
+            for card_representation in card_representation_list:
+                all_figure.append(card_representation[0])
+                all_decor.append(card_representation[1])
+        for card_representation in sorted_cards:
+            all_figure.append(card_representation[0])
+            all_decor.append(card_representation[1])
+        sorted_item_list.extend(all_figure)
+        sorted_item_list.extend(all_decor)
+
+        for i in range(self.num_player_fields):
+            for j in range(MAX_PLAYER_NUMBER):
+                sorted_item_list.append(current_all_player_status[j][i])
+
+        return np.array(sorted_item_list, dtype=np.int32)
+
     def get_obs(self, infoset, is_last_round):
         """
         This function obtains observations with imperfect information
@@ -402,7 +432,10 @@ class Env:
         #     [hand_cards, flop_cards, turn_cards, river_cards],
         #     current_all_player_status, all_historical_player_action)
 
-            return (current_round, current_player_role,
+            # return (current_round, current_player_role,
+            #     [hand_cards, flop_cards, turn_cards, river_cards],
+            #     sorted_cards, current_all_player_status)
+        return self._map_obs_idx_to_model_index(current_round, current_player_role,
                 [hand_cards, flop_cards, turn_cards, river_cards],
                 sorted_cards, current_all_player_status)
 
@@ -447,6 +480,9 @@ class Env:
                 call_min_value_to_game_init_value_bin = self.call_min_value_to_game_init_value_cutter.cut(call_min_value_to_game_init_value)
                 call_min_value_to_player_init_value_bin = self.call_min_value_to_player_init_value_cutter.cut(call_min_value_to_player_init_value)
                 call_min_value_to_player_value_left_bin = self.call_min_value_to_player_value_left_cutter.cut(call_min_value_to_player_value_left)
+                raise_min_value_to_game_init_value_bin = self.raise_min_value_to_game_init_value_cutter.cut(raise_min_value_to_game_init_value)
+                raise_min_value_to_player_init_value_bin = self.raise_min_value_to_player_init_value_cutter.cut(raise_min_value_to_player_init_value)
+                raise_min_value_to_player_value_left_bin = self.raise_min_value_to_player_value_left_cutter.cut(raise_min_value_to_player_value_left)
 
                 all_player_current_status_list[player_role] = (player_status.value,
                                                                player_init_value_to_pool_bin,

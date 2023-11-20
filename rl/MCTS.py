@@ -177,7 +177,6 @@ class MCTS:
             try:
                 workflow_status = self.workflow_signal_queue.get(block=False)
                 self.workflow_ack_signal_queue.put(workflow_status)
-                print(f'mcts {self.pid} locked')
 
                 with self.workflow_lock:
                     self.workflow_lock.wait()

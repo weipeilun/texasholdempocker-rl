@@ -32,6 +32,10 @@ class DummyAgent(object):
         return [*self.action, self.value_left]
 
     def determine_raise_call(self, bet_value, current_round_min_value, raised_value):
+        """
+        # PockerTDA.com规则[46.C]
+        下注数额大于current_round_min_value的1.5倍，视作raise，否则视作call.
+        """
         call_value_threshold = int(current_round_min_value * 1.5)
         if bet_value + raised_value < call_value_threshold:
             final_bet_value = min(current_round_min_value - raised_value, self.value_left)

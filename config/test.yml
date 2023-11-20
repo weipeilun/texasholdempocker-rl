@@ -1,3 +1,6 @@
+# workflow params
+num_predict_batch_process: 1
+
 # model params
 model_param_dict:
     device: 'cpu'
