@@ -89,14 +89,15 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
     def store_transition(self, observation, action_probs, winning_prob):
         def format_observation(obs):
-            cards_ori_list = obs[2]
-            cards_list = []
-            for cards_ori in cards_ori_list:
-                cards_list.extend(cards_ori)
-            cards_str = ','.join(str(cards) for cards in cards_list)
-            sorted_cards_str = ','.join(str(cards) for cards in obs[3])
-            players_str = ','.join(str(player) for player in obs[4])
-            return f'{obs[0]};{obs[1]};{cards_str};{sorted_cards_str};{players_str}'
+            # cards_ori_list = obs[2]
+            # cards_list = []
+            # for cards_ori in cards_ori_list:
+            #     cards_list.extend(cards_ori)
+            # cards_str = ','.join(str(cards) for cards in cards_list)
+            # sorted_cards_str = ','.join(str(cards) for cards in obs[3])
+            # players_str = ','.join(str(player) for player in obs[4])
+            # return f'{obs[0]};{obs[1]};{cards_str};{sorted_cards_str};{players_str}'
+            return ','.join([str(i) for i in obs.tolist()])
 
         if self.save_train_data:
             observation_str = format_observation(observation)
