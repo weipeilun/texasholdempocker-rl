@@ -59,7 +59,6 @@ if __name__ == '__main__':
     num_mcts_simulation_per_step = params['num_mcts_simulation_per_step']
     mcts_c_puct = params['mcts_c_puct']
     mcts_tau = params['mcts_tau']
-    game_id_counter = counter.Counter()
     workflow_lock = Condition()
     workflow_game_loop_signal_queue_list = list()
     workflow_game_loop_ack_signal_queue_list = list()
@@ -119,7 +118,9 @@ if __name__ == '__main__':
 
     # control game simulation thread, to prevent excess task produced by producer
     game_finalized_signal_queue = Queue()
-    Thread(target=train_game_control_thread, args=(train_game_id_signal_queue, game_finalized_signal_queue, env_info_dict, num_game_loop_thread * num_predict_batch_process), daemon=True).start()
+    game_id_counter = counter.Counter()
+    seed_counter = counter.Counter()
+    Thread(target=train_game_control_thread, args=(train_game_id_signal_queue, game_finalized_signal_queue, env_info_dict, game_id_counter, seed_counter), daemon=True).start()
 
     # gather train result and save to buffer
     step_counter = counter.Counter()
@@ -133,7 +134,7 @@ if __name__ == '__main__':
     eval_model_per_step = params['eval_model_per_step']
     log_step_num = params['log_step_num']
     historical_data_filename = params['historical_data_filename']
-    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename), daemon=True).start()
+    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread), daemon=True).start()
 
     # to monitor performance
     Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue,), daemon=True).start()

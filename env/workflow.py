@@ -1,4 +1,5 @@
 import logging
+import time
 
 import torch
 import os
@@ -285,7 +286,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
 
 
 # 模型训练（主进程）
-def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename):
+def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread):
     assert train_per_step > 0, 'train_per_step must > 0.'
 
     next_train_step = first_train_data_step
@@ -318,6 +319,21 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
         logging.info(f'Finished training historical data, train step: {train_step_num}, next eval step: {next_eval_step}')
     else:
         logging.info(f'No historical train data found, start training from scratch.')
+
+    # 生成训练任务
+    # 保持线程数=batch_size * 3，且线程数+2任务没有完成，可以保证瓶颈计算资源打满，同时有足够的任务进入模型batch队列
+    # 如此保证整个流程不会阻塞
+    # 这个方法放到这是为了解决训练和推理并行中RuntimeError: CUDA error: unspecified launch failure错误
+    time.sleep(1)
+    for _ in range(num_game_loop_thread + 2):
+        game_id = game_id_counter.increment()
+        seed = seed_counter.increment()
+
+        # 此处保证game_id唯一，env_info_dict, game_train_data_queue_dict不用加锁
+        game_info_dict = dict()
+        env_info_dict[game_id] = game_info_dict
+
+        game_id_signal_queue.put((game_id, seed))
 
     while True:
         if interrupt.interrupt_callback():
@@ -491,22 +507,7 @@ def train_eval_process(train_eval_thread_param_list, is_init_eval_thread, pid, l
 
 
 # 游戏流程控制（主进程），防止生产者生产过多任务，导致任务队列过长
-def train_game_control_thread(game_id_signal_queue, game_finalized_signal_queue, env_info_dict, num_game_loop_thread):
-    game_id = 0
-    seed = 10
-
-    # 保持线程数=batch_size * 3，且线程数+2任务没有完成，可以保证瓶颈计算资源打满，同时有足够的任务进入模型batch队列
-    # 如此保证整个流程不会阻塞
-    for _ in range(num_game_loop_thread + 2):
-        game_id += 1
-        seed += 1
-
-        # 此处保证game_id唯一，env_info_dict, game_train_data_queue_dict不用加锁
-        game_info_dict = dict()
-        env_info_dict[game_id] = game_info_dict
-
-        game_id_signal_queue.put((game_id, seed))
-
+def train_game_control_thread(game_id_signal_queue, game_finalized_signal_queue, env_info_dict, game_id_counter, seed_counter):
     while True:
         if interrupt.interrupt_callback():
             logging.info("game_controll_thread detect interrupt")
@@ -519,8 +520,8 @@ def train_game_control_thread(game_id_signal_queue, game_finalized_signal_queue,
                     break
 
                 _ = game_finalized_signal_queue.get(block=True, timeout=0.1)
-                game_id += 1
-                seed += 1
+                game_id = game_id_counter.increment()
+                seed = seed_counter.increment()
 
                 # 此处保证game_id唯一，env_info_dict, game_train_data_queue_dict不用加锁
                 game_info_dict = dict()
