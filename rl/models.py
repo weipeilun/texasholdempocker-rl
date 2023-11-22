@@ -397,6 +397,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                  embedding_dim=512,
                  positional_embedding_dim=128,
                  num_layers=6,
+                 num_transformer_head=10,
                  historical_action_sequence_length=56,
                  num_player_fields=10,
                  device='cpu'
@@ -421,7 +422,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           num_player_fields=num_player_fields,
                                           device=self.device)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=8, batch_first=True)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=num_transformer_head, batch_first=True)
         # encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim * 3)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, norm=None)
 

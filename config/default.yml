@@ -29,7 +29,8 @@ model_param_dict:
     device: 'cuda:0'
     embedding_dim: 256
     positional_embedding_dim: 128
-    num_layers: 4
+    num_transformer_head: 10
+    num_layers: 6
     historical_action_sequence_length: 16
     epsilon: 0.05
     epsilon_max: 0.8
