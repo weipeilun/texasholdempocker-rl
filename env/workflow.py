@@ -1,8 +1,10 @@
+import logging
+
 import torch
 import os
 from threading import Thread
 from env.env import *
-from tools import interrupt
+from tools.data_loader import *
 from rl.AlphaGoZero import AlphaGoZero
 from queue import Empty, Queue
 from rl.MCTS import MCTS
@@ -283,12 +285,35 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
 
 
 # 模型训练（主进程）
-def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num):
+def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename):
     next_train_step = first_train_data_step
-    train_per_step = train_per_step
-    eval_model_per_step = eval_model_per_step
+    next_eval_step = eval_model_per_step
     log_step_num = log_step_num
     train_step_num = 0
+
+    if os.path.exists(historical_data_filename):
+        logging.info(f'Found historical train data from {historical_data_filename}. Train with this first.')
+        # load data and train
+        data_generator = train_data_generator(historical_data_filename)
+        for observation_list, action_probs_list, winning_prob_list in data_generator:
+            model.store_transition(observation_list, action_probs_list, winning_prob_list, save_train_data=False)
+            step_counter.increment()
+
+            if step_counter.get_value() >= next_train_step:
+                action_probs_loss, winning_prob_loss = model.learn()
+                train_step_num += 1
+
+                if train_step_num % log_step_num == 0:
+                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, winning_prob_loss={winning_prob_loss}')
+
+        # eval
+        new_state_dict = get_state_dict_from_model(model)
+        eval_model_queue.put(new_state_dict)
+        next_eval_step = train_step_num + eval_model_per_step
+        logging.info(f'Finished training historical data, train step: {train_step_num}, next eval step: {next_eval_step}')
+    else:
+        logging.info(f'No historical train data found, start training from scratch.')
+
     while True:
         if interrupt.interrupt_callback():
             if is_save_model:
@@ -303,9 +328,11 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             if train_step_num % log_step_num == 0:
                 logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, winning_prob_loss={winning_prob_loss}')
 
-            if train_step_num % eval_model_per_step == 0:
+            if train_step_num >= next_eval_step:
                 new_state_dict = get_state_dict_from_model(model)
                 eval_model_queue.put(new_state_dict)
+                next_eval_step += eval_model_per_step
+                logging.info(f'Triggered eval task at train step: {train_step_num}, next eval step: {next_eval_step}')
 
             if is_save_model:
                 if train_step_num % 200 == 0:

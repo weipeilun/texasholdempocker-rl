@@ -132,7 +132,8 @@ if __name__ == '__main__':
     train_per_step = params['train_per_step']
     eval_model_per_step = params['eval_model_per_step']
     log_step_num = params['log_step_num']
-    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num), daemon=True).start()
+    historical_data_filename = params['historical_data_filename']
+    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename), daemon=True).start()
 
     # to monitor performance
     Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue,), daemon=True).start()

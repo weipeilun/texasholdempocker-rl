@@ -89,8 +89,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         win_rate = win_rate_tensor.cpu().numpy().tolist()[0]
         return value_probs, win_rate
 
-    def store_transition(self, observation, action_probs, winning_prob):
-        if self.save_train_data:
+    def store_transition(self, observation, action_probs, winning_prob, save_train_data=True):
+        if self.save_train_data and save_train_data:
             observation_str = ','.join([str(i) for i in observation.tolist()])
             action_prob_str = ','.join(['%.5f' % prob for prob in action_probs])
             winning_prob_str = '%.8f' % winning_prob
