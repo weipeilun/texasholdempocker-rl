@@ -22,6 +22,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  historical_action_sequence_length=56,
                  batch_size=32,
                  learning_rate=3e-4,
+                 l2_weight=0,
                  transition_buffer_len=1000,
                  epsilon=0.9,
                  epsilon_max=0.9,
@@ -46,8 +47,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.random_choice = np.arange(0, self.n_actions)
 
         self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, historical_action_sequence_length, num_player_fields, device).to(self.device)
-        self.optimizer = torch.optim.Adam(params=[{'params': self.model.parameters()}], lr=learning_rate)
-        # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate)
+        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, weight_decay=l2_weight)
+        # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
 
         self.action_prob_loss = torch.nn.CrossEntropyLoss()
         self.winning_prob_loss = torch.nn.MSELoss()
@@ -88,19 +89,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         return value_probs, win_rate
 
     def store_transition(self, observation, action_probs, winning_prob):
-        def format_observation(obs):
-            # cards_ori_list = obs[2]
-            # cards_list = []
-            # for cards_ori in cards_ori_list:
-            #     cards_list.extend(cards_ori)
-            # cards_str = ','.join(str(cards) for cards in cards_list)
-            # sorted_cards_str = ','.join(str(cards) for cards in obs[3])
-            # players_str = ','.join(str(player) for player in obs[4])
-            # return f'{obs[0]};{obs[1]};{cards_str};{sorted_cards_str};{players_str}'
-            return ','.join([str(i) for i in obs.tolist()])
-
         if self.save_train_data:
-            observation_str = format_observation(observation)
+            observation_str = ','.join([str(i) for i in observation.tolist()])
             action_prob_str = ','.join(['%.5f' % prob for prob in action_probs])
             winning_prob_str = '%.8f' % winning_prob
             result_str = f'{observation_str}\n{action_prob_str}\n{winning_prob_str}\n\n'

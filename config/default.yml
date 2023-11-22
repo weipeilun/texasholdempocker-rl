@@ -36,6 +36,7 @@ model_param_dict:
     gamma: 0.9
     batch_size: 16
     learning_rate: 0.0003
+    l2_weight: 0.02
     num_bins: 11
     save_train_data: True
 
