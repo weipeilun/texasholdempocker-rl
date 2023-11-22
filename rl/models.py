@@ -453,6 +453,6 @@ class TransformerAlphaGoZeroModel(nn.Module):
         value_x = x[:, 1, :]
         value_x = self.player_result_value_dense1(value_x)
         value_x = self.player_result_value_dense1_activation(value_x)
-        value_x = self.player_result_value_dense2(value_x)
+        value_x = self.player_result_value_dense2(value_x).squeeze(-1)
         player_result_value = self.winning_prob_logits_sigmoid(value_x)
         return action, player_result_value
