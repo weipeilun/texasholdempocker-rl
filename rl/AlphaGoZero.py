@@ -109,17 +109,19 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         with self.memory_lock:
             self.memory.store([observation, action_probs, winning_prob])
 
-    def learn(self):
-        sample_idx_np, _, data_batch = self.memory.sample(self.batch_size)
-        # weight_tensor = torch.from_numpy(weight_np).to(self.device)
+    def learn(self, observation_list=None, action_probs_list=None, winning_prob_list=None):
+        if observation_list is None or action_probs_list is None or winning_prob_list is None:
+            sample_idx_np, _, data_batch = self.memory.sample(self.batch_size)
+            # weight_tensor = torch.from_numpy(weight_np).to(self.device)
 
-        observation_list = list()
-        action_probs_list = list()
-        winning_prob_list = list()
-        for observation, action_probs, winning_prob in data_batch:
-            observation_list.append(observation)
-            action_probs_list.append(action_probs)
-            winning_prob_list.append(winning_prob)
+            observation_list = list()
+            action_probs_list = list()
+            winning_prob_list = list()
+            for observation, action_probs, winning_prob in data_batch:
+                observation_list.append(observation)
+                action_probs_list.append(action_probs)
+                winning_prob_list.append(winning_prob)
+
         action_probs_array = np.array(action_probs_list)
         winning_prob_array = np.array(winning_prob_list)
         action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32).to(self.device)

@@ -430,9 +430,13 @@ class TransformerAlphaGoZeroModel(nn.Module):
 
         # 预测action和下注金额
         # output: 0: fold, 1: check, raise & call share same output fields because they are only seperated by action_value
-        self.action_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class)
+        self.action_dense1 = nn.Linear(embedding_dim + positional_embedding_dim * 3, 128)
+        self.action_dense1_activation = torch.nn.ReLU()
+        self.action_dense2 = nn.Linear(128, num_output_class, bias=False)
         # 预测当前胜率
-        self.player_result_value_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 1)
+        self.player_result_value_dense1 = nn.Linear(embedding_dim + positional_embedding_dim * 3, 64)
+        self.player_result_value_dense1_activation = torch.nn.ReLU()
+        self.player_result_value_dense2 = nn.Linear(64, 1, bias=False)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
@@ -441,9 +445,14 @@ class TransformerAlphaGoZeroModel(nn.Module):
         x = self.transform_encoder(x)
 
         action_x = x[:, 0, :]
+        action_x = self.action_dense1(action_x)
+        action_x = self.action_dense1_activation(action_x)
+        action_x = self.action_dense2(action_x)
+        action = self.action_logits_softmax(action_x)
+
         value_x = x[:, 1, :]
-
-        action = self.action_logits_softmax(self.action_dense(action_x))
-        player_result_value = self.winning_prob_logits_sigmoid(self.player_result_value_dense(value_x).squeeze(-1))
-
+        value_x = self.player_result_value_dense1(value_x)
+        value_x = self.player_result_value_dense1_activation(value_x)
+        value_x = self.player_result_value_dense2(value_x)
+        player_result_value = self.winning_prob_logits_sigmoid(value_x)
         return action, player_result_value

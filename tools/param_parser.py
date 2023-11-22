@@ -26,12 +26,13 @@ def parse_params():
 
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, choices=['train', 'debug', 'test'], help='train/debug/test', required=True)
+    parser.add_argument('--mode', type=str, choices=['train', 'debug', 'test', 'test_train'], help='train/debug/test/test_train', required=True)
     args = parser.parse_args()
     task_param_path_dict = {
         'train': 'config/train.yml',
         'debug': 'config/debug.yml',
         'test': 'config/test.yml',
+        'test_train': 'config/test_train.yml',
     }
 
     default_params = yaml.load(open('config/default.yml', encoding="UTF-8"), Loader=yaml.FullLoader)

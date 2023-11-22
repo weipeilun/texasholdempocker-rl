@@ -1,0 +1,21 @@
+# workflow params
+num_predict_batch_process: 1
+predict_batch_size: 4
+game_loop_thread_multiple: 1.5
+train_data_path: data/test.txt
+
+# train process params
+log_step_num: 5
+predict_step_num: 50
+
+# model params
+model_param_dict:
+    device: 'cuda:0'
+    embedding_dim: 256
+    positional_embedding_dim: 64
+    num_layers: 12
+    batch_size: 16
+    learning_rate: 0.0003
+
+# checkpoints
+model_test_checkpoint_path: models/last.pth_bak
