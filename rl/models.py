@@ -421,9 +421,14 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           num_player_fields=num_player_fields,
                                           device=self.device)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=8, batch_first=True, device=self.device)
-        encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim * 3, device=self.device)
-        self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, encoder_norm)
+        # encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=8, batch_first=True)
+        # encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim * 3)
+        # self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, norm=None)
+        self.transformer = torch.nn.Transformer(d_model=embedding_dim + positional_embedding_dim * 3,
+                                              nhead=8,
+                                              num_encoder_layers=num_layers,
+                                              num_decoder_layers=num_layers,
+                                              batch_first=True)
 
         self.action_logits_softmax = torch.nn.Softmax(dim=-1)
         self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
@@ -442,7 +447,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
         x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
-        x = self.transform_encoder(x)
+        x = self.transformer(x, x)
 
         action_x = x[:, 0, :]
         action_x = self.action_dense1(action_x)
