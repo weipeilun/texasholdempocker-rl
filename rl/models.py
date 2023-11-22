@@ -442,7 +442,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
         x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
-        x = self.attention(x, x)
+        x = self.transform_encoder(x)
 
         action_x = x[:, 0, :]
         action_x = self.action_dense1(action_x)
