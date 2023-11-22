@@ -105,8 +105,8 @@ class EnvEmbedding(nn.Module):
             game_status_list.append(item_idx_abs_array)
         batch_size = len(x)
 
-        game_status_array = np.array(game_status_list)
-        game_status_tensor = torch.tensor(game_status_array).to(self.device)
+        game_status_array = np.asarray(game_status_list)
+        game_status_tensor = torch.tensor(game_status_array, device=self.device, requires_grad=False)
         game_status_embedding = self.field_embedding(game_status_tensor)
 
         if self.do_position_embedding and self.embedding_sequence_len > 0:

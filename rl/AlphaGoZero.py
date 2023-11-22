@@ -115,8 +115,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         action_probs_array = np.array(action_probs_list)
         winning_prob_array = np.array(winning_prob_list)
-        action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32).to(self.device)
-        winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32).to(self.device)
+        action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=self.device, requires_grad=False)
+        winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=self.device, requires_grad=False)
 
         self.model.train()
         model_action_probs_tensor, model_winning_prob_tensor = self.model(observation_list)
