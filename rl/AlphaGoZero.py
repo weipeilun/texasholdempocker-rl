@@ -47,7 +47,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.random_choice = np.arange(0, self.n_actions)
 
         self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, historical_action_sequence_length, num_player_fields, device).to(self.device)
-        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, weight_decay=l2_weight)
+        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=l2_weight)
         # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
 
         self.action_prob_loss = torch.nn.CrossEntropyLoss()
@@ -110,7 +110,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
             for observation, action_probs, winning_prob in data_batch:
                 observation_list.append(observation)
                 action_probs_list.append(action_probs)
-                winning_prob_list.append(winning_prob)
+                winning_prob_list.append([winning_prob])
 
         action_probs_array = np.array(action_probs_list)
         winning_prob_array = np.array(winning_prob_list)
@@ -122,7 +122,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         action_probs_loss = self.action_prob_loss(model_action_probs_tensor, action_probs_tensor)
         winning_prob_loss = self.winning_prob_loss(model_winning_prob_tensor, winning_prob_tensor)
-        over_all_loss = action_probs_loss + winning_prob_loss
+        over_all_loss = action_probs_loss + winning_prob_loss * 10
 
         self.optimizer.zero_grad()
         over_all_loss.backward()
