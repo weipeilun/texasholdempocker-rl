@@ -286,6 +286,8 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
 
 # 模型训练（主进程）
 def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename):
+    assert train_per_step > 0, 'train_per_step must > 0.'
+
     next_train_step = first_train_data_step
     next_eval_step = eval_model_per_step
     log_step_num = log_step_num
