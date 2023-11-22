@@ -111,7 +111,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
             for observation, action_probs, winning_prob in data_batch:
                 observation_list.append(observation)
                 action_probs_list.append(action_probs)
-                winning_prob_list.append([winning_prob])
+                winning_prob_list.append(winning_prob)
 
         action_probs_array = np.array(action_probs_list)
         winning_prob_array = np.array(winning_prob_list)
