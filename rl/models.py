@@ -433,10 +433,12 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.action_dense1 = nn.Linear(embedding_dim + positional_embedding_dim * 3, 128)
         self.action_dense1_activation = torch.nn.ReLU()
         self.action_dense2 = nn.Linear(128, num_output_class, bias=False)
+        self.action_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class, bias=False)
         # 预测当前胜率
         self.player_result_value_dense1 = nn.Linear(embedding_dim + positional_embedding_dim * 3, 64)
         self.player_result_value_dense1_activation = torch.nn.ReLU()
         self.player_result_value_dense2 = nn.Linear(64, 1, bias=False)
+        self.player_result_value_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 1)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
@@ -445,14 +447,16 @@ class TransformerAlphaGoZeroModel(nn.Module):
         x = self.transform_encoder(x)
 
         action_x = x[:, 0, :]
-        action_x = self.action_dense1(action_x)
-        action_x = self.action_dense1_activation(action_x)
-        action_x = self.action_dense2(action_x)
+        # action_x = self.action_dense1(action_x)
+        # action_x = self.action_dense1_activation(action_x)
+        # action_x = self.action_dense2(action_x)
+        action_x = self.action_dense(action_x)
         action = self.action_logits_softmax(action_x)
 
         value_x = x[:, 1, :]
-        value_x = self.player_result_value_dense1(value_x)
-        value_x = self.player_result_value_dense1_activation(value_x)
-        value_x = self.player_result_value_dense2(value_x).squeeze(-1)
+        # value_x = self.player_result_value_dense1(value_x)
+        # value_x = self.player_result_value_dense1_activation(value_x)
+        # value_x = self.player_result_value_dense2(value_x).squeeze(-1)
+        value_x = self.player_result_value_dense(value_x).squeeze(-1)
         player_result_value = self.winning_prob_logits_sigmoid(value_x)
         return action, player_result_value
