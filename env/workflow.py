@@ -216,7 +216,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
                 break
 
             try:
-                action_probs_list, player_result_value_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.003)
+                action_probs_list, player_result_value_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.001)
 
                 for action_probs, player_result_value, send_pid in zip(action_probs_list, player_result_value_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
@@ -262,7 +262,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
             pass
 
         try:
-            data, data_pid = in_queue.get(block=True, timeout=0.003)
+            data, data_pid = in_queue.get(block=True, timeout=0.001)
             batch_list.append(data)
             pid_list.append(data_pid)
 
@@ -423,7 +423,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
                 action = mcts.get_action(action_probs, use_argmax=True)
                 t1 = time.time()
-                logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, eval_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
+                # logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, eval_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
 
                 observation_, reward, terminated, info = env.step(action)
 
@@ -440,7 +440,12 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
 
 # train_eval_process进程，用于把cpu敏感任务分发到多个进程，避免单个进程打满
-def train_eval_process(train_eval_thread_param_list, is_init_eval_thread, pid):
+def train_eval_process(train_eval_thread_param_list, is_init_eval_thread, pid, log_level):
+    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
+                        datefmt='%Y-%m-%d,%H:%M:%S')
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+
     for train_eval_thread_param in train_eval_thread_param_list:
         Thread(target=train_game_loop_thread, args=train_eval_thread_param[0], daemon=True).start()
         if is_init_eval_thread:
@@ -451,7 +456,6 @@ def train_eval_process(train_eval_thread_param_list, is_init_eval_thread, pid):
             logging.info(f"train_eval_process_{pid} detect interrupt")
             break
         time.sleep(1.)
-
 
 
 # 游戏流程控制（主进程），防止生产者生产过多任务，导致任务队列过长

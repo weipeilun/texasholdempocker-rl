@@ -106,7 +106,7 @@ if __name__ == '__main__':
 
     is_init_eval_thread = True
     for pid in range(num_train_eval_process):
-        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_eval_thread, pid), daemon=True).start()
+        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_eval_thread, pid, log_level), daemon=True).start()
     logging.info('All train_eval_process inited.')
 
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict

@@ -190,7 +190,7 @@ class MCTS:
                 break
 
             try:
-                p_array, player_result_value = self.predict_out_queue.get(block=True, timeout=0.01)
+                p_array, player_result_value = self.predict_out_queue.get(block=True, timeout=0.001)
                 break
             except Empty:
                 continue
