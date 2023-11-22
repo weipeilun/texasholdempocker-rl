@@ -308,8 +308,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
                 if train_step_num % log_step_num == 0:
                     logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, winning_prob_loss={winning_prob_loss}')
 
-            # 避免训练数据过多重复
-            next_train_step += train_per_step
+                # 避免训练数据过多重复
+                next_train_step += train_per_step
 
         # eval
         new_state_dict = get_state_dict_from_model(model)
