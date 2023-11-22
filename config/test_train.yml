@@ -5,8 +5,8 @@ game_loop_thread_multiple: 1.5
 train_data_path: data/test.txt
 
 # train process params
-log_step_num: 5
-predict_step_num: 50
+log_step_num: 200
+predict_step_num: 500
 
 # model params
 model_param_dict:
