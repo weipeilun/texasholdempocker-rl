@@ -449,11 +449,13 @@ class GameEnv(object):
                 num_fold_player += 1
 
         # if (all_player_finished_once and ((num_raise_player == 1 and num_check_player == 0) or num_raise_player == 0)) or num_onboard_player <= 1:
-        if (all_player_finished_once and ((num_raise_player >= 1 and all_onboard_check_player_value_valid) or num_raise_player == 0)) or num_onboard_allin_player <= 1:
+        # 本轮正常结束
+        is_all_player_finished_valid = (all_player_finished_once and ((num_raise_player >= 1 and all_onboard_check_player_value_valid) or num_raise_player == 0))
+        if is_all_player_finished_valid or num_onboard_allin_player <= 1:
             logging.debug(f'round finished')
             self.historical_round_action_list.append(self.current_round_action_dict)
             self.historical_round_value_list.append(self.current_round_value_dict)
-            if self.current_round == 3 or num_onboard_allin_player <= 1 or num_onboard_player == 0:
+            if self.current_round == 3 or num_onboard_allin_player <= 1 or num_onboard_player == 0 or (is_all_player_finished_valid and num_onboard_player <= 1):
                 # game finished
                 logging.debug(f'game finished')
                 self.finish_game()
