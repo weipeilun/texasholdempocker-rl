@@ -453,7 +453,7 @@ class GameEnv(object):
             logging.debug(f'round finished')
             self.historical_round_action_list.append(self.current_round_action_dict)
             self.historical_round_value_list.append(self.current_round_value_dict)
-            if self.current_round == 3 or num_onboard_allin_player <= 1:
+            if self.current_round == 3 or num_onboard_allin_player <= 1 or num_onboard_player == 0:
                 # game finished
                 logging.debug(f'game finished')
                 self.finish_game()

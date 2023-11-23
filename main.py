@@ -49,7 +49,6 @@ if __name__ == '__main__':
     # 必须保证线程数 > batch_size * 2，以在train中gpu基本打满，在eval中不死锁
     predict_batch_size = params['predict_batch_size']
     num_game_loop_thread = int(predict_batch_size * params['game_loop_thread_multiple'])
-    assert num_game_loop_thread % 2 == 0, 'num_game_loop_thread must be even'
     # train_eval进程数
     num_train_eval_process = params['num_train_eval_process']
     num_train_eval_thread = num_game_loop_thread * num_predict_batch_process
