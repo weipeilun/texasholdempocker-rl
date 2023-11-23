@@ -343,7 +343,7 @@ class GameEnv(object):
 
         return acting_player_info_sets
 
-    def get_next_player_name(self, player_name):
+    def get_next_player_name(self, player_name, ignore_current_player=True):
         if player_name is None:
             return None
 
@@ -355,12 +355,17 @@ class GameEnv(object):
             return GET_PLAYER_NAME(player_id)
 
         next_player_name = next_player_name_by_name(player_name)
+        end_player_name = player_name if ignore_current_player else next_player_name
+        ignore_first = False if ignore_current_player else True
         while self.players[next_player_name].status != PlayerStatus.ONBOARD:
             next_player_name = next_player_name_by_name(next_player_name)
             # 转了一圈没有PlayerStatus.ONBOARD的人
-            if next_player_name == player_name:
-                next_player_name = None
-                break
+            if next_player_name == end_player_name:
+                if ignore_first:
+                    ignore_first = False
+                else:
+                    next_player_name = None
+                    break
         return next_player_name
 
     def finish_game(self):
@@ -458,7 +463,7 @@ class GameEnv(object):
                 for player in self.players.values():
                     player.reset_action()
 
-                self.acting_player_name = self.get_next_player_name(self.button_player_name)
+                self.acting_player_name = self.get_next_player_name(self.button_player_name, ignore_current_player=False)
 
                 self.current_round_action_dict = {player_name: None for player_name in self.players.keys()}
                 self.current_round_value_dict = {player_name: 0 for player_name in self.players.keys()}
