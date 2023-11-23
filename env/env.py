@@ -10,7 +10,7 @@ class Env:
     """
     Doudizhu multi-agent wrapper
     """
-    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=10, game_env=None, ignore_all_async_tasks=False):
+    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False):
         """
         Here, we use dummy agents.
         This is because, in the orignial game, the players
@@ -45,19 +45,25 @@ class Env:
 
         # 初始化连续特征的分桶器
         bin_cutter_interval = 1 / (num_bins - 1)
-        self.player_init_value_to_pool_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
-        self.player_value_left_to_pool_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
-        self.player_value_left_to_player_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval))
+        self.player_init_value_to_pool_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
+        self.player_value_left_to_pool_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
+        self.player_value_left_to_player_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
 
-        self.call_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
+        self.call_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
         # 以下，因为call_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
-        self.call_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
-        self.call_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
+        self.call_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        self.call_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
 
-        self.raise_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(0, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
+        self.raise_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(MAX_PLAYER_NUMBER * bin_cutter_interval, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
         # 以下，因为raise_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
-        self.raise_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
-        self.raise_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1 + bin_cutter_interval, bin_cutter_interval))
+        self.raise_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        self.raise_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+
+        # 玩家间特征
+        self.player_value_left_to_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
+        # 以下，若其他玩家财力大于当前玩家，当前玩家下大价值风险极大，则着重刻画小于1和大于1的部分
+        # 此处玩家初始实力相等情况不要落到最后一个桶
+        self.player_init_value_to_acting_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval + 0.00001)
 
         self.game_id = None
 
@@ -77,7 +83,7 @@ class Env:
 
         infoset = self._game_infoset
 
-        return self.get_obs(infoset, is_last_round=False), {}
+        return self.get_obs(infoset), {}
 
     # 修改经典step框架，异步计算reward
     def step(self, action):
@@ -115,7 +121,7 @@ class Env:
             done = False
             # reward = self._get_reward(game_id, step_id, acted_player_name, self.reward_cal_task_dict)
             reward = None
-            obs = self.get_obs(self._game_infoset, is_last_round=False)
+            obs = self.get_obs(self._game_infoset)
         return obs, reward, done, info
 
     def new_random(self):
@@ -288,19 +294,19 @@ class Env:
         num_data_generated = generate_recurrent(generate_recurrent_and_randomly_num_list, exist_card_list, 0)
         assert num_data_generated == num_estimation, f'Actual number of data generated:{num_data_generated} not equals to num_estimation:{num_estimation}, multiprocess calculation will miscalculate.'
 
-    def _get_reward_value(self):
-        """
-        This function is called in the end of each
-        game. It returns either 1/-1 for win/loss,
-        or ADP, i.e., every bomb will double the score.
-        """
-        player_role_reward_value = dict()
-        for player_name, init_value in self._env.player_init_value_dict.items():
-            player = self._env.players[player_name]
-
-            player_role = get_player_role(player_name, self._env.button_player_name, self._env.num_players)
-            player_role_reward_value[player_role] = (player.value_left - init_value) / init_value
-        return player_role_reward_value
+    # def _get_reward_value(self):
+    #     """
+    #     This function is called in the end of each
+    #     game. It returns either 1/-1 for win/loss,
+    #     or ADP, i.e., every bomb will double the score.
+    #     """
+    #     player_role_reward_value = dict()
+    #     for player_name, init_value in self._env.player_init_value_dict.items():
+    #         player = self._env.players[player_name]
+    #
+    #         player_role = get_player_role(player_name, self._env.button_player_name, self._env.num_players)
+    #         player_role_reward_value[player_role] = (player.value_left - init_value) / init_value
+    #     return player_role_reward_value
 
     @property
     def _game_infoset(self):
@@ -343,7 +349,7 @@ class Env:
         """
         return self._env.game_over
 
-    def _map_obs_idx_to_model_index(self, current_round, current_player_role, cards, sorted_cards, current_all_player_status):
+    def _map_obs_idx_to_model_index(self, current_round, current_player_role, cards, sorted_cards, acting_player_status_list, other_player_status_list):
         sorted_item_list = list()
         sorted_item_list.append(current_round)
         sorted_item_list.append(current_player_role)
@@ -359,13 +365,15 @@ class Env:
         sorted_item_list.extend(all_figure)
         sorted_item_list.extend(all_decor)
 
+        sorted_item_list.extend(acting_player_status_list)
+
         for i in range(self.num_player_fields):
-            for j in range(MAX_PLAYER_NUMBER):
-                sorted_item_list.append(current_all_player_status[j][i])
+            for j in range(MAX_PLAYER_NUMBER - 1):
+                sorted_item_list.append(other_player_status_list[j][i])
 
         return np.array(sorted_item_list, dtype=np.int32)
 
-    def get_obs(self, infoset, is_last_round):
+    def get_obs(self, infoset):
         """
         This function obtains observations with imperfect information
         from the infoset. It has three branches since we encode
@@ -390,111 +398,98 @@ class Env:
         `z`: same as z_batch but not a batch.
         """
         # todo: 此处先把历史下注行为干掉，没想好要怎么对玩家位置编码
-        if is_last_round:
-            # settle round
-            current_round = 5
-            # # `not a player`
-            # current_player_role = MAX_PLAYER_NUMBER
+        current_round = infoset.current_round
+        acting_player_id = GET_PLAYER_ID_BY_NAME(infoset.player_name)
 
-            obs_dict = dict()
-            for player_name, _infoset in infoset.items():
-                if _infoset.player_name is not None and _infoset.button_player_name is not None:
-                    current_player_role = get_player_role(_infoset.player_name, _infoset.button_player_name, _infoset.num_players)
+        hand_cards = get_card_representations(infoset.player_hand_cards, 2)
+        flop_cards = get_card_representations(infoset.flop_cards, 3)
+        turn_cards = get_card_representations(infoset.turn_cards, 1)
+        river_cards = get_card_representations(infoset.river_cards, 1)
 
-                    hand_cards = get_card_representations(_infoset.player_hand_cards, 2)
-                    flop_cards = get_card_representations(_infoset.flop_cards, 3)
-                    turn_cards = get_card_representations(_infoset.turn_cards, 1)
-                    river_cards = get_card_representations(_infoset.river_cards, 1)
+        sorted_cards = sort_card_representations(hand_cards, flop_cards, turn_cards, river_cards)
 
-                    sorted_cards = sort_card_representations(hand_cards, flop_cards, turn_cards, river_cards)
+        acting_player_status_list, other_player_status_list = self.get_all_player_current_status(infoset)
 
-                    current_all_player_status = self.get_all_player_current_status(_infoset)
-
-                    obs_dict[player_name] = (current_round, current_player_role,
-                    [hand_cards, flop_cards, turn_cards, river_cards], sorted_cards, current_all_player_status)
-            return obs_dict
-        else:
-            current_round = infoset.current_round
-            current_player_role = get_player_role(infoset.player_name, infoset.button_player_name, infoset.num_players)
-
-            hand_cards = get_card_representations(infoset.player_hand_cards, 2)
-            flop_cards = get_card_representations(infoset.flop_cards, 3)
-            turn_cards = get_card_representations(infoset.turn_cards, 1)
-            river_cards = get_card_representations(infoset.river_cards, 1)
-
-            sorted_cards = sort_card_representations(hand_cards, flop_cards, turn_cards, river_cards)
-
-            current_all_player_status = self.get_all_player_current_status(infoset)
-
-        #     all_historical_player_action = get_all_historical_action(infoset)
-        #
-        # return (current_round, current_player_role,
-        #     [hand_cards, flop_cards, turn_cards, river_cards],
-        #     current_all_player_status, all_historical_player_action)
-
-            # return (current_round, current_player_role,
-            #     [hand_cards, flop_cards, turn_cards, river_cards],
-            #     sorted_cards, current_all_player_status)
-        return self._map_obs_idx_to_model_index(current_round, current_player_role,
+        # all_historical_player_action = get_all_historical_action(infoset)
+        return self._map_obs_idx_to_model_index(current_round, acting_player_id,
                 [hand_cards, flop_cards, turn_cards, river_cards],
-                sorted_cards, current_all_player_status)
+                sorted_cards, acting_player_status_list, other_player_status_list)
 
     def get_all_player_current_status(self, infoset):
-        if infoset is None:
-            all_player_current_status_list = []
-        else:
-            all_player_current_status_list = [None] * infoset.num_players
+        assert infoset is not None, "The infoset should not be None."
 
-            player_name = infoset.player_name
-            game_init_value = infoset.game_init_value
-            call_min_value = infoset.call_min_value
-            raise_min_value = infoset.raise_min_value
-            for current_player_name, player_init_value in infoset.player_value_init_dict.items():
+        all_player_current_status_list = [None] * (infoset.num_players - 1)
+
+        game_init_value = infoset.game_init_value
+        # 当前玩家本轮call最小下注价值
+        acting_player_call_min_value = infoset.call_min_value
+        # 当前玩家本轮raise最小下注价值
+        acting_player_raise_min_value = infoset.raise_min_value
+
+        acting_player_init_value = infoset.player_value_init_dict[infoset.player_name]
+        acting_player_value_left = infoset.player_status_value_left_dict[infoset.player_name][1]
+
+        # 提示局势整体的激进/保守偏好
+        player_init_value_to_pool = acting_player_init_value / game_init_value
+        # 提示当前行为的绝对参照性的激进/保守偏好
+        player_value_left_to_pool = acting_player_value_left / game_init_value
+        # 提示当前行为的局势相对性的激进/保守偏好
+        player_value_left_to_player = acting_player_value_left / acting_player_init_value
+        # 提示当前最小跟注行为的绝对参照风险
+        call_min_value_to_game_init_value = acting_player_call_min_value / game_init_value
+        # 提示当前最小跟注行为的相对局势风险
+        call_min_value_to_player_init_value = acting_player_call_min_value / acting_player_init_value
+        # 提示当前最小跟注行为对玩家离场的风险
+        call_min_value_to_player_value_left = acting_player_call_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
+        # 提示当前最小加注行为的绝对参照风险
+        raise_min_value_to_game_init_value = acting_player_raise_min_value / game_init_value
+        # 提示当前最小加注行为的相对局势风险
+        raise_min_value_to_player_init_value = acting_player_raise_min_value / acting_player_init_value
+        # 提示当前最小加注行为对玩家离场的风险
+        raise_min_value_to_player_value_left = acting_player_raise_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
+
+        # 分桶
+        player_init_value_to_pool_bin = self.player_init_value_to_pool_cutter.cut(player_init_value_to_pool)
+        player_value_left_to_pool_bin = self.player_value_left_to_pool_cutter.cut(player_value_left_to_pool)
+        player_value_left_to_player_bin = self.player_value_left_to_player_cutter.cut(player_value_left_to_player)
+        call_min_value_to_game_init_value_bin = self.call_min_value_to_game_init_value_cutter.cut(call_min_value_to_game_init_value)
+        call_min_value_to_player_init_value_bin = self.call_min_value_to_player_init_value_cutter.cut(call_min_value_to_player_init_value)
+        call_min_value_to_player_value_left_bin = self.call_min_value_to_player_value_left_cutter.cut(call_min_value_to_player_value_left)
+        raise_min_value_to_game_init_value_bin = self.raise_min_value_to_game_init_value_cutter.cut(raise_min_value_to_game_init_value)
+        raise_min_value_to_player_init_value_bin = self.raise_min_value_to_player_init_value_cutter.cut(raise_min_value_to_player_init_value)
+        raise_min_value_to_player_value_left_bin = self.raise_min_value_to_player_value_left_cutter.cut(raise_min_value_to_player_value_left)
+
+        acting_player_status = (
+            player_init_value_to_pool_bin,
+            player_value_left_to_pool_bin,
+            player_value_left_to_player_bin,
+            call_min_value_to_game_init_value_bin,
+            call_min_value_to_player_init_value_bin,
+            call_min_value_to_player_value_left_bin,
+            raise_min_value_to_game_init_value_bin,
+            raise_min_value_to_player_init_value_bin,
+            raise_min_value_to_player_value_left_bin
+        )
+
+        for current_player_name, player_init_value in infoset.player_value_init_dict.items():
+            if current_player_name != infoset.player_name:
                 player_status, player_value_left = infoset.player_status_value_left_dict[current_player_name]
-                # 这用对于当前玩家的相对位置
-                player_role = get_player_role(current_player_name, player_name, infoset.num_players)
+                # 对于当前玩家的相对位置
+                # todo：此处相对位置和绝对位置都有物理意义，要怎么刻画没想好
+                relative_player_position = get_relative_player_position(current_player_name, infoset.player_name, infoset.num_players) - 1
 
-                # 提示局势整体的激进/保守偏好
-                player_init_value_to_pool = player_init_value / game_init_value
-                # 提示当前行为的绝对参照性的激进/保守偏好
-                player_value_left_to_pool = player_value_left / game_init_value
-                # 提示当前行为的局势相对性的激进/保守偏好
-                player_value_left_to_player = player_value_left / player_init_value
-                # 提示当前最小跟注行为的绝对参照风险
-                call_min_value_to_game_init_value = call_min_value / game_init_value
-                # 提示当前最小跟注行为的相对局势风险
-                call_min_value_to_player_init_value = call_min_value / player_init_value
-                # 提示当前最小跟注行为对玩家离场的风险
-                call_min_value_to_player_value_left = call_min_value / player_value_left if player_value_left > 0 else MAX_PLAYER_NUMBER
-                # 提示当前最小加注行为的绝对参照风险
-                raise_min_value_to_game_init_value = raise_min_value / game_init_value
-                # 提示当前最小加注行为的相对局势风险
-                raise_min_value_to_player_init_value = raise_min_value / player_init_value
-                # 提示当前最小加注行为对玩家离场的风险
-                raise_min_value_to_player_value_left = raise_min_value / player_value_left if player_value_left > 0 else MAX_PLAYER_NUMBER
+                # 提示玩家下注比例
+                player_value_left_to_init_value = player_value_left / player_init_value
+                # 提示玩家实力对比
+                player_init_value_to_acting_player_init_value = player_init_value / acting_player_init_value
 
-                # 分桶
-                player_init_value_to_pool_bin = self.player_init_value_to_pool_cutter.cut(player_init_value_to_pool)
-                player_value_left_to_pool_bin = self.player_value_left_to_pool_cutter.cut(player_value_left_to_pool)
-                player_value_left_to_player_bin = self.player_value_left_to_player_cutter.cut(player_value_left_to_player)
-                call_min_value_to_game_init_value_bin = self.call_min_value_to_game_init_value_cutter.cut(call_min_value_to_game_init_value)
-                call_min_value_to_player_init_value_bin = self.call_min_value_to_player_init_value_cutter.cut(call_min_value_to_player_init_value)
-                call_min_value_to_player_value_left_bin = self.call_min_value_to_player_value_left_cutter.cut(call_min_value_to_player_value_left)
-                raise_min_value_to_game_init_value_bin = self.raise_min_value_to_game_init_value_cutter.cut(raise_min_value_to_game_init_value)
-                raise_min_value_to_player_init_value_bin = self.raise_min_value_to_player_init_value_cutter.cut(raise_min_value_to_player_init_value)
-                raise_min_value_to_player_value_left_bin = self.raise_min_value_to_player_value_left_cutter.cut(raise_min_value_to_player_value_left)
+                player_value_left_to_init_value_bin = self.player_value_left_to_init_value_cutter.cut(player_value_left_to_init_value)
+                player_init_value_to_acting_player_init_value_bin = self.player_init_value_to_acting_player_init_value_cutter.cut(player_init_value_to_acting_player_init_value)
 
-                all_player_current_status_list[player_role] = (player_status.value,
-                                                               player_init_value_to_pool_bin,
-                                                               player_value_left_to_pool_bin,
-                                                               player_value_left_to_player_bin,
-                                                               call_min_value_to_game_init_value_bin,
-                                                               call_min_value_to_player_init_value_bin,
-                                                               call_min_value_to_player_value_left_bin,
-                                                               raise_min_value_to_game_init_value_bin,
-                                                               raise_min_value_to_player_init_value_bin,
-                                                               raise_min_value_to_player_value_left_bin)
-        return all_player_current_status_list
+                all_player_current_status_list[relative_player_position] = (player_status.value,
+                                                                            player_value_left_to_init_value_bin,
+                                                                            player_init_value_to_acting_player_init_value_bin)
+        return acting_player_status, all_player_current_status_list
 
 
 def get_card_representations(list_cards, num_cards):
@@ -531,14 +526,13 @@ def sort_card_representations(hand_cards, flop_cards, turn_cards, river_cards):
     return card_list
 
 
-def get_player_role(player_name, king_player_name, num_players):
-    king_player_id = GET_PLAYER_ID_BY_NAME(king_player_name)
+def get_relative_player_position(player_name, base_player_name, num_players):
+    base_player_id = GET_PLAYER_ID_BY_NAME(base_player_name)
     player_id = GET_PLAYER_ID_BY_NAME(player_name)
-    num_players = num_players
 
-    player_role = player_id + num_players - king_player_id
-    if player_role >= num_players:
-        player_role -= num_players
+    player_role = player_id - base_player_id
+    if player_role < 0:
+        player_role += num_players
     return player_role
 
 
@@ -555,7 +549,7 @@ def get_all_historical_action(infoset):
 
             for player_name, action, value_pull, value_left in player_action_value_list:
                 player_init_value = infoset.player_value_init_dict[player_name]
-                player_role = get_player_role(player_name, infoset.button_player_name, infoset.num_players)
+                player_role = get_relative_player_position(player_name, infoset.button_player_name, infoset.num_players)
 
                 value_start = value_pull + value_left
 

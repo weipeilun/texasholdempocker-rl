@@ -22,7 +22,7 @@ mcts_c_puct: 7.
 mcts_tau: 1.
 
 # model params
-num_bins: 11
+num_bins: 10
 model_param_dict:
     n_observation: 5
     n_actions: 4
@@ -39,7 +39,7 @@ model_param_dict:
     batch_size: 32
     learning_rate: 0.000003
     l2_weight: 0.0001
-    num_bins: 11
+    num_bins: 10
     save_train_data: True
     transition_buffer_len: 10000
 

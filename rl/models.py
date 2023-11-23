@@ -10,7 +10,7 @@ from env.constants import *
 
 
 class EnvEmbedding(nn.Module):
-    def __init__(self, embedding_dim, historical_action_sequence_length, num_bins, do_position_embedding=False, positional_embedding_dim=128, embedding_sequence_len=-1, num_starters=1, num_player_fields=10, num_append_segments=0, device='cpu'):
+    def __init__(self, embedding_dim, historical_action_sequence_length, num_bins, do_position_embedding=False, positional_embedding_dim=128, embedding_sequence_len=-1, num_starters=1, num_acting_player_fields=9, num_other_player_fields=3, num_append_segments=0, device='cpu'):
         super().__init__()
 
         self.embedding_dim = embedding_dim
@@ -20,32 +20,36 @@ class EnvEmbedding(nn.Module):
         self.embedding_sequence_len = embedding_sequence_len
         self.num_starters = num_starters
         self.num_bins = num_bins
-        self.num_player_fields = num_player_fields
+        self.num_acting_player_fields = num_acting_player_fields
+        self.num_other_player_fields = num_other_player_fields
         self.device = device
 
         assert self.embedding_dim > 0 and self.historical_action_sequence_length > 0, ValueError(f'embedding_dim({self.embedding_dim}) and historical_action_sequence_length({self.historical_action_sequence_length}) must greater than 0.')
 
         # starters
-        # all 5 rounds + settle round + `not a round`
+        # all 4 rounds: pre-flop, flop, turn, river
         # all players + `not a player`
         # figures
         # decors
         # player status
-        # bins of player status values
-        field_dim_list = [(1, 5 + 1 + 1),
+        # bins of acting player status
+        # bins of other player status
+        field_dim_list = [(1, 4),
                               (1, MAX_PLAYER_NUMBER + 1),
                               (7 * 2, len(CardFigure) + 1),
                               (7 * 2, len(CardDecor) + 1),
-                              (2, len(PlayerStatus)),
-                              (2, num_bins + 1),
-                              (2, num_bins + 1),
-                              (2, num_bins + 1),
-                              (2, num_bins + 1),
-                              (2, num_bins + 2),
-                              (2, num_bins + 2),
-                              (2, num_bins + 1),
-                              (2, num_bins + 2),
-                              (2, num_bins + 2)
+                              (1, num_bins),
+                              (1, num_bins),
+                              (1, num_bins),
+                              (1, num_bins),
+                              (1, num_bins + 1),
+                              (1, num_bins + 1),
+                              (1, num_bins),
+                              (1, num_bins + 1),
+                              (1, num_bins + 1),
+                          (MAX_PLAYER_NUMBER - 1, len(PlayerStatus)),
+                          (MAX_PLAYER_NUMBER - 1, num_bins),
+                          (MAX_PLAYER_NUMBER - 1, num_bins + 1),
                               ]
         self.starter_idx_array = np.arange(0, num_starters, dtype=np.int32)
         current_start_idx = num_starters
@@ -67,15 +71,16 @@ class EnvEmbedding(nn.Module):
             position_embedding_idx_3 = torch.arange(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64) + num_starters + 2 + len(card_segments)
             self.position_embedding_idx = nn.Parameter(torch.cat([position_embedding_idx_1, position_embedding_idx_2, position_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
 
-            self.segment_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1), embedding_dim=self.positional_embedding_dim)
+            self.segment_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1), embedding_dim=self.positional_embedding_dim)
             # 此处的segment组成：starters, round, role, figure * 7 * 2, decor * 7 * 2, player_status(num_player_fields) * num_player, (append_segments)
             segment_embedding_idx_ordinary_1 = torch.arange(num_starters + 2)
             segment_embedding_idx_ordinary_2 = torch.tensor(card_segments) + num_starters + 2
             segment_embedding_idx_ordinary_3 = torch.tensor(card_segments) + num_starters + 2
-            segment_embedding_idx_players = torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * num_player_fields - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1) - num_append_segments).repeat(num_player_fields)
-            segment_embedding_idx_list = [segment_embedding_idx_ordinary_1, segment_embedding_idx_ordinary_2, segment_embedding_idx_ordinary_3, segment_embedding_idx_players]
+            segment_embedding_idx_acting_players = torch.ones(num_acting_player_fields, dtype=torch.int64) * (num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields - (MAX_PLAYER_NUMBER - 1) * num_other_player_fields - num_append_segments)
+            segment_embedding_idx_other_players = torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * num_other_player_fields - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1) - num_append_segments).repeat(num_other_player_fields)
+            segment_embedding_idx_list = [segment_embedding_idx_ordinary_1, segment_embedding_idx_ordinary_2, segment_embedding_idx_ordinary_3, segment_embedding_idx_acting_players, segment_embedding_idx_other_players]
             if num_append_segments > 0:
-                segment_embedding_idx_list.append(torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1) - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - MAX_PLAYER_NUMBER * (num_player_fields - 1)))
+                segment_embedding_idx_list.append(torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1) - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1)))
             self.segment_embedding_idx = nn.Parameter(torch.cat(segment_embedding_idx_list, dim=0).unsqueeze(0), requires_grad=False)
 
             # 加入card_embedding是因为segment_embedding无法编码牌的点数和花色的对应关系
@@ -399,7 +404,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
                  num_layers=6,
                  num_transformer_head=10,
                  historical_action_sequence_length=56,
-                 num_player_fields=10,
+                 num_acting_player_fields=9,
+                 num_other_player_fields=3,
                  device='cpu'
                  ):
         super().__init__()
@@ -409,8 +415,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.historical_action_sequence_length = historical_action_sequence_length
         self.device = device
 
-        # round, role, figure * 7 * 2, decor * 7 * 2, player_status(num_player_fields) * num_player
-        embedding_sequence_len = 2 + 4 * 7 + num_player_fields * MAX_PLAYER_NUMBER
+        # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players
+        embedding_sequence_len = 2 + 4 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1)
 
         self.env_embedding = EnvEmbedding(embedding_dim,
                                           historical_action_sequence_length=historical_action_sequence_length,
@@ -419,7 +425,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           positional_embedding_dim=positional_embedding_dim,
                                           embedding_sequence_len=embedding_sequence_len,
                                           num_starters=2,
-                                          num_player_fields=num_player_fields,
+                                          num_acting_player_fields=num_acting_player_fields,
+                                          num_other_player_fields=num_other_player_fields,
                                           device=self.device)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=num_transformer_head, batch_first=True)
@@ -431,14 +438,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
 
         # 预测action和下注金额
         # output: 0: fold, 1: check, raise & call share same output fields because they are only seperated by action_value
-        self.action_dense1 = nn.Linear(embedding_dim + positional_embedding_dim * 3, 128)
-        self.action_dense1_activation = torch.nn.ReLU()
-        self.action_dense2 = nn.Linear(128, num_output_class, bias=False)
         self.action_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class, bias=False)
         # 预测当前胜率
-        self.player_result_value_dense1 = nn.Linear(embedding_dim + positional_embedding_dim * 3, 64)
-        self.player_result_value_dense1_activation = torch.nn.ReLU()
-        self.player_result_value_dense2 = nn.Linear(64, 1, bias=False)
         self.player_result_value_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 1)
 
     def forward(self, x):
@@ -448,16 +449,10 @@ class TransformerAlphaGoZeroModel(nn.Module):
         x = self.transform_encoder(x)
 
         action_x = x[:, 0, :]
-        # action_x = self.action_dense1(action_x)
-        # action_x = self.action_dense1_activation(action_x)
-        # action_x = self.action_dense2(action_x)
         action_x = self.action_dense(action_x)
         action = self.action_logits_softmax(action_x)
 
         value_x = x[:, 1, :]
-        # value_x = self.player_result_value_dense1(value_x)
-        # value_x = self.player_result_value_dense1_activation(value_x)
-        # value_x = self.player_result_value_dense2(value_x).squeeze(-1)
         value_x = self.player_result_value_dense(value_x).squeeze(-1)
         player_result_value = self.winning_prob_logits_sigmoid(value_x)
         return action, player_result_value

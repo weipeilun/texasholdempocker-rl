@@ -29,7 +29,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  epsilon_max=0.9,
                  epsilon_delta_per_step=0.00001,
                  num_bins=10,
-                 num_player_fields=10,
+                 num_acting_player_fields=9,
+                 num_other_player_fields=3,
                  save_train_data=False
                  ):
         super(AlphaGoZero, self).__init__()
@@ -47,7 +48,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.epsilon_max = epsilon_max
         self.random_choice = np.arange(0, self.n_actions)
 
-        self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, num_transformer_head, historical_action_sequence_length, num_player_fields, device).to(self.device)
+        self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, num_transformer_head, historical_action_sequence_length, num_acting_player_fields, num_other_player_fields, device).to(self.device)
         self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=l2_weight)
         # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
 

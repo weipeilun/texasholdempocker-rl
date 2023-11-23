@@ -234,14 +234,15 @@ class GameEnv(object):
         self.player_init_value_dict = {player_name: player.value_left for player_name, player in self.players.items()}
 
         # PockerTDA.com规则[34]
-        small_bind_player_name = self.get_next_player_name(self.button_player_name)
-        big_bind_player_name = self.get_next_player_name(small_bind_player_name)
         if self.num_players == 2:
             # 单挑局，小盲位翻牌前先行动，翻牌后的每个下注轮后行动
-            self.button_player_name = small_bind_player_name
-            self.acting_player_name = small_bind_player_name
+            small_bind_player_name = self.button_player_name
+            big_bind_player_name = self.get_next_player_name(small_bind_player_name)
+            self.acting_player_name = self.button_player_name
         else:
             # 翻牌前大盲位后先行动，后续按钮位后先行动
+            small_bind_player_name = self.get_next_player_name(self.button_player_name)
+            big_bind_player_name = self.get_next_player_name(small_bind_player_name)
             self.acting_player_name = self.get_next_player_name(big_bind_player_name)
 
         small_blind_actual_bet = self.players[small_bind_player_name].set_blinds(self.small_blind)
@@ -443,11 +444,11 @@ class GameEnv(object):
                 num_fold_player += 1
 
         # if (all_player_finished_once and ((num_raise_player == 1 and num_check_player == 0) or num_raise_player == 0)) or num_onboard_player <= 1:
-        if (all_player_finished_once and ((num_raise_player >= 1 and all_onboard_check_player_value_valid) or num_raise_player == 0)) or num_onboard_player <= 1:
+        if (all_player_finished_once and ((num_raise_player >= 1 and all_onboard_check_player_value_valid) or num_raise_player == 0)) or num_onboard_allin_player <= 1:
             logging.debug(f'round finished')
             self.historical_round_action_list.append(self.current_round_action_dict)
             self.historical_round_value_list.append(self.current_round_value_dict)
-            if self.current_round == 3 or num_onboard_player <= 1:
+            if self.current_round == 3 or num_onboard_allin_player <= 1:
                 # game finished
                 logging.debug(f'game finished')
                 self.finish_game()
