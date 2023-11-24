@@ -390,6 +390,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 continue
 
         observation, info = env.reset(game_id, seed=seed)
+        logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
 
         while True:
             if interrupt.interrupt_callback():
