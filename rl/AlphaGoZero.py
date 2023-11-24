@@ -124,7 +124,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         action_probs_loss = self.action_prob_loss(model_action_probs_tensor, action_probs_tensor)
         winning_prob_loss = self.winning_prob_loss(model_winning_prob_tensor, winning_prob_tensor)
-        over_all_loss = action_probs_loss + winning_prob_loss * 100
+        over_all_loss = action_probs_loss + winning_prob_loss * 10
 
         self.optimizer.zero_grad()
         over_all_loss.backward()
