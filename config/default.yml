@@ -17,7 +17,7 @@ log_step_num: 200
 # game params
 small_blind: 25
 big_blind: 50
-num_mcts_simulation_per_step: 2000
+num_mcts_simulation_per_step: 600
 mcts_c_puct: 7.
 mcts_tau: 1.
 mcts_dirichlet_noice_epsilon: 0.2
