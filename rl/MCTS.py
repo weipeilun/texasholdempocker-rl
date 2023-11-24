@@ -49,12 +49,12 @@ class MCTS:
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
 
-        p_array, _ = self.predict(observation, env._acting_player_name)
+        acting_player_name = env._acting_player_name
+        p_array, _ = self.predict(observation, acting_player_name)
         if self.is_root and self.apply_dirichlet_noice:
             dirichlet_noise = np.random.dirichlet(p_array)
             p_array = (1 - self.dirichlet_noice_epsilon) * p_array + self.dirichlet_noice_epsilon * dirichlet_noise
 
-        acting_player_name = env._acting_player_name
         for i in range(self.n_simulation):
             if interrupt.interrupt_callback():
                 logging.info("MCTS.simulate detect interrupt")
@@ -63,11 +63,10 @@ class MCTS:
             new_env = env.new_random()
 
             action_bin, action = self._choose_action(p_array)
-            observation_, reward, terminated, info = new_env.step(action)
+            observation_, reward_dict, terminated, info = new_env.step(action)
             if not terminated:
-                player_action_reward = self.children[action_bin].expand(observation_, new_env, acting_player_name)
-            else:
-                player_action_reward = self.get_player_action_reward(reward, acting_player_name)
+                reward_dict = self.children[action_bin].expand(observation_, new_env)
+            player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
             self.children_w_array[action_bin] += player_action_reward
             self.children_n_array[action_bin] += 1
@@ -144,7 +143,7 @@ class MCTS:
         else:
             raise ValueError(f"action should be in [0, {self.n_actions}), which is {action_bin}")
 
-    def expand(self, observation, env, acting_player_name):
+    def expand(self, observation, env):
         if self.children is None:
             self.children = list()
             for _ in range(self.n_actions):
@@ -153,22 +152,22 @@ class MCTS:
             self.children_n_array = np.zeros(self.n_actions)
             self.children_q_array = np.zeros(self.n_actions)
 
-        p_array, _ = self.predict(observation, env._acting_player_name)
+        acting_player_name = env._acting_player_name
+        p_array, _ = self.predict(observation, acting_player_name)
         action_bin, action = self._choose_action(p_array)
 
-        observation_, reward, terminated, info = env.step(action)
+        observation_, reward_dict, terminated, info = env.step(action)
         if not terminated:
-            player_action_reward = self.children[action_bin].expand(observation_, env, acting_player_name)
-        else:
-            player_action_reward = self.get_player_action_reward(reward, acting_player_name)
+            reward_dict = self.children[action_bin].expand(observation_, env)
+        player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
         self.children_w_array[action_bin] += player_action_reward
         self.children_n_array[action_bin] += 1
         self.children_q_array[action_bin] = self.children_w_array[action_bin] / self.children_n_array[action_bin]
 
-        return player_action_reward
+        return reward_dict
 
-    def predict(self, observation, player_name_to_act):
+    def predict(self, observation, acting_player_name):
         # 仅支持多线程下的批量预测
         p_array = self.default_action_probs
         player_result_value = self.default_player_result_value
@@ -183,7 +182,7 @@ class MCTS:
             except Empty:
                 pass
 
-        self.player_name_predict_in_queue_dict[player_name_to_act].put((observation, self.pid))
+        self.player_name_predict_in_queue_dict[acting_player_name].put((observation, self.pid))
         while True:
             if interrupt.interrupt_callback():
                 logging.info(f"MCTS.predict{self.pid} detect interrupt")

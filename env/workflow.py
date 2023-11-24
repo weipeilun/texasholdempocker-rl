@@ -366,7 +366,7 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
 
 # 游戏对弈（train_eval_process进程）
-def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, model_predict_in_queue, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, pid, thread_name):
+def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, model_predict_in_queue, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, pid, thread_name):
     env = Env(winning_probability_generating_task_queue, num_bins, num_players=MAX_PLAYER_NUMBER, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue, model_predict_in_queue)
 
@@ -396,7 +396,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 break
 
             t0 = time.time()
-            mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, pid=pid, thread_name=thread_name)
+            mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, pid=pid, thread_name=thread_name)
             action_probs = mcts.simulate(observation=observation, env=env)
             # 用于接收中断信号
             if action_probs is None:

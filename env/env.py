@@ -44,7 +44,7 @@ class Env:
         self.reward_cal_task_set = set()
 
         # 初始化连续特征的分桶器
-        bin_cutter_interval = 1 / (num_bins - 1)
+        bin_cutter_interval = 1 / num_bins
         self.player_init_value_to_pool_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
         self.player_value_left_to_pool_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
         self.player_value_left_to_player_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
@@ -54,7 +54,7 @@ class Env:
         self.call_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
         self.call_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
 
-        self.raise_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(MAX_PLAYER_NUMBER * bin_cutter_interval, MAX_PLAYER_NUMBER, MAX_PLAYER_NUMBER * bin_cutter_interval))
+        self.raise_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
         # 以下，因为raise_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
         self.raise_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
         self.raise_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
@@ -399,7 +399,8 @@ class Env:
         """
         # todo: 此处先把历史下注行为干掉，没想好要怎么对玩家位置编码
         current_round = infoset.current_round
-        acting_player_id = GET_PLAYER_ID_BY_NAME(infoset.player_name)
+        # 注意这用相对位置，因为button位在局和局间变化，此处要刻画在该局游戏中玩家位置的强弱
+        acting_player_id = get_relative_player_position(infoset.player_name, infoset.button_player_name, infoset.num_players)
 
         hand_cards = get_card_representations(infoset.player_hand_cards, 2)
         flop_cards = get_card_representations(infoset.flop_cards, 3)
@@ -534,40 +535,3 @@ def get_relative_player_position(player_name, base_player_name, num_players):
     if player_role < 0:
         player_role += num_players
     return player_role
-
-
-def get_all_historical_action(infoset):
-    all_historical_action_list = list()
-
-    if infoset is not None:
-        game_init_value = infoset.game_init_value
-        call_min_value = infoset.call_min_value
-        all_round_exist_list = [round_num for round_num in infoset.all_round_player_action_value_dict.keys()]
-        all_round_exist_list.sort()
-        for round_idx, current_round in enumerate(all_round_exist_list):
-            player_action_value_list = infoset.all_round_player_action_value_dict[current_round]
-
-            for player_name, action, value_pull, value_left in player_action_value_list:
-                player_init_value = infoset.player_value_init_dict[player_name]
-                player_role = get_relative_player_position(player_name, infoset.button_player_name, infoset.num_players)
-
-                value_start = value_pull + value_left
-
-                value_start_to_pool = value_start / game_init_value
-                value_start_to_player = value_start / player_init_value
-                # todo：参照player修改这块
-                call_min_value_to_player_value_left = call_min_value / value_start if value_start > 0 else 0.
-                value_pull_to_pool = value_pull / game_init_value
-                value_pull_to_player = value_pull / player_init_value
-                value_pull_to_start = value_pull / value_start
-                all_historical_action_list.append((
-                    round_idx, player_role, action.value,
-                    value_start_to_pool, value_start_to_player,
-                    call_min_value_to_player_value_left,
-                    value_pull_to_pool, value_pull_to_player, value_pull_to_start
-                ))
-        assert len(all_historical_action_list) > 0, ValueError(f'len(all_historical_action_list) must > 0')
-    return all_historical_action_list
-
-
-

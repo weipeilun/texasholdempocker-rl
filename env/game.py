@@ -906,5 +906,5 @@ class InfoSet(object):
         self.player_status_value_left_dict = None
         # Number of players. A str
         self.num_players = None
-        # The king player name. A str
-        self.king_player_name = None
+        # The button player name. A str
+        self.button_player_name = None
