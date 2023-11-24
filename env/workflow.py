@@ -219,7 +219,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
                 break
 
             try:
-                action_probs_list, player_result_value_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.001)
+                action_probs_list, player_result_value_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
                 for action_probs, player_result_value, send_pid in zip(action_probs_list, player_result_value_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
@@ -265,7 +265,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
             pass
 
         try:
-            data, data_pid = in_queue.get(block=True, timeout=0.001)
+            data, data_pid = in_queue.get(block=True, timeout=0.01)
             batch_list.append(data)
             pid_list.append(data_pid)
 
@@ -384,6 +384,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                     break
 
                 game_id, seed = game_id_seed_signal_queue.get(block=True, timeout=1.)
+                logging.info(f"train_game_loop_thread {thread_name} start to simulate game {game_id}")
                 break
             except Empty:
                 continue
@@ -405,7 +406,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             action = mcts.get_action(action_probs, use_argmax=False)
             t1 = time.time()
-            # logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, train_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
+            logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
             game_train_data_queue.put((game_id, ([observation, action_probs], info)))

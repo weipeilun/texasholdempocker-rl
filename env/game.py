@@ -154,7 +154,7 @@ class GameEnv(object):
 
         return new_env
 
-    def reset_players(self):
+    def reset_players(self, force_restart_game=False):
         def restart_game():
             self.num_players = self.initial_num_players
             self.init_value = self.initial_init_value
@@ -204,7 +204,7 @@ class GameEnv(object):
 
             self.button_player_name = self.get_next_player_name(self.button_player_name)
 
-        if self.players is None:
+        if force_restart_game or self.players is None:
             # no players inited
             restart_game()
         else:
@@ -226,9 +226,9 @@ class GameEnv(object):
                 # Just reset a single game for no player busted
                 reset_single_game()
 
-    def reset(self, seed=None):
+    def reset(self, seed=None, force_restart_game=False):
         # reset the whole env or just reset a single game
-        self.reset_players()
+        self.reset_players(force_restart_game=force_restart_game)
 
         # get player init value for each player
         self.player_init_value_dict = {player_name: player.value_left for player_name, player in self.players.items()}
@@ -291,7 +291,7 @@ class GameEnv(object):
                 num_player_onboard += 1
         if num_player_onboard <= 1:
             self.finish_game()
-            self.reset()
+            self.reset(force_restart_game=True)
 
     def card_play_init(self, seed=None):
         if seed is not None:
