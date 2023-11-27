@@ -17,5 +17,6 @@ def interrupt_callback():
 
 
 # capture SIGINT signal, e.g., Ctrl+C
+signal.signal(signal.SIGALRM, _signal_handler)
 signal.signal(signal.SIGINT, _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)

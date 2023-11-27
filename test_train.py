@@ -1,3 +1,6 @@
+import signal
+import time
+
 from env.workflow import *
 from tools.param_parser import *
 from tools.data_loader import *
@@ -89,10 +92,10 @@ if __name__ == '__main__':
     # load model and synchronize to all predict_batch_process
     load_model_and_synchronize(model, model_last_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
 
-
     train_data_path = params['train_data_path']
     log_step_num = params['log_step_num']
     predict_step_num = params['predict_step_num']
+    num_train_steps = params['num_train_steps']
     batch_size = params['model_param_dict']['batch_size']
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
@@ -111,7 +114,7 @@ if __name__ == '__main__':
             for predict_action_probs, predict_player_result_value in zip(predict_action_probs_list, predict_player_result_value_list):
                 logging.info(f'predic_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}, predic_winning_prob={predict_player_result_value.tolist()}')
 
-        if train_step_num >= 10:
+        if train_step_num >= num_train_steps:
             break
     logging.info('Finish training.')
 
@@ -126,7 +129,7 @@ if __name__ == '__main__':
     best_model_workflow_queue_list, new_model_workflow_queue_list = get_best_new_queues_for_eval(workflow_queue_list)
     best_model_workflow_ack_queue_list, new_model_workflow_ack_queue_list = get_best_new_queues_for_eval(workflow_ack_queue_list)
 
-    workflow_status = WorkflowStatus.REGISTERING_EVAL_MODEL
+    workflow_status = WorkflowStatus.TRAINING
     # 负责新模型推理的batch predict进程注册新模型
     for new_model_update_state_queue in new_model_update_state_queue_list:
         new_model_update_state_queue.put(new_state_dict)
@@ -173,4 +176,6 @@ if __name__ == '__main__':
 
         logging.info(f'Evaluation finished for task_id={eval_task_id}, new_model_bb_per_100={new_model_bb_per_100}')
 
+    signal.alarm(0)
+    time.sleep(5)
     exit(0)
