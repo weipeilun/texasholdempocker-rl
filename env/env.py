@@ -61,9 +61,8 @@ class Env:
 
         # 玩家间特征
         self.player_value_left_to_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
-        # 以下，若其他玩家财力大于当前玩家，当前玩家下大价值风险极大，则着重刻画小于1和大于1的部分
-        # 此处玩家初始实力相等情况不要落到最后一个桶
-        self.player_init_value_to_acting_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval + 0.00001)
+        # 以下，其他玩家财力大于当前玩家越多，当前玩家下大价值风险越大，则要对小于1和大于1的部分都有细分刻画，且包含一个远大于的部分
+        self.player_init_value_to_acting_player_init_value_cutter = CutByThreshold((np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval) * MAX_PLAYER_NUMBER)
 
         self.game_id = None
 
@@ -477,7 +476,7 @@ class Env:
                 player_status, player_value_left = infoset.player_status_value_left_dict[current_player_name]
                 # 对于当前玩家的相对位置
                 # todo：此处相对位置和绝对位置都有物理意义，要怎么刻画没想好
-                relative_player_position = get_relative_player_position(current_player_name, infoset.player_name, infoset.num_players) - 1
+                relative_player_position = get_relative_player_position(current_player_name, infoset.button_player_name, infoset.num_players) - 1
 
                 # 提示玩家下注比例
                 player_value_left_to_init_value = player_value_left / player_init_value

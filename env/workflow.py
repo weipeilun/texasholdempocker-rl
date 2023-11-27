@@ -33,6 +33,9 @@ def load_model_and_synchronize(model, model_path, update_model_param_queue_list,
         checkpoint = torch.load(model_path, map_location='cpu')
         model_param = checkpoint['model']
         model.load_state_dict(model_param)
+        if 'optimizer' in checkpoint:
+            model.optimizer.load_state_dict(checkpoint['optimizer'])
+
         for update_model_param_queue in update_model_param_queue_list:
             update_model_param_queue.put(model_param)
         for workflow_ack_queue in workflow_ack_queue_list:
@@ -490,14 +493,15 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
 
 # train_eval_process进程，用于把cpu敏感任务分发到多个进程，避免单个进程打满
-def train_eval_process(train_eval_thread_param_list, is_init_eval_thread, pid, log_level):
+def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_init_eval_thread, pid, log_level):
     logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
                         datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
     for train_eval_thread_param in train_eval_thread_param_list:
-        Thread(target=train_game_loop_thread, args=train_eval_thread_param[0], daemon=True).start()
+        if is_init_train_thread:
+            Thread(target=train_game_loop_thread, args=train_eval_thread_param[0], daemon=True).start()
         if is_init_eval_thread:
             Thread(target=eval_game_loop_thread, args=train_eval_thread_param[1], daemon=True).start()
 
