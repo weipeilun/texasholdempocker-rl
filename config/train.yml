@@ -1,5 +1,5 @@
 # game params
-mcts_tau: 1.
+mcts_tau: 1.8
 
 # model params
 model_param_dict:
