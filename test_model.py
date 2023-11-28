@@ -29,7 +29,7 @@ if __name__ == '__main__':
     # 用户所有连续特征分桶embedding
     num_bins = params['num_bins']
     model_param_dict = params['model_param_dict']
-    model_test_checkpoint_path = params['model_test_checkpoint_path']
+    model_init_checkpoint_path = params['model_init_checkpoint_path']
     model = AlphaGoZero(**model_param_dict)
 
     # init generate winning probability calculating data processes
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
-    load_model_and_synchronize(model, model_test_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
+    load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
 
     # control game simulation thread, to prevent excess task produced by producer
     game_finalized_signal_queue = Queue()

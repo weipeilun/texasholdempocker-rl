@@ -23,4 +23,4 @@ model_param_dict:
     l2_weight: 0.005
 
 # checkpoints
-model_test_checkpoint_path: models/test_train.pth
+model_init_checkpoint_path: models/default_train.pth
