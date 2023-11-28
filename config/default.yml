@@ -108,6 +108,7 @@ simulation_recurrent_params:
     - 990
 
 # checkpoints
+model_init_checkpoint_path: models/test_train.pth
 model_last_checkpoint_path: models/last.pth
 model_eval_snapshot_path_format: models/eval_%s.pth
 model_best_checkpoint_path: models/best.pth
