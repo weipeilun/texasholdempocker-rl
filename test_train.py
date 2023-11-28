@@ -123,7 +123,7 @@ if __name__ == '__main__':
     model_eval_snapshot_path_format = params['model_eval_snapshot_path_format']
     eval_task_id = params['task_id']
     new_state_dict = get_state_dict_from_model(model)
-    save_model_by_state_dict(new_state_dict, model_eval_snapshot_path_format % eval_task_id)
+    save_model(model, model_eval_snapshot_path_format % eval_task_id)
 
     best_model_update_state_queue_list, new_model_update_state_queue_list = get_best_new_queues_for_eval(update_model_param_queue_list)
     best_model_workflow_queue_list, new_model_workflow_queue_list = get_best_new_queues_for_eval(workflow_queue_list)
