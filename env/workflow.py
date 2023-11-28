@@ -387,13 +387,13 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                     break
 
                 game_id, seed = game_id_seed_signal_queue.get(block=True, timeout=1.)
-                logging.info(f"train_game_loop_thread {thread_name} start to simulate game {game_id}")
+                # logging.info(f"train_game_loop_thread {thread_name} start to simulate game {game_id}")
                 break
             except Empty:
                 continue
 
         observation, info = env.reset(game_id, seed=seed)
-        logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
+        # logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
 
         while True:
             if interrupt.interrupt_callback():
@@ -410,7 +410,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             action = mcts.get_action(action_probs, use_argmax=False)
             t1 = time.time()
-            logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
+            # logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
             game_train_data_queue.put((game_id, ([observation, action_probs], info)))

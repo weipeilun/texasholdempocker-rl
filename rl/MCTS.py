@@ -28,7 +28,7 @@ class MCTS:
 
         self.children = None
 
-        num_bins_for_raise_call = self.n_actions - 2
+        num_bins_for_raise_call = self.n_actions - 3
         self.num_small_range_bins = math.ceil(num_bins_for_raise_call / 2)
         self.num_big_range_bins = num_bins_for_raise_call - self.num_small_range_bins
         self.big_range = 1 / (self.num_big_range_bins + 1)
@@ -138,8 +138,10 @@ class MCTS:
             return PlayerActions.FOLD.value, 0.
         elif action_bin == 1:
             return PlayerActions.CHECK.value, 0.
-        elif 2 <= action_bin < self.n_actions:
+        elif 2 <= action_bin < self.n_actions - 1:
             return PlayerActions.RAISE.value, generate_value_by_bin_number(action_bin - 2)
+        elif action_bin == self.n_actions - 1:
+            return PlayerActions.RAISE.value, 1.
         else:
             raise ValueError(f"action should be in [0, {self.n_actions}), which is {action_bin}")
 

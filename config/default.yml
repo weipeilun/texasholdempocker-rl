@@ -27,7 +27,7 @@ num_bins: 10
 model_param_dict:
     n_observation: 5
     n_actions: 4
-    num_output_class: 21
+    num_output_class: 22
     device: 'cuda:0'
     embedding_dim: 256
     positional_embedding_dim: 128
