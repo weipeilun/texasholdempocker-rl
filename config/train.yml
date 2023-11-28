@@ -1,5 +1,6 @@
 # game params
-mcts_tau: 1.8
+mcts_tau: 2
+mcts_dirichlet_noice_epsilon: 0.3
 
 # model params
 model_param_dict:
