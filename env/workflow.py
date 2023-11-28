@@ -419,7 +419,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 observation = observation_
             else:
                 game_finished_signal_queue.put(game_id)
-                logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
+                # logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
                 break
     env.close()
 
