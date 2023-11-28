@@ -16,7 +16,7 @@ def train_data_generator(filename, epoch=1):
         target_value_str = f.readline()
         f.readline()
 
-        if feature_str == '':
+        if feature_str == '' or target_probs_str == '' or target_value_str == '':
             if epoch < 0 or current_epoch < epoch:
                 f = open(filename, 'r')
                 current_epoch += 1
