@@ -34,7 +34,7 @@ def load_model_and_synchronize(model, model_path, update_model_param_queue_list,
         model_param = checkpoint['model']
         model.load_state_dict(model_param, strict=False)
         if 'optimizer' in checkpoint:
-            model.optimizer.load_state_dict(checkpoint['optimizer'], strict=False)
+            model.optimizer.load_state_dict(checkpoint['optimizer'])
 
         for update_model_param_queue in update_model_param_queue_list:
             update_model_param_queue.put(model_param)
