@@ -226,7 +226,7 @@ class GameEnv(object):
                 # Just reset a single game for no player busted
                 reset_single_game()
 
-    def reset(self, seed=None, force_restart_game=False):
+    def reset(self, seed=None, cards_dict=None, force_restart_game=False):
         # reset the whole env or just reset a single game
         self.reset_players(force_restart_game=force_restart_game)
 
@@ -280,7 +280,7 @@ class GameEnv(object):
 
         self.all_round_overall_value = big_blind_actual_bet + small_blind_actual_bet
 
-        self.card_play_init(seed=seed)
+        self.card_play_init(seed=seed, cards_dict=cards_dict)
 
         # no more than one ONBOARD player after blind bet
         # 盲注导致allin的情况，不好整合训练数据，暂时认为和模型训练无关，所以直接结束游戏。
@@ -293,7 +293,7 @@ class GameEnv(object):
             self.finish_game()
             self.reset(force_restart_game=True)
 
-    def card_play_init(self, seed=None):
+    def card_play_init(self, seed=None, cards_dict=None):
         if seed is not None:
             np.random.seed(seed)
 
@@ -302,10 +302,25 @@ class GameEnv(object):
         np.random.shuffle(_deck)
 
         for i, player_name in enumerate(self.players.keys()):
-            self.info_sets[player_name].player_hand_cards = sorted(_deck[i * 2: (i + 1) * 2])
-        self.flop_cards = sorted(_deck[self.num_players * 2 + 1: self.num_players * 2 + 4])
-        self.turn_cards = sorted(_deck[self.num_players * 2 + 5: self.num_players * 2 + 6])
-        self.river_cards = sorted(_deck[self.num_players * 2 + 7: self.num_players * 2 + 8])
+            if cards_dict is not None and player_name in cards_dict and len(cards_dict[player_name]) == 2:
+                self.info_sets[player_name].player_hand_cards = sorted(cards_dict[player_name])
+            else:
+                self.info_sets[player_name].player_hand_cards = sorted(_deck[i * 2: (i + 1) * 2])
+
+        if cards_dict is not None and CARDS_FLOP in cards_dict and len(cards_dict[CARDS_FLOP]) == 3:
+            self.flop_cards = sorted(cards_dict[CARDS_FLOP])
+        else:
+            self.flop_cards = sorted(_deck[self.num_players * 2 + 1: self.num_players * 2 + 4])
+
+        if cards_dict is not None and CARDS_TURN in cards_dict and len(cards_dict[CARDS_TURN]) == 1:
+            self.turn_cards = cards_dict[CARDS_TURN].copy()
+        else:
+            self.turn_cards = sorted(_deck[self.num_players * 2 + 5: self.num_players * 2 + 6])
+
+        if cards_dict is not None and CARDS_RIVER in cards_dict and len(cards_dict[CARDS_RIVER]) == 1:
+            self.river_cards = cards_dict[CARDS_RIVER].copy()
+        else:
+            self.river_cards = sorted(_deck[self.num_players * 2 + 7: self.num_players * 2 + 8])
         self.game_infoset = self.update_get_infoset()
 
     def update_get_infoset(self):

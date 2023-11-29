@@ -14,7 +14,7 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
-    params = parse_params()
+    args, params = parse_params()
 
     torch.multiprocessing.set_start_method('spawn')
 

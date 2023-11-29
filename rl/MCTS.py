@@ -10,7 +10,7 @@ from env.constants import *
 
 
 class MCTS:
-    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, pid=None, thread_name=None):
+    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, log_to_file=False, pid=None, thread_name=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.player_name_predict_in_queue_dict = player_name_predict_in_queue_dict
@@ -25,6 +25,14 @@ class MCTS:
         self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
         self.pid = pid
         self.thread_name = thread_name
+        self.log_to_file = log_to_file
+
+        self.file_writer_n = None
+        self.file_writer_q = None
+        self.file_writer_u = None
+        self.file_writer_r = None
+        self.file_writer_n_term = None
+        self.file_writer_choice = None
 
         self.children = None
 
@@ -42,12 +50,18 @@ class MCTS:
         self.children_q_array = None
 
     def simulate(self, observation, env):
-        self.children = list()
-        for _ in range(self.n_actions):
-            self.children.append(MCTS(self.n_actions, is_root=False, player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict, predict_out_queue=self.predict_out_queue, apply_dirichlet_noice=False, workflow_lock=self.workflow_lock, workflow_signal_queue=self.workflow_signal_queue, workflow_ack_signal_queue=self.workflow_ack_signal_queue, n_simulation=self.n_simulation, c_puct=self.c_puct, tau=self.tau, dirichlet_noice_epsilon=self.dirichlet_noice_epsilon, pid=self.pid, thread_name=self.thread_name))
+        self.children = [None] * self.n_actions
         self.children_w_array = np.zeros(self.n_actions)
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
+
+        if self.log_to_file and self.pid == 0:
+            self.file_writer_n = open(f"log/n.csv", "w", encoding='UTF-8')
+            self.file_writer_q = open(f"log/q.csv", "w", encoding='UTF-8')
+            self.file_writer_u = open(f"log/u.csv", "w", encoding='UTF-8')
+            self.file_writer_r = open(f"log/r.csv", "w", encoding='UTF-8')
+            self.file_writer_n_term = open(f"log/n_term.csv", "w", encoding='UTF-8')
+            self.file_writer_choice = open(f"log/choice.csv", "w", encoding='UTF-8')
 
         acting_player_name = env._acting_player_name
         p_array, _ = self.predict(observation, acting_player_name)
@@ -62,9 +76,27 @@ class MCTS:
 
             new_env = env.new_random()
 
-            action_bin, action = self._choose_action(p_array)
+            action_bin, action = self._choose_action(p_array, self.tau, do_log=True)
+            if self.file_writer_choice is not None:
+                self.file_writer_choice.write(f'{i},{action_bin}\n')
             observation_, reward_dict, terminated, info = new_env.step(action)
             if not terminated:
+                if self.children[action_bin] is None:
+                    self.children[action_bin] = MCTS(self.n_actions,
+                                                     is_root=False,
+                                                     player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict,
+                                                     predict_out_queue=self.predict_out_queue,
+                                                     apply_dirichlet_noice=False,
+                                                     workflow_lock=self.workflow_lock,
+                                                     workflow_signal_queue=self.workflow_signal_queue,
+                                                     workflow_ack_signal_queue=self.workflow_ack_signal_queue,
+                                                     n_simulation=self.n_simulation,
+                                                     c_puct=self.c_puct,
+                                                     tau=self.tau,
+                                                     dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
+                                                     log_to_file=self.log_to_file,
+                                                     pid=self.pid,
+                                                     thread_name=self.thread_name)
                 reward_dict = self.children[action_bin].expand(observation_, new_env)
             player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
@@ -72,6 +104,19 @@ class MCTS:
             self.children_n_array[action_bin] += 1
             self.children_q_array[action_bin] = self.children_w_array[action_bin] / self.children_n_array[action_bin]
 
+            if self.file_writer_n is not None:
+                self.file_writer_n.write(','.join('%d' % i for i in self.children_n_array) + '\n')
+            if self.file_writer_q is not None:
+                self.file_writer_q.write(','.join('%.3f' % i for i in self.children_q_array) + '\n')
+        if self.log_to_file and self.pid == 0:
+            self.file_writer_n.close()
+            self.file_writer_q.close()
+            self.file_writer_u.close()
+            self.file_writer_r.close()
+            self.file_writer_n_term.close()
+            self.file_writer_choice.close()
+            logging.info('finished')
+            exit(0)
         return self._cal_action_probs(self.tau)
 
     # πa ∝ pow(N(s, a), 1 / τ)
@@ -105,7 +150,7 @@ class MCTS:
         player_result_value, reward_value, net_win_value = reward[acting_player_name]
         return reward_value
 
-    def _choose_action(self, p_array):
+    def _choose_action(self, p_array, tau, do_log=False):
         sum_N = sum(self.children_n_array)
         # 注意此处原生的蒙特卡洛搜索树要求U(s, a) ∝ P(s, a)/(1 + N(s, a))
         # 此处增加了sqrt(sum_N)项作为分子，因此在第一次求解时需要满足U(s, a) ∝ P(s, a)
@@ -115,8 +160,18 @@ class MCTS:
             # sqrt_sum_N_of_b_array = np.sqrt(sum_N - self.children_n_array)
             sqrt_sum_N_of_b_array = np.sqrt(sum_N)
             N_term_array = sqrt_sum_N_of_b_array / (1 + self.children_n_array)
-            U_array = self.c_puct * p_array * N_term_array
+            # this p should be proportional to n, as an adjust factor for q if N is big enough
+            powered_p_array = np.power(p_array, np.ones(self.n_actions, dtype=np.float32) * tau)
+            U_array = self.c_puct * powered_p_array * N_term_array
             R_array = U_array + self.children_q_array
+
+            if do_log:
+                if self.file_writer_n_term is not None:
+                    self.file_writer_n_term.write(','.join('%.3f' % i for i in N_term_array) + '\n')
+                if self.file_writer_u is not None:
+                    self.file_writer_u.write(','.join('%.3f' % i for i in U_array) + '\n')
+                if self.file_writer_r is not None:
+                    self.file_writer_r.write(','.join('%.3f' % i for i in R_array) + '\n')
 
             action_bin = int(np.argmax(R_array).tolist())
 
@@ -147,19 +202,33 @@ class MCTS:
 
     def expand(self, observation, env):
         if self.children is None:
-            self.children = list()
-            for _ in range(self.n_actions):
-                self.children.append(MCTS(self.n_actions, is_root=False, player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict, predict_out_queue=self.predict_out_queue, apply_dirichlet_noice=False, workflow_lock=self.workflow_lock, workflow_signal_queue=self.workflow_signal_queue, workflow_ack_signal_queue=self.workflow_ack_signal_queue, n_simulation=self.n_simulation, c_puct=self.c_puct, tau=self.tau, dirichlet_noice_epsilon=self.dirichlet_noice_epsilon, pid=self.pid, thread_name=self.thread_name))
+            self.children = [None] * self.n_actions
             self.children_w_array = np.zeros(self.n_actions)
             self.children_n_array = np.zeros(self.n_actions)
             self.children_q_array = np.zeros(self.n_actions)
 
         acting_player_name = env._acting_player_name
         p_array, _ = self.predict(observation, acting_player_name)
-        action_bin, action = self._choose_action(p_array)
+        action_bin, action = self._choose_action(p_array, self.tau)
 
         observation_, reward_dict, terminated, info = env.step(action)
         if not terminated:
+            if self.children[action_bin] is None:
+                self.children[action_bin] = MCTS(self.n_actions,
+                                                 is_root=False,
+                                                 player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict,
+                                                 predict_out_queue=self.predict_out_queue,
+                                                 apply_dirichlet_noice=False,
+                                                 workflow_lock=self.workflow_lock,
+                                                 workflow_signal_queue=self.workflow_signal_queue,
+                                                 workflow_ack_signal_queue=self.workflow_ack_signal_queue,
+                                                 n_simulation=self.n_simulation,
+                                                 c_puct=self.c_puct,
+                                                 tau=self.tau,
+                                                 dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
+                                                 log_to_file=self.log_to_file,
+                                                 pid=self.pid,
+                                                 thread_name=self.thread_name)
             reward_dict = self.children[action_bin].expand(observation_, env)
         player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 

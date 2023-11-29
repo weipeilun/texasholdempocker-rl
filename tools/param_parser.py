@@ -52,7 +52,7 @@ def parse_params():
     default_params = yaml.load(open('config/default.yml', encoding="UTF-8"), Loader=yaml.FullLoader)
     task_params = yaml.load(open(task_param_path_dict[args.mode], encoding="UTF-8"), Loader=yaml.FullLoader)
     params = _update_concurrent(default_params.copy(), task_params.copy())
-    return params
+    return args, params
 
 
 def parse_test_train_params():

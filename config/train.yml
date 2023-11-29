@@ -1,8 +1,3 @@
-# game params
-mcts_c_puct: 5.
-mcts_tau: 3
-mcts_dirichlet_noice_epsilon: 0.3
-
 # model params
 model_param_dict:
     device: 'cuda:0'

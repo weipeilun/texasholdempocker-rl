@@ -17,10 +17,11 @@ log_step_num: 200
 # game params
 small_blind: 25
 big_blind: 50
-num_mcts_simulation_per_step: 800
-mcts_c_puct: 7.
-mcts_tau: 1.
-mcts_dirichlet_noice_epsilon: 0.2
+num_mcts_simulation_per_step: 1000
+mcts_c_puct: 1.7
+mcts_tau: 0.5
+mcts_dirichlet_noice_epsilon: 0.3
+mcts_log_to_file: False
 
 # model params
 num_bins: 10

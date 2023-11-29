@@ -66,7 +66,7 @@ class Env:
 
         self.game_id = None
 
-    def reset(self, game_id, seed=None):
+    def reset(self, game_id, seed=None, cards_dict=None):
         """
         Every time reset is called, the environment
         will be re-initialized with a new deck of cards.
@@ -76,7 +76,7 @@ class Env:
         self.game_id = game_id
 
         # reset environment
-        self._env.reset(seed=seed)
+        self._env.reset(seed=seed, cards_dict=cards_dict)
 
         logging.debug([f'{player_name}:{int(player.value_left)},{player.status.name}' for player_name, player in self._env.players.items()])
 
