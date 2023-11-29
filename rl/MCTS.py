@@ -116,7 +116,6 @@ class MCTS:
             self.file_writer_n_term.close()
             self.file_writer_choice.close()
             logging.info('finished')
-            exit(0)
         return self._cal_action_probs(self.tau)
 
     # πa ∝ pow(N(s, a), 1 / τ)

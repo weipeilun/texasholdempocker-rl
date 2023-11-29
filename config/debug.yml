@@ -14,10 +14,10 @@ eval_model_per_step: 100
 log_step_num: 5
 
 # game params
-num_mcts_simulation_per_step: 1000
-mcts_c_puct: 1.7
+num_mcts_simulation_per_step: 1200
+mcts_c_puct: 1.4
 mcts_tau: 0.5
-mcts_dirichlet_noice_epsilon: 0.3
+mcts_log_to_file: True
 
 # model params
 model_param_dict:
