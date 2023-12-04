@@ -160,8 +160,9 @@ class MCTS:
             sqrt_sum_N_of_b_array = np.sqrt(sum_N)
             N_term_array = sqrt_sum_N_of_b_array / (1 + self.children_n_array)
             # this p should be proportional to n, as an adjust factor for q if N is big enough
-            powered_p_array = np.power(p_array, np.ones(self.n_actions, dtype=np.float32) * tau)
-            U_array = self.c_puct * powered_p_array * N_term_array
+            # this p will lead to a inefficient MCTS if the whole process does work
+            # powered_p_array = np.power(p_array, np.ones(self.n_actions, dtype=np.float32) * tau)
+            U_array = self.c_puct * p_array * N_term_array
             R_array = U_array + self.children_q_array
 
             if do_log:
