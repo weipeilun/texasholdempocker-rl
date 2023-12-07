@@ -424,7 +424,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
                                           embedding_sequence_len=embedding_sequence_len,
-                                          num_starters=2,
+                                          num_starters=0,
                                           num_acting_player_fields=num_acting_player_fields,
                                           num_other_player_fields=num_other_player_fields,
                                           device=self.device)
@@ -436,23 +436,20 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.action_logits_softmax = torch.nn.Softmax(dim=-1)
         self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
 
-        # 预测action和下注金额
-        # output: 0: fold, 1: check, raise & call share same output fields because they are only seperated by action_value
-        self.action_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class, bias=False)
-        # 预测当前胜率
-        self.player_result_value_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 1)
+        # 预测action的概率分布
+        self.action_prob_dense = nn.Linear((embedding_dim + positional_embedding_dim * 3) * embedding_sequence_len, num_output_class, bias=False)
+        # 预测action的Q值分布
+        self.action_Q_dense = nn.Linear((embedding_dim + positional_embedding_dim * 3) * embedding_sequence_len, num_output_class, bias=True)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
         x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
         x = self.transform_encoder(x)
+        x = x.reshape(x.shape[0], -1)
 
-        action_x = x[:, 0, :]
-        action_x = self.action_dense(action_x)
-        action = self.action_logits_softmax(action_x)
+        action_prob_logits = self.action_prob_dense(x)
+        action_prob = self.action_logits_softmax(action_prob_logits)
 
-        value_x = x[:, 1, :]
-        value_x = self.player_result_value_dense(value_x).squeeze(-1)
-        player_result_value = self.winning_prob_logits_sigmoid(value_x)
-        return action, player_result_value
+        action_Q_logits = self.action_Q_dense(x)
+        return action_prob, action_Q_logits

@@ -222,13 +222,13 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
                 break
 
             try:
-                action_probs_list, player_result_value_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                action_probs_list, action_Q_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
-                for action_probs, player_result_value, send_pid in zip(action_probs_list, player_result_value_list, send_pid_list):
+                for action_probs, action_Q, send_pid in zip(action_probs_list, action_Q_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((action_probs, player_result_value))
+                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((action_probs, action_Q))
                     elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((action_probs, player_result_value))
+                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((action_probs, action_Q))
                     else:
                         raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
             except Empty:
@@ -239,11 +239,11 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
 
     def predict_and_send(predict_send_model, predict_send_batch_list, predict_send_pid_list, predict_send_send_in_queue, predict_send_workflow_status):
         with torch.no_grad():
-            action_probs_tensor, player_result_value_tensor = predict_send_model(predict_send_batch_list)
+            action_probs_tensor, action_Q_tensor = predict_send_model(predict_send_batch_list)
             action_probs_list = action_probs_tensor.cpu().numpy()
-            player_result_value_list = player_result_value_tensor.cpu().numpy()
+            action_Q_list = action_Q_tensor.cpu().numpy()
 
-        predict_send_send_in_queue.put((action_probs_list, player_result_value_list, predict_send_pid_list, predict_send_workflow_status))
+        predict_send_send_in_queue.put((action_probs_list, action_Q_list, predict_send_pid_list, predict_send_workflow_status))
 
     batch_list = list()
     pid_list = list()
@@ -306,11 +306,11 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             step_counter.increment()
 
             if step_counter.get_value() >= next_train_step:
-                action_probs_loss, winning_prob_loss = model.learn()
+                action_probs_loss, action_Q_loss = model.learn()
                 train_step_num += 1
 
                 if train_step_num % log_step_num == 0:
-                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, winning_prob_loss={winning_prob_loss}')
+                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')
 
                 # 避免训练数据过多重复
                 next_train_step += train_per_step
@@ -346,11 +346,11 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             break
 
         if step_counter.get_value() >= next_train_step:
-            action_probs_loss, winning_prob_loss = model.learn()
+            action_probs_loss, action_Q_loss = model.learn()
             train_step_num += 1
 
             if train_step_num % log_step_num == 0:
-                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, winning_prob_loss={winning_prob_loss}')
+                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')
 
             if train_step_num >= next_eval_step:
                 new_state_dict = get_state_dict_from_model(model)
@@ -393,7 +393,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 continue
 
         observation, info = env.reset(game_id, seed=seed)
-        # logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
+        logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
 
         while True:
             if interrupt.interrupt_callback():
@@ -402,7 +402,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             t0 = time.time()
             mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, log_to_file=mcts_log_to_file, pid=pid, thread_name=thread_name)
-            action_probs = mcts.simulate(observation=observation, env=env)
+            action_probs, action_Qs = mcts.simulate(observation=observation, env=env)
             # 用于接收中断信号
             if action_probs is None:
                 logging.info(f"train_game_loop_thread {thread_name} detect interrupt")
@@ -410,16 +410,16 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             action = mcts.get_action(action_probs, use_argmax=False)
             t1 = time.time()
-            # logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
+            logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
-            game_train_data_queue.put((game_id, ([observation, action_probs], info)))
+            game_train_data_queue.put((game_id, ([observation, action_probs, action_Qs], info)))
 
             if not terminated:
                 observation = observation_
             else:
                 game_finished_signal_queue.put(game_id)
-                # logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
+                logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
                 break
     env.close()
 
@@ -468,7 +468,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
                 t0 = time.time()
                 # 在eval时不使用dirichlet_noice以增加随机性，设置tau为0即在play步骤中丢弃随机性使用argmax
                 mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, log_to_file=False, pid=pid, thread_name=thread_name)
-                action_probs = mcts.simulate(observation=observation, env=env)
+                action_probs, _ = mcts.simulate(observation=observation, env=env)
                 # 用于接收中断信号
                 if action_probs is None:
                     logging.info(f"eval_game_loop_thread {thread_name} detect interrupt")

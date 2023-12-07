@@ -31,6 +31,8 @@ if __name__ == '__main__':
     model_param_dict = params['model_param_dict']
     model_init_checkpoint_path = params['model_init_checkpoint_path']
     model = AlphaGoZero(**model_param_dict)
+    # to regenerate new default model
+    # save_model(model, 'models/default_train.pth')
 
     # init generate winning probability calculating data processes
     num_gen_winning_prob_cal_data_processes = params['num_gen_winning_prob_cal_data_processes']
@@ -155,12 +157,15 @@ if __name__ == '__main__':
                     round_num = step_info[KEY_ROUND_NUM]
                     player_name = step_info[KEY_ACTED_PLAYER_NAME]
                     if player_name in game_info_dict and round_num in game_info_dict[player_name]:
-                        observation, estimate_value_probs = train_data_list
+                        observation, estimate_value_probs, estimate_value_Qs = train_data_list
                         estimate_winning_prob = game_info_dict[player_name][round_num]
-                        model_value_probs, model_winning_prob = model.cal_reward([observation])
+                        model_value_probs, action_Q_loss = model.cal_reward([observation])
                         estimate_value_probs_str = ','.join('%.2f' % value for value in estimate_value_probs)
                         model_value_probs_str = ','.join('%.2f' % value for value in model_value_probs)
-                        logging.info(f'observation={observation}\nestimate_value_probs={estimate_value_probs_str}\nmodel_value_probs={model_value_probs_str}\nestimate_winning_prob={estimate_winning_prob}\nmodel_winning_prob={model_winning_prob}\n')
+                        # todo: model input observation
+                        estimation_action_Q_str = ','.join('%.2f' % value for value in estimate_value_Qs)
+                        action_Q_str = ','.join('%.2f' % value for value in action_Q_loss)
+                        logging.info(f'observation={observation}\nestimate_value_probs={estimate_value_probs_str}\nmodel_value_probs={model_value_probs_str}\nestimation_action_Q_str={estimation_action_Q_str}\naction_Qs={action_Q_str}\n')
                     else:
                         game_train_data_not_finished_list.append(game_train_data)
 

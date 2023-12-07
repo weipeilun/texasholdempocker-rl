@@ -9,12 +9,12 @@ historical_data_filename: data/nil
 
 # train process params
 first_train_data_step: 10
-train_per_step: 1000
-eval_model_per_step: 100
+train_per_step: 2
+eval_model_per_step: 30
 log_step_num: 5
 
 # game params
-num_mcts_simulation_per_step: 1200
+num_mcts_simulation_per_step: 10
 mcts_c_puct: 1.4
 mcts_tau: 0.5
 mcts_log_to_file: True
@@ -22,6 +22,7 @@ mcts_log_to_file: True
 # model params
 model_param_dict:
     device: 'cpu'
+    batch_size: 8
 
 # simulation params
 simulation_recurrent_params:

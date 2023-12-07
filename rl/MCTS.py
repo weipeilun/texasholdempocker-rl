@@ -10,7 +10,7 @@ from env.constants import *
 
 
 class MCTS:
-    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, log_to_file=False, pid=None, thread_name=None):
+    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, log_to_file=False, pid=None, thread_name=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.player_name_predict_in_queue_dict = player_name_predict_in_queue_dict
@@ -23,6 +23,7 @@ class MCTS:
         self.c_puct = c_puct
         self.tau = tau
         self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
+        self.model_Q_epsilon = model_Q_epsilon  # 用来平衡模型的价值和env的价值
         self.pid = pid
         self.thread_name = thread_name
         self.log_to_file = log_to_file
@@ -43,7 +44,7 @@ class MCTS:
         self.small_range = self.big_range / self.num_small_range_bins
 
         self.default_action_probs = np.ones(self.n_actions, dtype=np.float32) / self.n_actions
-        self.default_player_result_value = 0.
+        self.default_action_Qs = np.zeros(self.n_actions, dtype=np.float32)
 
         self.children_w_array = None
         self.children_n_array = None
@@ -64,19 +65,19 @@ class MCTS:
             self.file_writer_choice = open(f"log/choice.csv", "w", encoding='UTF-8')
 
         acting_player_name = env._acting_player_name
-        p_array, _ = self.predict(observation, acting_player_name)
+        action_prob, action_Qs = self.predict(observation, acting_player_name)
         if self.is_root and self.apply_dirichlet_noice:
-            dirichlet_noise = np.random.dirichlet(p_array)
-            p_array = (1 - self.dirichlet_noice_epsilon) * p_array + self.dirichlet_noice_epsilon * dirichlet_noise
+            dirichlet_noise = np.random.dirichlet(action_prob)
+            action_prob = (1 - self.dirichlet_noice_epsilon) * action_prob + self.dirichlet_noice_epsilon * dirichlet_noise
 
         for i in range(self.n_simulation):
             if interrupt.interrupt_callback():
                 logging.info("MCTS.simulate detect interrupt")
-                return None
+                return None, None
 
             new_env = env.new_random()
 
-            action_bin, action = self._choose_action(p_array, self.tau, do_log=True)
+            action_bin, action = self._choose_action(action_prob, self.tau, do_log=True)
             if self.file_writer_choice is not None:
                 self.file_writer_choice.write(f'{i},{action_bin}\n')
             observation_, reward_dict, terminated, info = new_env.step(action)
@@ -100,7 +101,7 @@ class MCTS:
                 reward_dict = self.children[action_bin].expand(observation_, new_env)
             player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
-            self.children_w_array[action_bin] += player_action_reward
+            self.children_w_array[action_bin] += self.model_Q_epsilon * action_Qs[action_bin] + (1 - self.model_Q_epsilon) * player_action_reward
             self.children_n_array[action_bin] += 1
             self.children_q_array[action_bin] = self.children_w_array[action_bin] / self.children_n_array[action_bin]
 
@@ -115,8 +116,7 @@ class MCTS:
             self.file_writer_r.close()
             self.file_writer_n_term.close()
             self.file_writer_choice.close()
-            logging.info('finished')
-        return self._cal_action_probs(self.tau)
+        return self._cal_action_probs(self.tau), self.children_q_array
 
     # πa ∝ pow(N(s, a), 1 / τ)
     def _cal_action_probs(self, tau):
@@ -208,8 +208,8 @@ class MCTS:
             self.children_q_array = np.zeros(self.n_actions)
 
         acting_player_name = env._acting_player_name
-        p_array, _ = self.predict(observation, acting_player_name)
-        action_bin, action = self._choose_action(p_array, self.tau)
+        action_prob, action_Qs = self.predict(observation, acting_player_name)
+        action_bin, action = self._choose_action(action_prob, self.tau)
 
         observation_, reward_dict, terminated, info = env.step(action)
         if not terminated:
@@ -232,7 +232,7 @@ class MCTS:
             reward_dict = self.children[action_bin].expand(observation_, env)
         player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
-        self.children_w_array[action_bin] += player_action_reward
+        self.children_w_array[action_bin] += self.model_Q_epsilon * action_Qs[action_bin] + (1 - self.model_Q_epsilon) * player_action_reward
         self.children_n_array[action_bin] += 1
         self.children_q_array[action_bin] = self.children_w_array[action_bin] / self.children_n_array[action_bin]
 
@@ -240,8 +240,8 @@ class MCTS:
 
     def predict(self, observation, acting_player_name):
         # 仅支持多线程下的批量预测
-        p_array = self.default_action_probs
-        player_result_value = self.default_player_result_value
+        action_prob = self.default_action_probs
+        action_Qs = self.default_action_Qs
         # 这个锁用于控制workflow的状态切换
         if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
             try:
@@ -260,8 +260,8 @@ class MCTS:
                 break
 
             try:
-                p_array, player_result_value = self.predict_out_queue.get(block=True, timeout=0.001)
+                action_prob, action_Qs = self.predict_out_queue.get(block=True, timeout=0.001)
                 break
             except Empty:
                 continue
-        return p_array, player_result_value
+        return action_prob, action_Qs

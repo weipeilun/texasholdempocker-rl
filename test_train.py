@@ -99,12 +99,12 @@ if __name__ == '__main__':
     batch_size = params['model_param_dict']['batch_size']
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
-    for observation_list, action_probs_list, winning_prob_list in train_batch_gen:
-        action_probs_loss, winning_prob_loss = model.learn(observation_list, action_probs_list, winning_prob_list)
+    for observation_list, action_probs_list, action_Q_list in train_batch_gen:
+        action_probs_loss, action_Q_loss = model.learn(observation_list, action_probs_list, action_Q_list)
         train_step_num += 1
 
         if train_step_num % log_step_num == 0:
-            logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, winning_prob_loss={winning_prob_loss}')
+            logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')
 
         if train_step_num % predict_step_num == 0:
             with torch.no_grad():
