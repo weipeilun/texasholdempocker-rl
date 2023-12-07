@@ -10,7 +10,7 @@ from env.constants import *
 
 
 class MCTS:
-    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, log_to_file=False, pid=None, thread_name=None):
+    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=10, log_to_file=False, pid=None, thread_name=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.player_name_predict_in_queue_dict = player_name_predict_in_queue_dict
@@ -20,7 +20,7 @@ class MCTS:
         self.workflow_signal_queue = workflow_signal_queue
         self.workflow_ack_signal_queue = workflow_ack_signal_queue
         self.n_simulation = n_simulation
-        self.c_puct = c_puct
+        self.c_puct = c_puct    # 模型预测的高值大概率是更好的，要更多的探索。这是模型的p值到env的Q值的乘数，注意将U和Q保持在相同数量级上。todo：动态调整c_puct
         self.tau = tau
         self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
         self.model_Q_epsilon = model_Q_epsilon  # 用来平衡模型的价值和env的价值
@@ -42,6 +42,8 @@ class MCTS:
         self.num_big_range_bins = num_bins_for_raise_call - self.num_small_range_bins
         self.big_range = 1 / (self.num_big_range_bins + 1)
         self.small_range = self.big_range / self.num_small_range_bins
+
+        self.max_init_root_num_simulation = int(init_root_n_simulation) * self.n_actions
 
         self.default_action_probs = np.ones(self.n_actions, dtype=np.float32) / self.n_actions
         self.default_action_Qs = np.zeros(self.n_actions, dtype=np.float32)
@@ -77,7 +79,7 @@ class MCTS:
 
             new_env = env.new_random()
 
-            action_bin, action = self._choose_action(action_prob, self.tau, do_log=True)
+            action_bin, action = self._choose_action(action_prob, num_simulation=i, do_log=True)
             if self.file_writer_choice is not None:
                 self.file_writer_choice.write(f'{i},{action_bin}\n')
             observation_, reward_dict, terminated, info = new_env.step(action)
@@ -95,6 +97,7 @@ class MCTS:
                                                      c_puct=self.c_puct,
                                                      tau=self.tau,
                                                      dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
+                                                     model_Q_epsilon=self.model_Q_epsilon,
                                                      log_to_file=self.log_to_file,
                                                      pid=self.pid,
                                                      thread_name=self.thread_name)
@@ -149,31 +152,35 @@ class MCTS:
         player_result_value, reward_value, net_win_value = reward[acting_player_name]
         return reward_value
 
-    def _choose_action(self, p_array, tau, do_log=False):
-        sum_N = sum(self.children_n_array)
-        # 注意此处原生的蒙特卡洛搜索树要求U(s, a) ∝ P(s, a)/(1 + N(s, a))
-        # 此处增加了sqrt(sum_N)项作为分子，因此在第一次求解时需要满足U(s, a) ∝ P(s, a)
-        if sum_N == 0:
-            action_bin = int(np.argmax(p_array).tolist())
+    def _choose_action(self, p_array, num_simulation=None, do_log=False):
+        if num_simulation is not None and num_simulation < self.max_init_root_num_simulation:
+            # init root node
+            action_bin = num_simulation % self.n_actions
         else:
-            # sqrt_sum_N_of_b_array = np.sqrt(sum_N - self.children_n_array)
-            sqrt_sum_N_of_b_array = np.sqrt(sum_N)
-            N_term_array = sqrt_sum_N_of_b_array / (1 + self.children_n_array)
-            # this p should be proportional to n, as an adjust factor for q if N is big enough
-            # this p will lead to a inefficient MCTS if the whole process does work
-            # powered_p_array = np.power(p_array, np.ones(self.n_actions, dtype=np.float32) * tau)
-            U_array = self.c_puct * p_array * N_term_array
-            R_array = U_array + self.children_q_array
+            sum_N = sum(self.children_n_array)
+            # 注意此处原生的蒙特卡洛搜索树要求U(s, a) ∝ P(s, a)/(1 + N(s, a))
+            # 此处增加了sqrt(sum_N)项作为分子，因此在第一次求解时需要满足U(s, a) ∝ P(s, a)
+            if sum_N == 0:
+                action_bin = int(np.argmax(p_array).tolist())
+            else:
+                # sqrt_sum_N_of_b_array = np.sqrt(sum_N - self.children_n_array)
+                sqrt_sum_N_of_b_array = np.sqrt(sum_N)
+                N_term_array = sqrt_sum_N_of_b_array / (1 + self.children_n_array)
+                # this p should be proportional to n, as an adjust factor for q if N is big enough
+                # this p will lead to a inefficient MCTS if the whole process does work
+                # powered_p_array = np.power(p_array, np.ones(self.n_actions, dtype=np.float32) * tau)
+                U_array = self.c_puct * p_array * N_term_array
+                R_array = U_array + self.children_q_array
 
-            if do_log:
-                if self.file_writer_n_term is not None:
-                    self.file_writer_n_term.write(','.join('%.3f' % i for i in N_term_array) + '\n')
-                if self.file_writer_u is not None:
-                    self.file_writer_u.write(','.join('%.3f' % i for i in U_array) + '\n')
-                if self.file_writer_r is not None:
-                    self.file_writer_r.write(','.join('%.3f' % i for i in R_array) + '\n')
+                if do_log:
+                    if self.file_writer_n_term is not None:
+                        self.file_writer_n_term.write(','.join('%.3f' % i for i in N_term_array) + '\n')
+                    if self.file_writer_u is not None:
+                        self.file_writer_u.write(','.join('%.3f' % i for i in U_array) + '\n')
+                    if self.file_writer_r is not None:
+                        self.file_writer_r.write(','.join('%.3f' % i for i in R_array) + '\n')
 
-            action_bin = int(np.argmax(R_array).tolist())
+                action_bin = int(np.argmax(R_array).tolist())
 
         action, action_value = self.map_model_action_to_actual_action_and_value(action_bin)
         return action_bin, (action, action_value)
@@ -209,7 +216,7 @@ class MCTS:
 
         acting_player_name = env._acting_player_name
         action_prob, action_Qs = self.predict(observation, acting_player_name)
-        action_bin, action = self._choose_action(action_prob, self.tau)
+        action_bin, action = self._choose_action(action_prob)
 
         observation_, reward_dict, terminated, info = env.step(action)
         if not terminated:
@@ -226,6 +233,7 @@ class MCTS:
                                                  c_puct=self.c_puct,
                                                  tau=self.tau,
                                                  dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
+                                                 model_Q_epsilon=self.model_Q_epsilon,
                                                  log_to_file=self.log_to_file,
                                                  pid=self.pid,
                                                  thread_name=self.thread_name)

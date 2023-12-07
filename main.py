@@ -61,6 +61,7 @@ if __name__ == '__main__':
     mcts_tau = params['mcts_tau']
     mcts_log_to_file = params['mcts_log_to_file']
     mcts_dirichlet_noice_epsilon = params['mcts_dirichlet_noice_epsilon']
+    mcts_model_Q_epsilon = params['mcts_model_Q_epsilon']
     workflow_lock = Condition()
     workflow_game_loop_signal_queue_list = list()
     workflow_game_loop_ack_signal_queue_list = list()
@@ -95,12 +96,12 @@ if __name__ == '__main__':
 
             batch_queue_info_train = map_train_thread_to_queue_info_train(thread_id, model_predict_batch_queue_info_list)
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_train[1][0], batch_queue_info_train[1][1], batch_queue_info_train[1][2])
-            train_thread_param = (train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, mcts_log_to_file, thread_id, thread_name)
+            train_thread_param = (train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, batch_queue_info_train[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_signal_queue, workflow_game_loop_ack_signal_queue, mcts_log_to_file, thread_id, thread_name)
 
             batch_queue_info_eval_best, batch_queue_info_eval_new = map_train_thread_to_queue_info_eval(thread_id, model_predict_batch_queue_info_list)
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_best[1][0], batch_queue_info_eval_best[1][2], batch_queue_info_eval_best[1][1])
             map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_new[1][0], batch_queue_info_eval_new[1][2], batch_queue_info_eval_new[1][1])
-            eval_thread_param = (eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, thread_id, thread_name)
+            eval_thread_param = (eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, thread_id, thread_name)
 
             train_eval_thread_param_list.append((train_thread_param, eval_thread_param))
             logging.info(f'Finished init params for train and eval thread {thread_id}')
