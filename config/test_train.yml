@@ -1,5 +1,5 @@
 # workflow params
-num_choices: 10
+num_choices: 30
 num_predict_batch_process: 2
 predict_batch_size: 4
 game_loop_thread_multiple: 2.5
@@ -17,6 +17,7 @@ model_param_dict:
     device: 'cuda:0'
     embedding_dim: [256, 512]
     positional_embedding_dim: [64, 128]
+    transformer_head_dim: [32, 64]
     num_layers: [6, 8, 10]
     batch_size: 64
     learning_rate: [0.00003, 0.0001, 0.0003]
