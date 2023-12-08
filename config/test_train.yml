@@ -21,6 +21,7 @@ model_param_dict:
     batch_size: 64
     learning_rate: [0.00003, 0.0001, 0.0003]
     l2_weight: [0.001, 0.005]
+    save_train_data: False
 
 # checkpoints
 model_save_checkpoint_path_format: models/test_train_%d.pth
