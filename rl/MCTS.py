@@ -43,7 +43,8 @@ class MCTS:
         self.big_range = 1 / (self.num_big_range_bins + 1)
         self.small_range = self.big_range / self.num_small_range_bins
 
-        self.max_init_root_num_simulation = int(init_root_n_simulation) * self.n_actions
+        self.init_root_n_simulation = init_root_n_simulation
+        self.max_init_root_num_simulation = int(self.init_root_n_simulation) * self.n_actions
 
         self.default_action_probs = np.ones(self.n_actions, dtype=np.float32) / self.n_actions
         self.default_action_Qs = np.zeros(self.n_actions, dtype=np.float32)
@@ -98,6 +99,7 @@ class MCTS:
                                                      tau=self.tau,
                                                      dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                                                      model_Q_epsilon=self.model_Q_epsilon,
+                                                     init_root_n_simulation=self.init_root_n_simulation,
                                                      log_to_file=self.log_to_file,
                                                      pid=self.pid,
                                                      thread_name=self.thread_name)
@@ -234,6 +236,7 @@ class MCTS:
                                                  tau=self.tau,
                                                  dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                                                  model_Q_epsilon=self.model_Q_epsilon,
+                                                 init_root_n_simulation=self.init_root_n_simulation,
                                                  log_to_file=self.log_to_file,
                                                  pid=self.pid,
                                                  thread_name=self.thread_name)
