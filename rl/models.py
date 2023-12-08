@@ -402,7 +402,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                  embedding_dim=512,
                  positional_embedding_dim=128,
                  num_layers=6,
-                 num_transformer_head=10,
+                 transformer_head_dim=64,
                  historical_action_sequence_length=56,
                  num_acting_player_fields=9,
                  num_other_player_fields=3,
@@ -429,6 +429,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           num_other_player_fields=num_other_player_fields,
                                           device=self.device)
 
+        assert int(embedding_dim + positional_embedding_dim * 3) % transformer_head_dim == 0, f'embedding_dim({embedding_dim}) + positional_embedding_dim({positional_embedding_dim}) * 3 must be divisible by transformer_head_dim({transformer_head_dim}).'
+        num_transformer_head = int(embedding_dim + positional_embedding_dim * 3) // transformer_head_dim
         encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=num_transformer_head, batch_first=True)
         # encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim * 3)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, norm=None)

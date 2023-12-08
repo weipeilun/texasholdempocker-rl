@@ -23,7 +23,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  batch_size=32,
                  learning_rate=3e-4,
                  l2_weight=0,
-                 num_transformer_head=8,
+                 transformer_head_dim=64,
                  transition_buffer_len=1000,
                  epsilon=0.9,
                  epsilon_max=0.9,
@@ -48,7 +48,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.epsilon_max = epsilon_max
         self.random_choice = np.arange(0, self.n_actions)
 
-        self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, num_transformer_head, historical_action_sequence_length, num_acting_player_fields, num_other_player_fields, device).to(self.device)
+        self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, transformer_head_dim, historical_action_sequence_length, num_acting_player_fields, num_other_player_fields, device).to(self.device)
         self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=l2_weight)
         # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
 

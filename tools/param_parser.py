@@ -1,13 +1,16 @@
+import logging
+import random
+
 import yaml
 import argparse
 import numpy as np
 
 
-def _update_concurrent(target_dict, new_dict):
+def update_concurrent(target_dict, new_dict):
     for key, value in new_dict.items():
         if key in target_dict:
             if isinstance(value, dict):
-                _update_concurrent(target_dict[key], new_dict[key])
+                update_concurrent(target_dict[key], new_dict[key])
             else:
                 target_dict[key] = new_dict[key]
         else:
@@ -19,10 +22,11 @@ def choose_params_concurrent(param_dict):
     new_dict = dict()
     for param_key, param_value in param_dict.items():
         if isinstance(param_value, list):
-            value_choice = np.random.choice(param_value)
+            value_choice = random.choice(param_value)
             new_dict[param_key] = value_choice
+            logging.info(f'chosen {param_key}: {value_choice}')
         elif isinstance(param_value, dict):
-            new_dict[param_key] = _choice_concurrent(param_value)
+            new_dict[param_key] = choose_params_concurrent(param_value)
         else:
             new_dict[param_key] = param_value
     return new_dict
@@ -51,13 +55,11 @@ def parse_params():
 
     default_params = yaml.load(open('config/default.yml', encoding="UTF-8"), Loader=yaml.FullLoader)
     task_params = yaml.load(open(task_param_path_dict[args.mode], encoding="UTF-8"), Loader=yaml.FullLoader)
-    params = _update_concurrent(default_params.copy(), task_params.copy())
+    params = update_concurrent(default_params.copy(), task_params.copy())
     return args, params
 
 
 def parse_test_train_params():
     default_params = yaml.load(open('config/default.yml', encoding="UTF-8"), Loader=yaml.FullLoader)
     task_params = yaml.load(open('config/test_train.yml', encoding="UTF-8"), Loader=yaml.FullLoader)
-    chosen_task_params = choose_params_concurrent(task_params)
-    params = _update_concurrent(default_params.copy(), chosen_task_params.copy())
-    return params, task_params
+    return default_params, task_params

@@ -7,16 +7,10 @@ from tools.data_loader import *
 from torch.multiprocessing import Manager, Process, Condition
 
 
-if __name__ == '__main__':
-    log_level = logging.INFO
-    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-                        datefmt='%Y-%m-%d,%H:%M:%S')
+def train_process(params, n_loop, log_level):
+    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
     logger.setLevel(log_level)
-
-    args, params = parse_params()
-
-    torch.multiprocessing.set_start_method('spawn')
 
     num_predict_batch_process = params['num_predict_batch_process']
     assert num_predict_batch_process % 2 == 0, 'num_predict_batch_process must be even'
@@ -32,7 +26,6 @@ if __name__ == '__main__':
     # 用户所有连续特征分桶embedding
     num_bins = params['num_bins']
     model_param_dict = params['model_param_dict']
-    model_init_checkpoint_path = params['model_init_checkpoint_path']
     model = AlphaGoZero(**model_param_dict)
 
     # game simulation threads (train and evaluate)
@@ -91,7 +84,12 @@ if __name__ == '__main__':
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
-    load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
+    is_model_init_from_path = params['is_model_init_from_path']
+    if is_model_init_from_path:
+        model_init_checkpoint_path = params['model_init_checkpoint_path']
+        load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
+    model_save_checkpoint_path = params['model_save_checkpoint_path_format'] % n_loop
+    save_model(model, model_save_checkpoint_path)
 
     train_data_path = params['train_data_path']
     log_step_num = params['log_step_num']
@@ -103,6 +101,14 @@ if __name__ == '__main__':
     for observation_list, action_probs_list, action_Q_list in train_batch_gen:
         action_probs_loss, action_Q_loss = model.learn(observation_list, action_probs_list, action_Q_list)
         train_step_num += 1
+
+        action_probs_loss_np = action_probs_loss.detach().numpy()
+        action_Q_loss_np = action_Q_loss.detach().numpy()
+        if np.isnan(action_probs_loss_np) or np.isinf(action_probs_loss_np) or np.isnan(action_Q_loss_np) or np.isinf(action_Q_loss_np):
+            logging.error(f'loss is nan or inf, action_probs_loss={action_probs_loss_np}, action_Q_loss={action_Q_loss_np}')
+            signal.alarm(0)
+            time.sleep(5)
+            exit(-1)
 
         if train_step_num % log_step_num == 0:
             logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')
@@ -121,10 +127,9 @@ if __name__ == '__main__':
 
     # eval
     eval_task_num_games = params['eval_task_num_games']
-    model_eval_snapshot_path_format = params['model_eval_snapshot_path_format']
-    eval_task_id = params['task_id']
+    model_eval_snapshot_path = params['model_eval_snapshot_path_format'] % n_loop
     new_state_dict = get_state_dict_from_model(model)
-    save_model(model, model_eval_snapshot_path_format % eval_task_id)
+    save_model(model, model_eval_snapshot_path)
 
     best_model_update_state_queue_list, new_model_update_state_queue_list = get_best_new_queues_for_eval(update_model_param_queue_list)
     best_model_workflow_queue_list, new_model_workflow_queue_list = get_best_new_queues_for_eval(workflow_queue_list)
@@ -175,8 +180,43 @@ if __name__ == '__main__':
         new_model_bb_per_100 = new_model_net_win_value_sum / num_statics_round / big_blind
         is_update_old_model = new_model_bb_per_100 > update_model_bb_per_100_thres
 
-        logging.info(f'Evaluation finished for task_id={eval_task_id}, new_model_bb_per_100={new_model_bb_per_100}')
+        logging.info(f'Evaluation finished for loop={n_loop}, new_model_bb_per_100={new_model_bb_per_100}')
 
     signal.alarm(0)
     time.sleep(5)
     exit(0)
+
+
+def validate_params(new_params, params_buffer):
+    for historical_params in params_buffer:
+        if historical_params == new_params:
+            return False
+    return True
+
+
+if __name__ == '__main__':
+    log_level = logging.INFO
+    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
+                        datefmt='%Y-%m-%d,%H:%M:%S')
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+
+    default_params, train_params = parse_test_train_params()
+
+    torch.multiprocessing.set_start_method('spawn')
+
+    num_choices = train_params['num_choices']
+    params_buffer = list()
+    for i in range(num_choices):
+        logging.info(f'start train and eval loop {i}')
+
+        chosen_task_params = choose_params_concurrent(train_params)
+        while not validate_params(chosen_task_params, params_buffer):
+            chosen_task_params = choose_params_concurrent(train_params)
+        params_buffer.append(chosen_task_params)
+        params = update_concurrent(default_params.copy(), chosen_task_params.copy())
+
+        p = Process(target=train_process, args=(params, i, log_level))
+        p.start()
+        p.join()
+        logging.info(f'end train and eval loop {i}')
