@@ -120,7 +120,7 @@ def train_process(params, n_loop, log_level):
                 predict_action_probs_list = action_probs_tensor.cpu().numpy()
                 predict_player_result_value_list = player_result_value_tensor.cpu().numpy()
             for predict_action_probs, predict_player_result_value in zip(predict_action_probs_list, predict_player_result_value_list):
-                logging.info(f'predic_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}, predic_winning_prob={predict_player_result_value.tolist()}')
+                logging.info(f'predic_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}, predic_winning_prob={["%.4f" % item for item in predict_player_result_value.tolist()]}')
 
         if train_step_num >= num_train_steps:
             break
