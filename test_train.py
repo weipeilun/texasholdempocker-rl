@@ -83,11 +83,12 @@ def train_process(params, n_loop, log_level):
         Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
-    # load model and synchronize to all predict_batch_process
-    is_model_init_from_path = params['is_model_init_from_path']
-    if is_model_init_from_path:
-        model_init_checkpoint_path = params['model_init_checkpoint_path']
-        load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
+    # synchronize model to all predict_batch_process
+    original_model_param = get_state_dict_from_model(model)
+    for update_model_param_queue in update_model_param_queue_list:
+        update_model_param_queue.put(original_model_param)
+    for workflow_ack_queue in workflow_ack_queue_list:
+        workflow_ack_queue.get(block=True, timeout=None)
     model_save_checkpoint_path = params['model_save_checkpoint_path_format'] % n_loop
     save_model(model, model_save_checkpoint_path)
 

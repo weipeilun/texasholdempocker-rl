@@ -23,6 +23,5 @@ model_param_dict:
     l2_weight: [0.001, 0.005]
 
 # checkpoints
-is_model_init_from_path: False
 model_save_checkpoint_path_format: models/test_train_%d.pth
 model_eval_snapshot_path_format: models/test_train_%d_eval.pth
