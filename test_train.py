@@ -100,14 +100,14 @@ def train_process(params, n_loop, log_level):
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
     for observation_list, action_probs_list, action_Q_list in train_batch_gen:
-        action_probs_loss, action_Q_loss = model.learn(observation_list, action_probs_list, action_Q_list)
-        train_step_num += 1
-
-        if torch.any(torch.isnan(action_probs_loss)) or torch.any(torch.isnan(action_Q_loss)) or torch.any(torch.isinf(action_probs_loss)) or torch.any(torch.isinf(action_Q_loss)):
-            logging.error(f'loss is nan or inf')
+        try:
+            action_probs_loss, action_Q_loss = model.learn(observation_list, action_probs_list, action_Q_list)
+        except ValueError as e:
+            logging.error(f'ValueError in model.learn: {e}')
             signal.alarm(0)
             time.sleep(5)
             exit(-1)
+        train_step_num += 1
 
         if train_step_num % log_step_num == 0:
             logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')

@@ -127,6 +127,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         action_probs_loss = self.action_prob_loss(action_prob, action_probs_tensor)
         action_Q_loss = self.action_Q_loss(action_Q_logits, action_Q_tensor)
+        assert not torch.any(torch.isnan(action_probs_loss)) and not torch.any(torch.isnan(action_Q_loss)) and not torch.any(torch.isinf(action_probs_loss)) and not torch.any(torch.isinf(action_Q_loss)), ValueError('loss is nan or inf')
         over_all_loss = action_probs_loss + action_Q_loss
 
         self.optimizer.zero_grad()
