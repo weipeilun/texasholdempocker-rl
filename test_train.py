@@ -103,10 +103,8 @@ def train_process(params, n_loop, log_level):
         action_probs_loss, action_Q_loss = model.learn(observation_list, action_probs_list, action_Q_list)
         train_step_num += 1
 
-        action_probs_loss_np = action_probs_loss.cpu().detach().numpy()
-        action_Q_loss_np = action_Q_loss.cpu().detach().numpy()
-        if np.isnan(action_probs_loss_np) or np.isinf(action_probs_loss_np) or np.isnan(action_Q_loss_np) or np.isinf(action_Q_loss_np):
-            logging.error(f'loss is nan or inf, action_probs_loss={action_probs_loss_np}, action_Q_loss={action_Q_loss_np}')
+        if torch.any(torch.isnan(action_probs_loss)) or torch.any(torch.isnan(action_Q_loss)) or torch.any(torch.isinf(action_probs_loss)) or torch.any(torch.isinf(action_Q_loss)):
+            logging.error(f'loss is nan or inf')
             signal.alarm(0)
             time.sleep(5)
             exit(-1)
