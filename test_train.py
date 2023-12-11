@@ -182,6 +182,7 @@ def train_process(params, n_loop, log_level):
         logging.info(f'Evaluation finished for loop={n_loop}, new_model_bb_per_100={new_model_bb_per_100}')
 
     signal.alarm(0)
+    train_batch_gen.close()
     time.sleep(5)
     exit(0)
 

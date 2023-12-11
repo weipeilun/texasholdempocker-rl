@@ -53,3 +53,4 @@ def data_batch_generator(filename, batch_size=8, epoch=1):
             feature_list_buffer = list()
             target_probs_list_buffer = list()
             target_Qs_buffer = list()
+    data_generator.close()
