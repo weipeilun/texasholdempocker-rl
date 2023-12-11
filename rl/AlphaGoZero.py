@@ -128,6 +128,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         action_probs_loss = self.action_prob_loss(action_prob, action_probs_tensor)
         action_Q_loss = self.action_Q_loss(action_Q_logits, action_Q_tensor)
         assert not torch.any(torch.isnan(action_probs_loss)) and not torch.any(torch.isnan(action_Q_loss)) and not torch.any(torch.isinf(action_probs_loss)) and not torch.any(torch.isinf(action_Q_loss)), ValueError('loss is nan or inf')
+        action_probs_loss_float = action_probs_loss.item()
+        action_Q_loss_float = action_Q_loss.item()
         over_all_loss = action_probs_loss + action_Q_loss
 
         self.optimizer.zero_grad()
@@ -138,8 +140,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         # abs_error_np = v_error_abs_tensor.detach().cpu().numpy()
         # self.memory.batch_update(sample_idx_np, abs_error_np)
 
-        if self.epsilon_delta_per_step is not None and self.epsilon_max is not None and self.epsilon_delta_per_step > 0 and 0 <= self.epsilon_max <= 1:
-            if self.epsilon < self.epsilon_max:
-                self.epsilon += self.epsilon_delta_per_step
+        # if self.epsilon_delta_per_step is not None and self.epsilon_max is not None and self.epsilon_delta_per_step > 0 and 0 <= self.epsilon_max <= 1:
+        #     if self.epsilon < self.epsilon_max:
+        #         self.epsilon += self.epsilon_delta_per_step
 
-        return action_probs_loss, action_Q_loss
+        return action_probs_loss_float, action_Q_loss_float

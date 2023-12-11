@@ -100,6 +100,8 @@ def train_process(params, n_loop, log_level):
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
     for observation_list, action_probs_list, action_Q_list in train_batch_gen:
+        logging.info(f'get data for train_step {train_step_num}')
+
         try:
             action_probs_loss, action_Q_loss = model.learn(observation_list, action_probs_list, action_Q_list)
         except ValueError as e:
@@ -113,8 +115,10 @@ def train_process(params, n_loop, log_level):
             logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')
 
         if train_step_num % predict_step_num == 0:
+            logging.info(f'start predict for train_step {train_step_num}')
             with torch.no_grad():
                 action_probs_tensor, player_result_value_tensor = model(observation_list)
+                logging.info(f'finished predict for train_step {train_step_num}')
                 predict_action_probs_list = action_probs_tensor.cpu().numpy()
                 predict_player_result_value_list = player_result_value_tensor.cpu().numpy()
             for predict_action_probs, predict_player_result_value in zip(predict_action_probs_list, predict_player_result_value_list):
