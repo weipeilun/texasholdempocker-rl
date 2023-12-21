@@ -10,7 +10,7 @@ historical_data_filename: data/history.txt
 
 # train process params
 first_train_data_step: 500
-train_per_step: 2
+train_per_step: 4
 eval_model_per_step: 5000
 log_step_num: 200
 
