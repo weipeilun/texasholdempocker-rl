@@ -159,11 +159,21 @@ class MCTS:
             # init root node
             action_bin = num_simulation % self.n_actions
         else:
+            # 这是核心的蒙特卡洛搜索树算法
+            # 注意此处原生的蒙特卡洛搜索树要求U(s, a) ∝ sqrt(ln(sum_N) / N(s, a))
+            # 在没有遍历完子树的所有节点的情况下，随机选择一个没有遍历过的节点
+            # AlphaGo Zero修改U(s, a) ∝ P(s, a) * sqrt(sum_N) / (1 + N(s, a))
+            # 所以在没有遍历完子树的所有节点的情况下，要选择一个没遍历过的P(s, a)最大的节点
+            # todo: 非完全信息博弈场景，每次模拟都面向一个新的随机隐藏信息，所以每次模拟的q都和历史模拟的q不一样。所以本质上这的MCTS在物理意义上是不成立的（exploitation-exploration过程中exploitation是不严格成立的）。但在应用中可能有效的假设在于：对历史隐藏信息统计的q在当前隐藏信息下仍然是有效的。
             sum_N = sum(self.children_n_array)
-            # 注意此处原生的蒙特卡洛搜索树要求U(s, a) ∝ P(s, a)/(1 + N(s, a))
-            # 此处增加了sqrt(sum_N)项作为分子，因此在第一次求解时需要满足U(s, a) ∝ P(s, a)
-            if sum_N == 0:
-                action_bin = int(np.argmax(p_array).tolist())
+            if sum_N < self.n_actions:
+                action_bin = -1
+                tmp_max_p = -1
+                for i, p in enumerate(p_array):
+                    if self.children_n_array[i] == 0:
+                        if action_bin == -1 or p > tmp_max_p:
+                            action_bin = i
+                            tmp_max_p = p
             else:
                 # sqrt_sum_N_of_b_array = np.sqrt(sum_N - self.children_n_array)
                 sqrt_sum_N_of_b_array = np.sqrt(sum_N)

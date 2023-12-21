@@ -14,7 +14,7 @@ eval_model_per_step: 30
 log_step_num: 5
 
 # game params
-num_mcts_simulation_per_step: 1000
+num_mcts_simulation_per_step: 800
 mcts_c_puct: 1
 mcts_tau: 1
 mcts_log_to_file: True
