@@ -31,7 +31,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  num_bins=10,
                  num_acting_player_fields=9,
                  num_other_player_fields=3,
-                 save_train_data=False
+                 save_train_data=False,
+                 default_train_file_path='data/test.txt'
                  ):
         super(AlphaGoZero, self).__init__()
 
@@ -43,6 +44,9 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.batch_size = batch_size
         self.epsilon_delta_per_step = epsilon_delta_per_step
         self.save_train_data = save_train_data
+        self.default_train_file_path = default_train_file_path
+
+        self.train_file = None
 
         self.epsilon = epsilon
         self.epsilon_max = epsilon_max
@@ -60,10 +64,10 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.memory = SimpleMemory(transition_buffer_len, n_observation * 2 + 2)
 
         if self.save_train_data:
-            self.train_file = open('data/test.txt', 'a', encoding='UTF-8')
+            self.train_file = open(default_train_file_path, 'a', encoding='UTF-8')
 
     def __del__(self):
-        if self.save_train_data:
+        if self.save_train_data and self.train_file is not None:
             self.train_file.flush()
             self.train_file.close()
 
