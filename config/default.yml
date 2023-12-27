@@ -31,9 +31,9 @@ model_param_dict:
     n_actions: 4
     num_output_class: 22
     device: 'cuda:0'
-    embedding_dim: 512
+    embedding_dim: 320
     positional_embedding_dim: 64
-    transformer_head_dim: 64
+    transformer_head_dim: 32
     num_layers: 10
     historical_action_sequence_length: 16
     epsilon: 0.05
