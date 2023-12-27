@@ -51,7 +51,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, transformer_head_dim, historical_action_sequence_length, num_acting_player_fields, num_other_player_fields, device).to(self.device)
         self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, weight_decay=l2_weight)
         # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
-        self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=learning_rate, step_size_up=5000, mode="triangular")
+        self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=learning_rate, step_size_up=5000, mode="triangular", cycle_momentum=False)
 
         self.action_prob_loss = torch.nn.CrossEntropyLoss()
         self.action_Q_loss = torch.nn.MSELoss()
