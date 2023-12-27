@@ -58,7 +58,7 @@ class EnvEmbedding(nn.Module):
             for _ in range(num_fields):
                 field_start_idx_list.append(current_start_idx)
             current_start_idx += num_dims
-        self.field_start_idx_array = torch.asarray(np.array(field_start_idx_list, dtype=np.int32), requires_grad=False)
+        self.field_start_idx_array = torch.tensor(field_start_idx_list, dtype=torch.int32, requires_grad=False)
         self.field_embedding = nn.Embedding(num_embeddings=num_starters + sum(item[1] for item in field_dim_list), embedding_dim=embedding_dim)
 
         card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
