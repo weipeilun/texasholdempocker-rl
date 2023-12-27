@@ -49,8 +49,9 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.random_choice = np.arange(0, self.n_actions)
 
         self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, transformer_head_dim, historical_action_sequence_length, num_acting_player_fields, num_other_player_fields, device).to(self.device)
-        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=l2_weight)
+        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, weight_decay=l2_weight)
         # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
+        self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=learning_rate, step_size_up=5000, mode="triangular")
 
         self.action_prob_loss = torch.nn.CrossEntropyLoss()
         self.action_Q_loss = torch.nn.MSELoss()
@@ -102,8 +103,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         with self.memory_lock:
             self.memory.store([observation, action_probs, action_Qs, winning_prob])
 
-    def learn(self, observation_list=None, action_probs_list=None, action_Q_list=None):
-        if observation_list is None or action_probs_list is None or action_Q_list is None:
+    def learn(self, observation_tensor=None, action_probs_tensor=None, action_Q_tensor=None):
+        if observation_tensor is None or action_probs_tensor is None or action_Q_tensor is None:
             sample_idx_np, _, data_batch = self.memory.sample(self.batch_size)
             # weight_tensor = torch.from_numpy(weight_np).to(self.device)
 
@@ -117,13 +118,15 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                 # discard winning_prob for model training
                 # todo: delete value calcalation process
 
-        action_probs_array = np.array(action_probs_list)
-        action_Q_array = np.array(action_Q_list)
-        action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=self.device, requires_grad=False)
-        action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=self.device, requires_grad=False)
+            observation_array = np.array(observation_list)
+            action_probs_array = np.array(action_probs_list)
+            action_Q_array = np.array(action_Q_list)
+            observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.device, requires_grad=False)
+            action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=self.device, requires_grad=False)
+            action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=self.device, requires_grad=False)
 
         self.model.train()
-        action_prob, action_Q_logits = self.model(observation_list)
+        action_prob, action_Q_logits = self.model(observation_tensor)
 
         action_probs_loss = self.action_prob_loss(action_prob, action_probs_tensor)
         action_Q_loss = self.action_Q_loss(action_Q_logits, action_Q_tensor)
@@ -134,7 +137,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         self.optimizer.zero_grad()
         over_all_loss.backward()
-        self.optimizer.step()
+        self.scheduler.step()
+        # self.scheduler.get_last_lr()
 
         # v_error_abs_tensor = torch.abs(value_eval_tensor - value_target_tensor)
         # abs_error_np = v_error_abs_tensor.detach().cpu().numpy()

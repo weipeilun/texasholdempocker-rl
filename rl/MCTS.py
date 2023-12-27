@@ -10,7 +10,7 @@ from env.constants import *
 
 
 class MCTS:
-    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=10, log_to_file=False, pid=None, thread_name=None):
+    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=0, log_to_file=False, pid=None, thread_name=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.player_name_predict_in_queue_dict = player_name_predict_in_queue_dict

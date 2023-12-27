@@ -410,7 +410,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             action = mcts.get_action(action_probs, use_argmax=False)
             t1 = time.time()
-            logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
+            # logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
             game_train_data_queue.put((game_id, ([observation, action_probs, action_Qs], info)))
@@ -419,7 +419,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 observation = observation_
             else:
                 game_finished_signal_queue.put(game_id)
-                logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
+                # logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
                 break
     env.close()
 

@@ -51,14 +51,14 @@ class EnvEmbedding(nn.Module):
                           (MAX_PLAYER_NUMBER - 1, num_bins),
                           (MAX_PLAYER_NUMBER - 1, num_bins + 1),
                               ]
-        self.starter_idx_array = np.arange(0, num_starters, dtype=np.int32)
+        self.starter_idx_array = torch.arange(0, num_starters, dtype=torch.int32, requires_grad=False)
         current_start_idx = num_starters
         field_start_idx_list = list()
         for num_fields, num_dims in field_dim_list:
             for _ in range(num_fields):
                 field_start_idx_list.append(current_start_idx)
             current_start_idx += num_dims
-        self.field_start_idx_array = np.array(field_start_idx_list, dtype=np.int32)
+        self.field_start_idx_array = torch.asarray(np.array(field_start_idx_list, dtype=np.int32), requires_grad=False)
         self.field_embedding = nn.Embedding(num_embeddings=num_starters + sum(item[1] for item in field_dim_list), embedding_dim=embedding_dim)
 
         card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
@@ -100,18 +100,13 @@ class EnvEmbedding(nn.Module):
             # self.segment_embedding_idx = nn.Parameter(torch.cat([segment_embedding_idx_ordinary, segment_embedding_idx_players, segment_embedding_idx_historical_actions], dim=1), requires_grad=False)
 
     def forward(self, x):
-        game_status_list = list()
+        batch_size = x.shape[0]
 
-        for item in x:
-            # current_round, current_player_role, cards, current_all_player_status, all_historical_player_action = item
-            item_idx_modified_array = item + self.field_start_idx_array
-            # 把每个字段的相对idx映射成embedding的绝对idx
-            item_idx_abs_array = np.hstack((self.starter_idx_array, item_idx_modified_array))
-            game_status_list.append(item_idx_abs_array)
-        batch_size = len(x)
-
-        game_status_array = np.asarray(game_status_list)
-        game_status_tensor = torch.tensor(game_status_array, device=self.device, requires_grad=False)
+        item_idx_modified_array = x + self.field_start_idx_array
+        if self.num_starters > 0:
+            game_status_tensor = torch.hstack((self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1), item_idx_modified_array))
+        else:
+            game_status_tensor = item_idx_modified_array
         game_status_embedding = self.field_embedding(game_status_tensor)
 
         if self.do_position_embedding and self.embedding_sequence_len > 0:
@@ -424,7 +419,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
                                           embedding_sequence_len=embedding_sequence_len,
-                                          num_starters=0,
+                                          num_starters=2,
                                           num_acting_player_fields=num_acting_player_fields,
                                           num_other_player_fields=num_other_player_fields,
                                           device=self.device)
@@ -432,26 +427,25 @@ class TransformerAlphaGoZeroModel(nn.Module):
         assert int(embedding_dim + positional_embedding_dim * 3) % transformer_head_dim == 0, f'embedding_dim({embedding_dim}) + positional_embedding_dim({positional_embedding_dim}) * 3 must be divisible by transformer_head_dim({transformer_head_dim}).'
         num_transformer_head = int(embedding_dim + positional_embedding_dim * 3) // transformer_head_dim
         encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=num_transformer_head, batch_first=True)
-        # encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim * 3)
-        self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, norm=None)
+        self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers)
 
         self.action_logits_softmax = torch.nn.Softmax(dim=-1)
         self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
 
         # 预测action的概率分布
-        self.action_prob_dense = nn.Linear((embedding_dim + positional_embedding_dim * 3) * embedding_sequence_len, num_output_class, bias=False)
+        self.action_prob_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class, bias=False)
         # 预测action的Q值分布
-        self.action_Q_dense = nn.Linear((embedding_dim + positional_embedding_dim * 3) * embedding_sequence_len, num_output_class, bias=True)
+        self.action_Q_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class, bias=True)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
         x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
         x = self.transform_encoder(x)
-        x = x.reshape(x.shape[0], -1)
+        # x = x.reshape(x.shape[0], -1)
 
-        action_prob_logits = self.action_prob_dense(x)
+        action_prob_logits = self.action_prob_dense(x[:, 0, :])
         action_prob = self.action_logits_softmax(action_prob_logits)
 
-        action_Q_logits = self.action_Q_dense(x)
+        action_Q_logits = self.action_Q_dense(x[:, 1, :])
         return action_prob, action_Q_logits

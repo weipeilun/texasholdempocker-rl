@@ -10,7 +10,7 @@ historical_data_filename: data/history.txt
 
 # train process params
 first_train_data_step: 500
-train_per_step: 4
+train_per_step: 8
 eval_model_per_step: 5000
 log_step_num: 200
 
@@ -39,8 +39,8 @@ model_param_dict:
     epsilon: 0.05
     epsilon_max: 0.8
     gamma: 0.9
-    batch_size: 64
-    learning_rate: 0.00003
+    batch_size: 256
+    learning_rate: 0.003
     l2_weight: 0.005
     num_bins: 10
     save_train_data: True

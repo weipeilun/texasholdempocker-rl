@@ -97,13 +97,20 @@ def train_process(params, n_loop, log_level):
     predict_step_num = params['predict_step_num']
     num_train_steps = params['num_train_steps']
     batch_size = params['model_param_dict']['batch_size']
+    device = params['model_param_dict']['device']
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
     for observation_list, action_probs_list, action_Q_list in train_batch_gen:
         logging.info(f'get data for train_step {train_step_num}')
 
+        observation_array = np.array(observation_list)
+        action_probs_array = np.array(action_probs_list)
+        action_Q_array = np.array(action_Q_list)
+        observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=device, requires_grad=False)
+        action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=device, requires_grad=False)
+        action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=device, requires_grad=False)
         try:
-            action_probs_loss, action_Q_loss = model.learn(observation_list, action_probs_list, action_Q_list)
+            action_probs_loss, action_Q_loss = model.learn(observation_tensor, action_probs_tensor, action_Q_tensor)
         except ValueError as e:
             logging.error(f'ValueError in model.learn: {e}')
             signal.alarm(0)
