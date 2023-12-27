@@ -239,7 +239,9 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
 
     def predict_and_send(predict_send_model, predict_send_batch_list, predict_send_pid_list, predict_send_send_in_queue, predict_send_workflow_status):
         with torch.no_grad():
-            action_probs_tensor, action_Q_tensor = predict_send_model(predict_send_batch_list)
+            observation_array = np.array(predict_send_batch_list)
+            observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=model.device, requires_grad=False)
+            action_probs_tensor, action_Q_tensor = predict_send_model(observation_tensor)
             action_probs_list = action_probs_tensor.cpu().numpy()
             action_Q_list = action_Q_tensor.cpu().numpy()
 
