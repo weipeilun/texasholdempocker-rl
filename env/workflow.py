@@ -559,6 +559,18 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
             logging.info("train_gather_result_thread detect interrupt")
             break
 
+        signal_finished_game_id_list = list()
+        while True:
+            try:
+                if interrupt.interrupt_callback():
+                    logging.info("train_gather_result_thread detect interrupt")
+                    break
+
+                signal_finished_game_id = game_finished_signal_queue.get(block=False)
+                signal_finished_game_id_list.append(signal_finished_game_id)
+            except Empty:
+                break
+
         while True:
             try:
                 if interrupt.interrupt_callback():
@@ -575,16 +587,9 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
             except Empty:
                 break
 
-        while True:
-            try:
-                if interrupt.interrupt_callback():
-                    logging.info("train_gather_result_thread detect interrupt")
-                    break
-
-                signal_finished_game_id = game_finished_signal_queue.get(block=False)
-                finished_game_id_dict[signal_finished_game_id] = len(game_train_data_list_dict[signal_finished_game_id])
-            except Empty:
-                break
+        # 此处会有多进程下的数据幻觉问题，会导致取数异常。把从game_finished_signal_queue取数放到前边
+        for signal_finished_game_id in signal_finished_game_id_list:
+            finished_game_id_dict[signal_finished_game_id] = len(game_train_data_list_dict[signal_finished_game_id])
 
         finalized_game_id_set = set()
         for finished_game_id, num_total_games in finished_game_id_dict.items():
