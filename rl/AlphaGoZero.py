@@ -21,7 +21,10 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  num_layers=6,
                  historical_action_sequence_length=56,
                  batch_size=32,
-                 learning_rate=3e-4,
+                 base_learning_rate=3e-4,
+                 max_learning_rate=3e-4,
+                 step_size_up=1000,
+                 step_size_down=1000,
                  l2_weight=0,
                  transformer_head_dim=64,
                  transition_buffer_len=1000,
@@ -53,9 +56,9 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.random_choice = np.arange(0, self.n_actions)
 
         self.model = TransformerAlphaGoZeroModel(num_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, transformer_head_dim, historical_action_sequence_length, num_acting_player_fields, num_other_player_fields, device).to(self.device)
-        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=learning_rate, weight_decay=l2_weight)
+        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=max_learning_rate, weight_decay=l2_weight)
         # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
-        self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=learning_rate, step_size_up=5000, mode="triangular", cycle_momentum=False)
+        self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=base_learning_rate, max_lr=max_learning_rate, step_size_up=step_size_up, step_size_down=step_size_down, mode="triangular", cycle_momentum=False)
 
         self.action_prob_loss = torch.nn.CrossEntropyLoss()
         self.action_Q_loss = torch.nn.MSELoss()
@@ -141,6 +144,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         self.optimizer.zero_grad()
         over_all_loss.backward()
+        self.optimizer.step()
         self.scheduler.step()
         # self.scheduler.get_last_lr()
 

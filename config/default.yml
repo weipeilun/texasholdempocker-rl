@@ -40,7 +40,10 @@ model_param_dict:
     epsilon_max: 0.8
     gamma: 0.9
     batch_size: 256
-    learning_rate: 0.003
+    base_learning_rate: 0.00001
+    max_learning_rate: 0.003
+    step_size_up: 1000
+    step_size_down: 4000
     l2_weight: 0.005
     num_bins: 10
     save_train_data: True
