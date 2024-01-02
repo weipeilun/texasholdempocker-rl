@@ -20,7 +20,7 @@ model_param_dict:
     transformer_head_dim: [32, 64]
     num_layers: [6, 8, 10]
     max_learning_rate: [0.0005, 0.001, 0.003]
-    l2_weight: [0.001, 0.005]
+    l2_weight: [0.005, 0.01, 0.05]
     save_train_data: False
 
 # checkpoints

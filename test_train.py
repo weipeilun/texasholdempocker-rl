@@ -101,7 +101,7 @@ def train_process(params, n_loop, log_level):
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
     for observation_list, action_probs_list, action_Q_list in train_batch_gen:
-        logging.info(f'get data for train_step {train_step_num}')
+        # logging.info(f'get data for train_step {train_step_num}')
 
         observation_array = np.array(observation_list)
         action_probs_array = np.array(action_probs_list)
