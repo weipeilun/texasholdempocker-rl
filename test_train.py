@@ -124,7 +124,7 @@ def train_process(params, n_loop, log_level):
         if train_step_num % predict_step_num == 0:
             logging.info(f'start predict for train_step {train_step_num}')
             with torch.no_grad():
-                action_probs_tensor, player_result_value_tensor = model(observation_list)
+                action_probs_tensor, player_result_value_tensor = model(observation_tensor)
                 logging.info(f'finished predict for train_step {train_step_num}')
                 predict_action_probs_list = action_probs_tensor.cpu().numpy()
                 predict_player_result_value_list = player_result_value_tensor.cpu().numpy()
