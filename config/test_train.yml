@@ -10,7 +10,7 @@ train_data_path: data/history.txt
 # train process params
 log_step_num: 200   # show loss per steps
 predict_step_num: 500   # show prediction result per steps
-num_train_steps: 50000  # train until steps
+num_train_steps: 10000  # train until steps
 
 # model params
 model_param_dict:
@@ -20,6 +20,7 @@ model_param_dict:
     transformer_head_dim: [32, 64]
     num_layers: [6, 8, 10]
     learning_rate: [0.01, 0.03]
+    max_learning_rate: [0.0005, 0.001, 0.003]
     l2_weight: [0.001, 0.005]
     save_train_data: False
 
