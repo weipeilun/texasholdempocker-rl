@@ -222,13 +222,13 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
                 break
 
             try:
-                action_probs_list, action_Q_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
-                for action_probs, action_Q, send_pid in zip(action_probs_list, action_Q_list, send_pid_list):
+                for action_probs, action_Q, winning_prob, send_pid in zip(action_probs_list, action_Q_list, winning_prob_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((action_probs, action_Q))
+                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((action_probs, action_Q, winning_prob))
                     elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((action_probs, action_Q))
+                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((action_probs, action_Q, winning_prob))
                     else:
                         raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
             except Empty:
@@ -241,11 +241,12 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
         with torch.no_grad():
             observation_array = np.array(predict_send_batch_list)
             observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=model.device, requires_grad=False)
-            action_probs_tensor, action_Q_tensor = predict_send_model(observation_tensor)
+            action_probs_tensor, action_Q_tensor, winning_prob_tensor = predict_send_model(observation_tensor)
             action_probs_list = action_probs_tensor.cpu().numpy()
             action_Q_list = action_Q_tensor.cpu().numpy()
+            winning_prob_list = winning_prob_tensor.cpu().numpy()
 
-        predict_send_send_in_queue.put((action_probs_list, action_Q_list, predict_send_pid_list, predict_send_workflow_status))
+        predict_send_send_in_queue.put((action_probs_list, action_Q_list, winning_prob_list, predict_send_pid_list, predict_send_workflow_status))
 
     batch_list = list()
     pid_list = list()
@@ -308,11 +309,11 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             step_counter.increment()
 
             if step_counter.get_value() >= next_train_step:
-                action_probs_loss, action_Q_loss = model.learn()
+                action_probs_loss, action_Q_loss, winning_prob_loss = model.learn()
                 train_step_num += 1
 
                 if train_step_num % log_step_num == 0:
-                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')
+                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
 
                 # 避免训练数据过多重复
                 next_train_step += train_per_step
@@ -348,11 +349,11 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             break
 
         if step_counter.get_value() >= next_train_step:
-            action_probs_loss, action_Q_loss = model.learn()
+            action_probs_loss, action_Q_loss, winning_prob_loss = model.learn()
             train_step_num += 1
 
             if train_step_num % log_step_num == 0:
-                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}')
+                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
 
             if train_step_num >= next_eval_step:
                 new_state_dict = get_state_dict_from_model(model)

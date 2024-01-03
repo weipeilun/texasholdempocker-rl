@@ -62,6 +62,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         self.action_prob_loss = torch.nn.CrossEntropyLoss()
         self.action_Q_loss = torch.nn.MSELoss()
+        self.winning_prob_loss = torch.nn.MSELoss()
 
         self.memory_lock = Lock()
         self.memory = SimpleMemory(transition_buffer_len, n_observation * 2 + 2)
@@ -110,37 +111,41 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         with self.memory_lock:
             self.memory.store([observation, action_probs, action_Qs, winning_prob])
 
-    def learn(self, observation_tensor=None, action_probs_tensor=None, action_Q_tensor=None):
-        if observation_tensor is None or action_probs_tensor is None or action_Q_tensor is None:
+    def learn(self, observation_tensor=None, action_probs_tensor=None, action_Q_tensor=None, winning_prob_tensor=None):
+        if observation_tensor is None or action_probs_tensor is None or action_Q_tensor is None or winning_prob_tensor is None:
             sample_idx_np, _, data_batch = self.memory.sample(self.batch_size)
             # weight_tensor = torch.from_numpy(weight_np).to(self.device)
 
             observation_list = list()
             action_probs_list = list()
             action_Q_list = list()
+            winning_prob_list = list()
             for observation, action_probs, action_Qs, winning_prob in data_batch:
                 observation_list.append(observation)
                 action_probs_list.append(action_probs)
                 action_Q_list.append(action_Qs)
-                # discard winning_prob for model training
-                # todo: delete value calcalation process
+                winning_prob_list.append(winning_prob)
 
             observation_array = np.array(observation_list)
             action_probs_array = np.array(action_probs_list)
             action_Q_array = np.array(action_Q_list)
+            winning_prob_array = np.array(winning_prob_list)
             observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.device, requires_grad=False)
             action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=self.device, requires_grad=False)
             action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=self.device, requires_grad=False)
+            winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=self.device, requires_grad=False)
 
         self.model.train()
-        action_prob, action_Q_logits = self.model(observation_tensor)
+        action_prob, action_Q_logits, winning_prob_logits = self.model(observation_tensor)
 
         action_probs_loss = self.action_prob_loss(action_prob, action_probs_tensor)
         action_Q_loss = self.action_Q_loss(action_Q_logits, action_Q_tensor)
-        assert not torch.any(torch.isnan(action_probs_loss)) and not torch.any(torch.isnan(action_Q_loss)) and not torch.any(torch.isinf(action_probs_loss)) and not torch.any(torch.isinf(action_Q_loss)), ValueError('loss is nan or inf')
+        winning_prob_loss = self.winning_prob_loss(winning_prob_logits, winning_prob_tensor)
+        assert not torch.any(torch.isnan(action_probs_loss)) and not torch.any(torch.isnan(action_Q_loss)) and not torch.any(torch.isnan(winning_prob_loss)) and not torch.any(torch.isinf(action_probs_loss)) and not torch.any(torch.isinf(action_Q_loss)) and not torch.any(torch.isinf(winning_prob_loss)), ValueError('loss is nan or inf')
         action_probs_loss_float = action_probs_loss.item()
         action_Q_loss_float = action_Q_loss.item()
-        over_all_loss = action_probs_loss + action_Q_loss
+        winning_prob_loss_float = winning_prob_loss.item()
+        over_all_loss = action_probs_loss + action_Q_loss * 0.1 + winning_prob_loss
 
         self.optimizer.zero_grad()
         over_all_loss.backward()
@@ -156,4 +161,4 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         #     if self.epsilon < self.epsilon_max:
         #         self.epsilon += self.epsilon_delta_per_step
 
-        return action_probs_loss_float, action_Q_loss_float
+        return action_probs_loss_float, action_Q_loss_float, winning_prob_loss_float

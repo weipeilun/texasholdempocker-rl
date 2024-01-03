@@ -348,7 +348,7 @@ class Env:
         """
         return self._env.game_over
 
-    def _map_obs_idx_to_model_index(self, current_round, current_player_role, cards, sorted_cards, acting_player_status_list, other_player_status_list):
+    def _map_obs_idx_to_model_index(self, current_round, current_player_role, cards, acting_player_status_list, other_player_status_list):
         sorted_item_list = list()
         sorted_item_list.append(current_round)
         sorted_item_list.append(current_player_role)
@@ -358,9 +358,9 @@ class Env:
             for card_representation in card_representation_list:
                 all_figure.append(card_representation[0])
                 all_decor.append(card_representation[1])
-        for card_representation in sorted_cards:
-            all_figure.append(card_representation[0])
-            all_decor.append(card_representation[1])
+        # for card_representation in sorted_cards:
+        #     all_figure.append(card_representation[0])
+        #     all_decor.append(card_representation[1])
         sorted_item_list.extend(all_figure)
         sorted_item_list.extend(all_decor)
 
@@ -406,14 +406,18 @@ class Env:
         turn_cards = get_card_representations(infoset.turn_cards, 1)
         river_cards = get_card_representations(infoset.river_cards, 1)
 
-        sorted_cards = sort_card_representations(hand_cards, flop_cards, turn_cards, river_cards)
+        # sorted_cards = sort_card_representations(hand_cards, flop_cards, turn_cards, river_cards)
 
         acting_player_status_list, other_player_status_list = self.get_all_player_current_status(infoset)
 
         # all_historical_player_action = get_all_historical_action(infoset)
+        # 干掉sorted_cards，疑似重复信息字段，测试模型是否可以学到规则
+        # return self._map_obs_idx_to_model_index(current_round, acting_player_id,
+        #         [hand_cards, flop_cards, turn_cards, river_cards],
+        #         sorted_cards, acting_player_status_list, other_player_status_list)
         return self._map_obs_idx_to_model_index(current_round, acting_player_id,
                 [hand_cards, flop_cards, turn_cards, river_cards],
-                sorted_cards, acting_player_status_list, other_player_status_list)
+                acting_player_status_list, other_player_status_list)
 
     def get_all_player_current_status(self, infoset):
         assert infoset is not None, "The infoset should not be None."

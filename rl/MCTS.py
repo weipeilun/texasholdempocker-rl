@@ -48,6 +48,7 @@ class MCTS:
 
         self.default_action_probs = np.ones(self.n_actions, dtype=np.float32) / self.n_actions
         self.default_action_Qs = np.zeros(self.n_actions, dtype=np.float32)
+        self.default_winning_prob = np.zeros(1, dtype=np.float32)
 
         self.children_w_array = None
         self.children_n_array = None
@@ -68,7 +69,7 @@ class MCTS:
             self.file_writer_choice = open(f"log/choice.csv", "w", encoding='UTF-8')
 
         acting_player_name = env._acting_player_name
-        action_prob, action_Qs = self.predict(observation, acting_player_name)
+        action_prob, action_Qs, _ = self.predict(observation, acting_player_name)
         if self.is_root and self.apply_dirichlet_noice:
             dirichlet_noise = np.random.dirichlet(action_prob)
             action_prob = (1 - self.dirichlet_noice_epsilon) * action_prob + self.dirichlet_noice_epsilon * dirichlet_noise
@@ -227,7 +228,7 @@ class MCTS:
             self.children_q_array = np.zeros(self.n_actions)
 
         acting_player_name = env._acting_player_name
-        action_prob, action_Qs = self.predict(observation, acting_player_name)
+        action_prob, action_Qs, _ = self.predict(observation, acting_player_name)
         action_bin, action = self._choose_action(action_prob)
 
         observation_, reward_dict, terminated, info = env.step(action)
@@ -263,6 +264,7 @@ class MCTS:
         # 仅支持多线程下的批量预测
         action_prob = self.default_action_probs
         action_Qs = self.default_action_Qs
+        winning_prob = self.default_winning_prob
         # 这个锁用于控制workflow的状态切换
         if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
             try:
@@ -281,8 +283,8 @@ class MCTS:
                 break
 
             try:
-                action_prob, action_Qs = self.predict_out_queue.get(block=True, timeout=0.001)
+                action_prob, action_Qs, winning_prob = self.predict_out_queue.get(block=True, timeout=0.001)
                 break
             except Empty:
                 continue
-        return action_prob, action_Qs
+        return action_prob, action_Qs, winning_prob

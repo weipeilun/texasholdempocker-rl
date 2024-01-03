@@ -35,22 +35,22 @@ class EnvEmbedding(nn.Module):
         # bins of acting player status
         # bins of other player status
         field_dim_list = [(1, 4),
-                              (1, MAX_PLAYER_NUMBER + 1),
-                              (7 * 2, len(CardFigure) + 1),
-                              (7 * 2, len(CardDecor) + 1),
-                              (1, num_bins),
-                              (1, num_bins),
-                              (1, num_bins),
-                              (1, num_bins),
-                              (1, num_bins + 1),
-                              (1, num_bins + 1),
-                              (1, num_bins),
-                              (1, num_bins + 1),
-                              (1, num_bins + 1),
+                          (1, MAX_PLAYER_NUMBER + 1),
+                          (7, len(CardFigure) + 1),
+                          (7, len(CardDecor) + 1),
+                          (1, num_bins),
+                          (1, num_bins),
+                          (1, num_bins),
+                          (1, num_bins),
+                          (1, num_bins + 1),
+                          (1, num_bins + 1),
+                          (1, num_bins),
+                          (1, num_bins + 1),
+                          (1, num_bins + 1),
                           (MAX_PLAYER_NUMBER - 1, len(PlayerStatus)),
                           (MAX_PLAYER_NUMBER - 1, num_bins),
                           (MAX_PLAYER_NUMBER - 1, num_bins + 1),
-                              ]
+                          ]
         self.starter_idx_array = nn.Parameter(torch.arange(0, num_starters, dtype=torch.int32), requires_grad=False)
         current_start_idx = num_starters
         field_start_idx_list = list()
@@ -61,43 +61,38 @@ class EnvEmbedding(nn.Module):
         self.field_start_idx_array = nn.Parameter(torch.tensor(field_start_idx_list, dtype=torch.int32), requires_grad=False)
         self.field_embedding = nn.Embedding(num_embeddings=num_starters + sum(item[1] for item in field_dim_list), embedding_dim=embedding_dim)
 
-        card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
-        num_segment_diff_by_card = len(card_segments) * 2 - max(card_segments) - 1
+        # card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
+        # num_segment_diff_by_card = len(card_segments) * 2 - max(card_segments) - 1
 
         if self.do_position_embedding and self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_sequence_length > 0:
-            self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - len(card_segments), embedding_dim=self.positional_embedding_dim)
-            position_embedding_idx_1 = torch.arange(num_starters + 2, dtype=torch.int64)
-            position_embedding_idx_2 = torch.arange(len(card_segments)).unsqueeze(1).repeat(2, 1).reshape(2 * len(card_segments)) + num_starters + 2
-            position_embedding_idx_3 = torch.arange(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64) + num_starters + 2 + len(card_segments)
-            self.position_embedding_idx = nn.Parameter(torch.cat([position_embedding_idx_1, position_embedding_idx_2, position_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
-
-            self.segment_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1), embedding_dim=self.positional_embedding_dim)
-            # 此处的segment组成：starters, round, role, figure * 7 * 2, decor * 7 * 2, player_status(num_player_fields) * num_player, (append_segments)
-            segment_embedding_idx_ordinary_1 = torch.arange(num_starters + 2)
-            segment_embedding_idx_ordinary_2 = torch.tensor(card_segments) + num_starters + 2
-            segment_embedding_idx_ordinary_3 = torch.tensor(card_segments) + num_starters + 2
-            segment_embedding_idx_acting_players = torch.ones(num_acting_player_fields, dtype=torch.int64) * (num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields - (MAX_PLAYER_NUMBER - 1) * num_other_player_fields - num_append_segments)
-            segment_embedding_idx_other_players = torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * num_other_player_fields - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1) - num_append_segments).repeat(num_other_player_fields)
-            segment_embedding_idx_list = [segment_embedding_idx_ordinary_1, segment_embedding_idx_ordinary_2, segment_embedding_idx_ordinary_3, segment_embedding_idx_acting_players, segment_embedding_idx_other_players]
-            if num_append_segments > 0:
-                segment_embedding_idx_list.append(torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1) - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1)))
-            self.segment_embedding_idx = nn.Parameter(torch.cat(segment_embedding_idx_list, dim=0).unsqueeze(0), requires_grad=False)
-
-            # 加入card_embedding是因为segment_embedding无法编码牌的点数和花色的对应关系
-            self.card_embedding = nn.Embedding(num_embeddings=len(card_segments) + 1, embedding_dim=self.positional_embedding_dim)
-            card_embedding_idx_1 = torch.zeros(num_starters + 2, dtype=torch.int64)
-            card_embedding_idx_2 = torch.arange(2).unsqueeze(1).repeat(1, len(card_segments)).reshape(2 * len(card_segments)) + 1
-            card_embedding_idx_3 = torch.zeros(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64)
-            self.card_embedding_idx = nn.Parameter(torch.cat([card_embedding_idx_1, card_embedding_idx_2, card_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
+            # 人工编码带有位置和段信息的embedding认为没有大意义
+            # self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - len(card_segments), embedding_dim=self.positional_embedding_dim)
+            # position_embedding_idx_1 = torch.arange(num_starters + 2, dtype=torch.int64)
+            # position_embedding_idx_2 = torch.arange(len(card_segments)).unsqueeze(1).repeat(2, 1).reshape(2 * len(card_segments)) + num_starters + 2
+            # position_embedding_idx_3 = torch.arange(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64) + num_starters + 2 + len(card_segments)
+            # self.position_embedding_idx = nn.Parameter(torch.cat([position_embedding_idx_1, position_embedding_idx_2, position_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
             #
-            # self.position_embedding = nn.Embedding(num_embeddings=self.embedding_sequence_len + self.historical_action_sequence_length * 9, embedding_dim=self.positional_embedding_dim)
-            # self.position_embedding_idx = nn.Parameter(torch.arange(self.embedding_sequence_len + self.historical_action_sequence_length * 9).unsqueeze(0), requires_grad=False)
+            # self.segment_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1), embedding_dim=self.positional_embedding_dim)
+            # # 此处的segment组成：starters, round, role, figure * 7 * 2, decor * 7 * 2, player_status(num_player_fields) * num_player, (append_segments)
+            # segment_embedding_idx_ordinary_1 = torch.arange(num_starters + 2)
+            # segment_embedding_idx_ordinary_2 = torch.tensor(card_segments) + num_starters + 2
+            # segment_embedding_idx_ordinary_3 = torch.tensor(card_segments) + num_starters + 2
+            # segment_embedding_idx_acting_players = torch.ones(num_acting_player_fields, dtype=torch.int64) * (num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields - (MAX_PLAYER_NUMBER - 1) * num_other_player_fields - num_append_segments)
+            # segment_embedding_idx_other_players = torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * num_other_player_fields - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1) - num_append_segments).repeat(num_other_player_fields)
+            # segment_embedding_idx_list = [segment_embedding_idx_ordinary_1, segment_embedding_idx_ordinary_2, segment_embedding_idx_ordinary_3, segment_embedding_idx_acting_players, segment_embedding_idx_other_players]
+            # if num_append_segments > 0:
+            #     segment_embedding_idx_list.append(torch.arange(num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1) - num_append_segments, num_starters + self.embedding_sequence_len - num_segment_diff_by_card - num_acting_player_fields + 1 - (MAX_PLAYER_NUMBER - 1) * (num_other_player_fields - 1)))
+            # self.segment_embedding_idx = nn.Parameter(torch.cat(segment_embedding_idx_list, dim=0).unsqueeze(0), requires_grad=False)
             #
-            # self.segment_embedding = nn.Embedding(num_embeddings=self.embedding_sequence_len - MAX_PLAYER_NUMBER * 4 + self.historical_action_sequence_length, embedding_dim=self.positional_embedding_dim)
-            # segment_embedding_idx_ordinary = torch.arange(self.embedding_sequence_len - MAX_PLAYER_NUMBER * 5).unsqueeze(0)
-            # segment_embedding_idx_players = torch.arange(self.embedding_sequence_len - MAX_PLAYER_NUMBER * 5, self.embedding_sequence_len - MAX_PLAYER_NUMBER * 4).unsqueeze(1).repeat(1, 5).reshape((1, MAX_PLAYER_NUMBER * 5))
-            # segment_embedding_idx_historical_actions = torch.arange(self.embedding_sequence_len - MAX_PLAYER_NUMBER * 4, self.embedding_sequence_len - MAX_PLAYER_NUMBER * 4 + self.historical_action_sequence_length).unsqueeze(1).repeat(1, 9).reshape((1, self.historical_action_sequence_length * 9))
-            # self.segment_embedding_idx = nn.Parameter(torch.cat([segment_embedding_idx_ordinary, segment_embedding_idx_players, segment_embedding_idx_historical_actions], dim=1), requires_grad=False)
+            # # 加入card_embedding是因为segment_embedding无法编码牌的点数和花色的对应关系
+            # self.card_embedding = nn.Embedding(num_embeddings=len(card_segments) + 1, embedding_dim=self.positional_embedding_dim)
+            # card_embedding_idx_1 = torch.zeros(num_starters + 2, dtype=torch.int64)
+            # card_embedding_idx_2 = torch.arange(2).unsqueeze(1).repeat(1, len(card_segments)).reshape(2 * len(card_segments)) + 1
+            # card_embedding_idx_3 = torch.zeros(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64)
+            # self.card_embedding_idx = nn.Parameter(torch.cat([card_embedding_idx_1, card_embedding_idx_2, card_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
+
+            self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len, embedding_dim=self.positional_embedding_dim)
+            self.position_embedding_idx = nn.Parameter(torch.arange(num_starters + self.embedding_sequence_len, dtype=torch.int64).unsqueeze(0), requires_grad=False)
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -109,12 +104,9 @@ class EnvEmbedding(nn.Module):
             game_status_tensor = item_idx_modified_array
         game_status_embedding = self.field_embedding(game_status_tensor)
 
-        if self.do_position_embedding and self.embedding_sequence_len > 0:
+        if self.do_position_embedding and self.num_starters + self.embedding_sequence_len > 0:
             position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
-            segment_embedding = self.segment_embedding(self.segment_embedding_idx.repeat(batch_size, 1))
-            card_embedding = self.card_embedding(self.card_embedding_idx.repeat(batch_size, 1))
-            position_segment_embedding = torch.cat([position_embedding, segment_embedding, card_embedding], dim=2)
-            return game_status_embedding, position_segment_embedding
+            return game_status_embedding, position_embedding
         else:
             return game_status_embedding
 
@@ -303,12 +295,12 @@ class TransformerActorModel(nn.Module):
                                           num_player_fields=num_player_fields,
                                           device=self.device)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=8, batch_first=True, device=self.device)
-        encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim * 3, device=self.device)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim, nhead=8, batch_first=True, device=self.device)
+        encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim, device=self.device)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, encoder_norm)
 
-        self.action_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 4)
-        self.action_value_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 1)
+        self.action_dense = nn.Linear(embedding_dim + positional_embedding_dim, 4)
+        self.action_value_dense = nn.Linear(embedding_dim + positional_embedding_dim, 1)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
@@ -363,13 +355,13 @@ class TransformerCriticalModel(nn.Module):
         self.action_value_embedding = nn.Embedding(num_embeddings=1, embedding_dim=embedding_dim)
         self.action_value_embedding_idx = nn.Parameter(torch.arange(1), requires_grad=False)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=8, batch_first=True, device=self.device)
-        encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim * 3, device=self.device)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim, nhead=8, batch_first=True, device=self.device)
+        encoder_norm = nn.LayerNorm(normalized_shape=embedding_dim + positional_embedding_dim, device=self.device)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, encoder_norm)
 
         # critical网络的训练目标是value最大化，loss出现负值是可以接受的
-        self.reward_value_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 1)
-        self.player_result_value_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, 1)
+        self.reward_value_dense = nn.Linear(embedding_dim + positional_embedding_dim, 1)
+        self.player_result_value_dense = nn.Linear(embedding_dim + positional_embedding_dim, 1)
 
     def forward(self, x, action):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
@@ -411,7 +403,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.device = device
 
         # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players
-        embedding_sequence_len = 2 + 4 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1)
+        embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1)
 
         self.env_embedding = EnvEmbedding(embedding_dim,
                                           historical_action_sequence_length=historical_action_sequence_length,
@@ -419,23 +411,25 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
                                           embedding_sequence_len=embedding_sequence_len,
-                                          num_starters=2,
+                                          num_starters=3,
                                           num_acting_player_fields=num_acting_player_fields,
                                           num_other_player_fields=num_other_player_fields,
                                           device=self.device)
 
-        assert int(embedding_dim + positional_embedding_dim * 3) % transformer_head_dim == 0, f'embedding_dim({embedding_dim}) + positional_embedding_dim({positional_embedding_dim}) * 3 must be divisible by transformer_head_dim({transformer_head_dim}).'
-        num_transformer_head = int(embedding_dim + positional_embedding_dim * 3) // transformer_head_dim
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim * 3, nhead=num_transformer_head, batch_first=True)
+        assert int(embedding_dim + positional_embedding_dim) % transformer_head_dim == 0, f'embedding_dim({embedding_dim}) + positional_embedding_dim({positional_embedding_dim}) * 3 must be divisible by transformer_head_dim({transformer_head_dim}).'
+        num_transformer_head = int(embedding_dim + positional_embedding_dim) // transformer_head_dim
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim, nhead=num_transformer_head, batch_first=True)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers)
 
         self.action_logits_softmax = torch.nn.Softmax(dim=-1)
         self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
 
         # 预测action的概率分布
-        self.action_prob_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class, bias=False)
+        self.action_prob_dense = nn.Linear(embedding_dim + positional_embedding_dim, num_output_class, bias=False)
         # 预测action的Q值分布
-        self.action_Q_dense = nn.Linear(embedding_dim + positional_embedding_dim * 3, num_output_class, bias=True)
+        self.action_Q_dense = nn.Linear(embedding_dim + positional_embedding_dim, num_output_class, bias=True)
+        # 预测'客观胜率'
+        self.winning_prob_dense = nn.Linear(embedding_dim + positional_embedding_dim, 1, bias=True)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
@@ -448,4 +442,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         action_prob = self.action_logits_softmax(action_prob_logits)
 
         action_Q_logits = self.action_Q_dense(x[:, 1, :])
-        return action_prob, action_Q_logits
+
+        winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
+        winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits)
+        return action_prob, action_Q_logits, winning_prob

@@ -32,7 +32,7 @@ if __name__ == '__main__':
     model_init_checkpoint_path = params['model_init_checkpoint_path']
     model = AlphaGoZero(**model_param_dict)
     # to regenerate new default model
-    # save_model(model, 'models/default_train.pth')
+    save_model(model, 'models/default_train.pth')
 
     # init generate winning probability calculating data processes
     num_gen_winning_prob_cal_data_processes = params['num_gen_winning_prob_cal_data_processes']
