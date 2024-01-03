@@ -42,7 +42,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.n_observation = n_observation
         self.n_actions = n_actions
         self.num_output_class = num_output_class
-        self.device = device
+        self.device = torch.device(device)
         self.gamma = gamma
         self.batch_size = batch_size
         self.epsilon_delta_per_step = epsilon_delta_per_step
