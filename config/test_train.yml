@@ -9,14 +9,15 @@ train_data_path: data/history.txt
 
 # train process params
 log_step_num: 200   # show loss per steps
-predict_step_num: 500   # show prediction result per steps
+num_inference_per_step: 500   # show prediction result per steps
+num_data_print_per_inference: 10  # number of result to print per prediction
 num_train_steps: 10000  # train until steps
 
 # model params
 model_param_dict:
     device: 'cuda:0'
     embedding_dim: [512, 640]
-    positional_embedding_dim: [64, 128]
+    positional_embedding_dim: [128, 256]
     transformer_head_dim: 64
     num_layers: [16, 20, 24]
     max_learning_rate: [0.0001, 0.00005]

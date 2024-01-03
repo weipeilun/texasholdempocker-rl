@@ -94,7 +94,8 @@ def train_process(params, n_loop, log_level):
 
     train_data_path = params['train_data_path']
     log_step_num = params['log_step_num']
-    predict_step_num = params['predict_step_num']
+    num_inference_per_step = params['num_inference_per_step']
+    num_data_print_per_inference = params['num_data_print_per_inference']
     num_train_steps = params['num_train_steps']
     batch_size = params['model_param_dict']['batch_size']
     device = params['model_param_dict']['device']
@@ -123,7 +124,7 @@ def train_process(params, n_loop, log_level):
         if train_step_num % log_step_num == 0:
             logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
 
-        if train_step_num % predict_step_num == 0:
+        if train_step_num % num_inference_per_step == 0:
             logging.info(f'start predict for train_step {train_step_num}')
             with torch.no_grad():
                 action_probs_tensor, action_Qs_tensor, winning_prob_tensor = model(observation_tensor)
@@ -131,7 +132,9 @@ def train_process(params, n_loop, log_level):
                 predict_action_probs_list = action_probs_tensor.cpu().numpy()
                 predict_action_Qs_list = action_Qs_tensor.cpu().numpy()
                 predict_winning_prob_list = winning_prob_tensor.cpu().numpy()
-            for action_probs, action_Q, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob in zip(action_probs_list, action_Q_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list):
+            for data_idx, (action_probs, action_Q, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob) in enumerate(zip(action_probs_list, action_Q_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list)):
+                if data_idx >= num_data_print_per_inference:
+                    break
                 logging.info(f'action_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Q={",".join(["%.4f" % item for item in action_Q])}\npredict_winning_prob={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
 
         if train_step_num >= num_train_steps:
