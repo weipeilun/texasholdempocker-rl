@@ -28,50 +28,6 @@ def train_process(params, n_loop, log_level):
     model_param_dict = params['model_param_dict']
     model = AlphaGoZero(**model_param_dict)
 
-    # game simulation threads (train and evaluate)
-    # 必须保证线程数 > batch_size * 2，以在train中gpu基本打满，在eval中不死锁
-    predict_batch_size = params['predict_batch_size']
-    num_game_loop_thread = int(predict_batch_size * params['game_loop_thread_multiple'])
-    # train_eval进程数
-    num_train_eval_process = params['num_train_eval_process']
-    num_train_eval_thread = num_game_loop_thread * num_predict_batch_process
-    assert num_train_eval_thread % num_train_eval_process == 0, 'num_game_loop_thread must be multiple of num_train_eval_process'
-    num_game_loop_thread_per_process = num_train_eval_thread // num_train_eval_process
-    # game params
-    num_mcts_simulation_per_step = params['num_mcts_simulation_per_step']
-    mcts_c_puct = params['mcts_c_puct']
-    mcts_tau = params['mcts_tau']
-    mcts_dirichlet_noice_epsilon = params['mcts_dirichlet_noice_epsilon']
-    mcts_model_Q_epsilon = params['mcts_model_Q_epsilon']
-    workflow_lock = Condition()
-    # eval thread参数
-    eval_game_finished_reward_queue = Manager().Queue()
-    eval_game_id_signal_queue = Manager().Queue()
-    eval_workflow_signal_queue_list = list()
-    eval_workflow_ack_signal_queue_list = list()
-    # in_queue, (out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval)
-    model_predict_batch_queue_info_list = [(Manager().Queue(), (list(), dict(), dict())) for _ in range(num_predict_batch_process)]
-    # 相同thread_id，分train和eval线程
-    train_eval_thread_param_list = list()
-    for pid in range(num_predict_batch_process):
-        for tid in range(num_game_loop_thread):
-            thread_id = pid * num_game_loop_thread + tid
-            thread_name = f'{pid}_{tid}'
-            batch_out_queue = Manager().Queue()
-
-            eval_workflow_signal_queue = Manager().Queue()
-            eval_workflow_ack_signal_queue = Manager().Queue()
-            eval_workflow_signal_queue_list.append(eval_workflow_signal_queue)
-            eval_workflow_ack_signal_queue_list.append(eval_workflow_ack_signal_queue)
-
-            batch_queue_info_eval_best, batch_queue_info_eval_new = map_train_thread_to_queue_info_eval(thread_id, model_predict_batch_queue_info_list)
-            map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_best[1][0], batch_queue_info_eval_best[1][2], batch_queue_info_eval_best[1][1])
-            map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_new[1][0], batch_queue_info_eval_new[1][2], batch_queue_info_eval_new[1][1])
-            eval_thread_param = (eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, thread_id, thread_name)
-
-            train_eval_thread_param_list.append((None, eval_thread_param))
-            logging.info(f'Finished init params for train and eval thread {thread_id}')
-
     model_save_checkpoint_path = params['model_save_checkpoint_path_format'] % n_loop
     save_model(model, model_save_checkpoint_path)
 
@@ -125,6 +81,50 @@ def train_process(params, n_loop, log_level):
     logging.info('Finish training.')
 
     # init eval and predict batch process here
+    # game simulation threads (train and evaluate)
+    # 必须保证线程数 > batch_size * 2，以在train中gpu基本打满，在eval中不死锁
+    predict_batch_size = params['predict_batch_size']
+    num_game_loop_thread = int(predict_batch_size * params['game_loop_thread_multiple'])
+    # train_eval进程数
+    num_train_eval_process = params['num_train_eval_process']
+    num_train_eval_thread = num_game_loop_thread * num_predict_batch_process
+    assert num_train_eval_thread % num_train_eval_process == 0, 'num_game_loop_thread must be multiple of num_train_eval_process'
+    num_game_loop_thread_per_process = num_train_eval_thread // num_train_eval_process
+    # game params
+    num_mcts_simulation_per_step = params['num_mcts_simulation_per_step']
+    mcts_c_puct = params['mcts_c_puct']
+    mcts_tau = params['mcts_tau']
+    mcts_dirichlet_noice_epsilon = params['mcts_dirichlet_noice_epsilon']
+    mcts_model_Q_epsilon = params['mcts_model_Q_epsilon']
+    workflow_lock = Condition()
+    # eval thread参数
+    eval_game_finished_reward_queue = Manager().Queue()
+    eval_game_id_signal_queue = Manager().Queue()
+    eval_workflow_signal_queue_list = list()
+    eval_workflow_ack_signal_queue_list = list()
+    # in_queue, (out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval)
+    model_predict_batch_queue_info_list = [(Manager().Queue(), (list(), dict(), dict())) for _ in range(num_predict_batch_process)]
+    # 相同thread_id，分train和eval线程
+    train_eval_thread_param_list = list()
+    for pid in range(num_predict_batch_process):
+        for tid in range(num_game_loop_thread):
+            thread_id = pid * num_game_loop_thread + tid
+            thread_name = f'{pid}_{tid}'
+            batch_out_queue = Manager().Queue()
+
+            eval_workflow_signal_queue = Manager().Queue()
+            eval_workflow_ack_signal_queue = Manager().Queue()
+            eval_workflow_signal_queue_list.append(eval_workflow_signal_queue)
+            eval_workflow_ack_signal_queue_list.append(eval_workflow_ack_signal_queue)
+
+            batch_queue_info_eval_best, batch_queue_info_eval_new = map_train_thread_to_queue_info_eval(thread_id, model_predict_batch_queue_info_list)
+            map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_best[1][0], batch_queue_info_eval_best[1][2], batch_queue_info_eval_best[1][1])
+            map_batch_predict_process_to_out_queue(thread_id, batch_out_queue, batch_queue_info_eval_new[1][0], batch_queue_info_eval_new[1][2], batch_queue_info_eval_new[1][1])
+            eval_thread_param = (eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, batch_queue_info_eval_best[0], batch_queue_info_eval_new[0], batch_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, thread_id, thread_name)
+
+            train_eval_thread_param_list.append((None, eval_thread_param))
+            logging.info(f'Finished init params for train and eval thread {thread_id}')
+
     is_init_train_thread = False
     is_init_eval_thread = True
     for pid in range(num_train_eval_process):
