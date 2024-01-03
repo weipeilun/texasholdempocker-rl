@@ -444,5 +444,5 @@ class TransformerAlphaGoZeroModel(nn.Module):
         action_Q_logits = self.action_Q_dense(x[:, 1, :])
 
         winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
-        winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits)
+        winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
         return action_prob, action_Q_logits, winning_prob
