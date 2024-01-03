@@ -20,8 +20,8 @@ model_param_dict:
     positional_embedding_dim: [128, 256]
     transformer_head_dim: 64
     num_layers: [16, 20, 24]
-    max_learning_rate: [0.0001, 0.00005]
-    l2_weight: [0.005, 0.01, 0.05]
+    max_learning_rate: [0.000005, 0.00003, 0.00005]
+    l2_weight: [0.0005, 0.002, 0.005]
     save_train_data: False
 
 # checkpoints

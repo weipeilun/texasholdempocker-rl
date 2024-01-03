@@ -40,7 +40,7 @@ model_param_dict:
     epsilon_max: 0.8
     gamma: 0.9
     batch_size: 256
-    base_learning_rate: 0.00001
+    base_learning_rate: 0.000001
     max_learning_rate: 0.003
     step_size_up: 1000
     step_size_down: 4000

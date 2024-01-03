@@ -101,19 +101,19 @@ def train_process(params, n_loop, log_level):
     device = params['model_param_dict']['device']
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
-    for observation_list, action_probs_list, action_Q_list, winning_prob_list in train_batch_gen:
+    for observation_list, action_probs_list, action_Qs_list, winning_prob_list in train_batch_gen:
         # logging.info(f'get data for train_step {train_step_num}')
 
         observation_array = np.array(observation_list)
         action_probs_array = np.array(action_probs_list)
-        action_Q_array = np.array(action_Q_list)
+        action_Qs_array = np.array(action_Qs_list)
         winning_prob_array = np.array(winning_prob_list)
         observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=device, requires_grad=False)
         action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=device, requires_grad=False)
-        action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=device, requires_grad=False)
+        action_Qs_tensor = torch.tensor(action_Qs_array, dtype=torch.float32, device=device, requires_grad=False)
         winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=device, requires_grad=False)
         try:
-            action_probs_loss, action_Q_loss, winning_prob_loss = model.learn(observation_tensor, action_probs_tensor, action_Q_tensor, winning_prob_tensor)
+            action_probs_loss, action_Q_loss, winning_prob_loss = model.learn(observation_tensor, action_probs_tensor, action_Qs_tensor, winning_prob_tensor)
         except ValueError as e:
             logging.error(f'ValueError in model.learn: {e}')
             signal.alarm(0)
@@ -127,15 +127,15 @@ def train_process(params, n_loop, log_level):
         if train_step_num % num_inference_per_step == 0:
             logging.info(f'start predict for train_step {train_step_num}')
             with torch.no_grad():
-                action_probs_tensor, action_Qs_tensor, winning_prob_tensor = model(observation_tensor)
+                predict_action_probs_tensor, predict_action_Qs_tensor, predict_winning_prob_tensor = model(observation_tensor)
                 logging.info(f'finished predict for train_step {train_step_num}')
-                predict_action_probs_list = action_probs_tensor.cpu().numpy()
-                predict_action_Qs_list = action_Qs_tensor.cpu().numpy()
-                predict_winning_prob_list = winning_prob_tensor.cpu().numpy()
-            for data_idx, (action_probs, action_Q, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob) in enumerate(zip(action_probs_list, action_Q_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list)):
+                predict_action_probs_list = predict_action_probs_tensor.cpu().numpy()
+                predict_action_Qs_list = predict_action_Qs_tensor.cpu().numpy()
+                predict_winning_prob_list = predict_winning_prob_tensor.cpu().numpy()
+            for data_idx, (action_probs, action_Qs, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob) in enumerate(zip(action_probs_list, action_Qs_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list)):
                 if data_idx >= num_data_print_per_inference:
                     break
-                logging.info(f'action_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Q={",".join(["%.4f" % item for item in action_Q])}\npredict_winning_prob={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
+                logging.info(f'action_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Qs={",".join(["%.4f" % item for item in action_Qs])}\npredict_action_Qs={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
 
         if train_step_num >= num_train_steps:
             break
