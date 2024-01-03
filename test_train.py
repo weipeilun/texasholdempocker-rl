@@ -72,23 +72,6 @@ def train_process(params, n_loop, log_level):
             train_eval_thread_param_list.append((None, eval_thread_param))
             logging.info(f'Finished init params for train and eval thread {thread_id}')
 
-    is_init_train_thread = False
-    is_init_eval_thread = True
-    for pid in range(num_train_eval_process):
-        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, pid, log_level), daemon=True).start()
-    logging.info('All train_eval_process inited.')
-
-    # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
-    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, (model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval))) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, model_predict_batch_queue_info_list)):
-        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level), daemon=True).start()
-    logging.info('All predict_batch_process inited.')
-
-    # synchronize model to all predict_batch_process
-    original_model_param = get_state_dict_from_model(model)
-    for update_model_param_queue in update_model_param_queue_list:
-        update_model_param_queue.put(original_model_param)
-    for workflow_ack_queue in workflow_ack_queue_list:
-        workflow_ack_queue.get(block=True, timeout=None)
     model_save_checkpoint_path = params['model_save_checkpoint_path_format'] % n_loop
     save_model(model, model_save_checkpoint_path)
 
@@ -140,6 +123,25 @@ def train_process(params, n_loop, log_level):
         if train_step_num >= num_train_steps:
             break
     logging.info('Finish training.')
+
+    # init eval and predict batch process here
+    is_init_train_thread = False
+    is_init_eval_thread = True
+    for pid in range(num_train_eval_process):
+        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, pid, log_level), daemon=True).start()
+    logging.info('All train_eval_process inited.')
+
+    # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
+    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, (model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval))) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, model_predict_batch_queue_info_list)):
+        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level), daemon=True).start()
+    logging.info('All predict_batch_process inited.')
+
+    # synchronize model to all predict_batch_process
+    original_model_param = get_state_dict_from_model(model)
+    for update_model_param_queue in update_model_param_queue_list:
+        update_model_param_queue.put(original_model_param)
+    for workflow_ack_queue in workflow_ack_queue_list:
+        workflow_ack_queue.get(block=True, timeout=None)
 
     # eval
     eval_task_num_games = params['eval_task_num_games']
