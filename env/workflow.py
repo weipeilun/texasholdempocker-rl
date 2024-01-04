@@ -304,8 +304,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
         logging.info(f'Found historical train data from {historical_data_filename}. Train with this first.')
         # load data and train
         data_generator = train_data_generator(historical_data_filename)
-        for observation_list, action_probs_list, winning_prob_list in data_generator:
-            model.store_transition(observation_list, action_probs_list, winning_prob_list, save_train_data=False)
+        for observation_list, action_probs_list, action_Qs_list, winning_prob_list in data_generator:
+            model.store_transition(observation_list, action_probs_list, action_Qs_list, winning_prob_list, save_train_data=False)
             step_counter.increment()
 
             if step_counter.get_value() >= next_train_step:
