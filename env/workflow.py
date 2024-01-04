@@ -297,7 +297,6 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
     next_train_step = first_train_data_step
     next_eval_step = eval_model_per_step
-    log_step_num = log_step_num
     train_step_num = 0
 
     if os.path.exists(historical_data_filename):
