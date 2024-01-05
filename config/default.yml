@@ -41,10 +41,10 @@ model_param_dict:
     gamma: 0.9
     batch_size: 256
     base_learning_rate: 0.000001
-    max_learning_rate: 0.000001
+    max_learning_rate: 0.00001
     step_size_up: 1000
     step_size_down: 4000
-    l2_weight: 0.0005
+    l2_weight: 0.0
     num_bins: 10
     save_train_data: True
     transition_buffer_len: 10000

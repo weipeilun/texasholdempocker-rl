@@ -153,8 +153,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.scheduler.step()
         # self.scheduler.get_last_lr()
 
-        del over_all_loss, action_probs_loss, action_Q_loss, winning_prob_loss, observation_tensor, action_probs_tensor, action_Q_tensor, winning_prob_tensor, action_prob, action_Q_logits, winning_prob_logits
-        torch.cuda.empty_cache()
+        # del over_all_loss, action_probs_loss, action_Q_loss, winning_prob_loss, observation_tensor, action_probs_tensor, action_Q_tensor, winning_prob_tensor, action_prob, action_Q_logits, winning_prob_logits
+        # torch.cuda.empty_cache()
 
         # v_error_abs_tensor = torch.abs(value_eval_tensor - value_target_tensor)
         # abs_error_np = v_error_abs_tensor.detach().cpu().numpy()
