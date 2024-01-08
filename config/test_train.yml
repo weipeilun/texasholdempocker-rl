@@ -15,7 +15,7 @@ num_train_steps: 1000000  # train until steps
 
 # model params
 model_param_dict:
-    device: 'cpu'
+    device: 'cuda:0'
     embedding_dim: 256
     positional_embedding_dim: 128
     transformer_head_dim: 64
