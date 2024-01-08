@@ -35,7 +35,9 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  num_acting_player_fields=9,
                  num_other_player_fields=3,
                  save_train_data=False,
-                 default_train_file_path='data/test.txt'
+                 default_train_file_path='data/test.txt',
+                 num_inference_per_step=200,
+                 num_data_print_per_inference=500
                  ):
         super(AlphaGoZero, self).__init__()
 
@@ -48,6 +50,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.epsilon_delta_per_step = epsilon_delta_per_step
         self.save_train_data = save_train_data
         self.default_train_file_path = default_train_file_path
+        self.num_inference_per_step = num_inference_per_step
+        self.num_data_print_per_inference = num_data_print_per_inference
 
         self.train_file = None
 
@@ -69,6 +73,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
 
         if self.save_train_data:
             self.train_file = open(default_train_file_path, 'a', encoding='UTF-8')
+
+        self.train_step_num = 0
 
     def __del__(self):
         if self.save_train_data and self.train_file is not None:
@@ -111,8 +117,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         with self.memory_lock:
             self.memory.store([observation, action_probs, action_Qs, winning_prob])
 
-    def learn(self, observation_tensor=None, action_probs_tensor=None, action_Q_tensor=None, winning_prob_tensor=None):
-        if observation_tensor is None or action_probs_tensor is None or action_Q_tensor is None or winning_prob_tensor is None:
+    def learn(self, observation_list=None, action_probs_list=None, action_Q_list=None, winning_prob_list=None):
+        if observation_list is None or action_probs_list is None or action_Q_list is None or winning_prob_list is None:
             sample_idx_np, _, data_batch = self.memory.sample(self.batch_size)
             # weight_tensor = torch.from_numpy(weight_np).to(self.device)
 
@@ -126,14 +132,14 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                 action_Q_list.append(action_Qs)
                 winning_prob_list.append(winning_prob)
 
-            observation_array = np.array(observation_list)
-            action_probs_array = np.array(action_probs_list)
-            action_Q_array = np.array(action_Q_list)
-            winning_prob_array = np.array(winning_prob_list)
-            observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.device, requires_grad=False)
-            action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=self.device, requires_grad=False)
-            action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=self.device, requires_grad=False)
-            winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=self.device, requires_grad=False)
+        observation_array = np.array(observation_list)
+        action_probs_array = np.array(action_probs_list)
+        action_Q_array = np.array(action_Q_list)
+        winning_prob_array = np.array(winning_prob_list)
+        observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.device, requires_grad=False)
+        action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=self.device, requires_grad=False)
+        action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=self.device, requires_grad=False)
+        winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=self.device, requires_grad=False)
 
         self.model.train()
         action_prob_logits, action_Q_logits, winning_prob_logits = self.model(observation_tensor)
@@ -163,5 +169,16 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         # if self.epsilon_delta_per_step is not None and self.epsilon_max is not None and self.epsilon_delta_per_step > 0 and 0 <= self.epsilon_max <= 1:
         #     if self.epsilon < self.epsilon_max:
         #         self.epsilon += self.epsilon_delta_per_step
+
+        self.train_step_num += 1
+        if self.train_step_num % self.num_inference_per_step == 0:
+            predict_action_probs_tensor = torch.softmax(action_prob_logits, dim=1)
+            predict_action_probs_list = predict_action_probs_tensor.cpu().detach().numpy()
+            predict_action_Qs_list = action_Q_logits.cpu().detach().numpy()
+            predict_winning_prob_list = winning_prob_logits.cpu().detach().numpy()
+            for data_idx, (action_probs, action_Qs, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob) in enumerate(zip(action_probs_list, action_Q_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list)):
+                if data_idx >= self.num_data_print_per_inference:
+                    break
+                logging.info(f'predictions:\naction_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Qs={",".join(["%.4f" % item for item in action_Qs])}\npredict_action_Qs={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
 
         return action_probs_loss_float, action_Q_loss_float, winning_prob_loss_float

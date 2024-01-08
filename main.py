@@ -137,10 +137,8 @@ if __name__ == '__main__':
     train_per_step = params['train_per_step']
     eval_model_per_step = params['eval_model_per_step']
     log_step_num = params['log_step_num']
-    num_inference_per_step = params['num_inference_per_step']
-    num_data_print_per_inference = params['num_data_print_per_inference']
     historical_data_filename = params['historical_data_filename']
-    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, num_inference_per_step, num_data_print_per_inference, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread), daemon=True).start()
+    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread), daemon=True).start()
 
     # to monitor performance
     Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue,), daemon=True).start()

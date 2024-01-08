@@ -13,8 +13,6 @@ first_train_data_step: 500
 train_per_step: 8
 eval_model_per_step: 5000
 log_step_num: 200
-num_inference_per_step: 500   # show prediction result per steps
-num_data_print_per_inference: 5  # number of result to print per inference
 
 # game params
 small_blind: 25
@@ -50,6 +48,8 @@ model_param_dict:
     num_bins: 10
     save_train_data: True
     transition_buffer_len: 10000
+    num_inference_per_step: 500   # show prediction result per steps
+    num_data_print_per_inference: 5  # number of result to print per inference
 
 # simulation params
 simulation_recurrent_params:
