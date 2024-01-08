@@ -2,6 +2,8 @@ import logging
 from queue import Empty
 from env.constants import GET_PLAYER_NAME
 from tools import interrupt
+import torch
+import numpy as np
 
 
 def map_train_thread_to_queue_info_train(thread_id, queue_info_list):
@@ -73,3 +75,18 @@ def get_player_name_model_dict(best_model_entity, new_model_entity):
 # 如果修改玩家数量要修改这块
 def get_new_model_player_name():
     return GET_PLAYER_NAME(1)
+
+
+def log_inference(observation_list, action_probs_list, action_Qs_list, winning_prob_list, model, num_data_print_per_inference):
+    with torch.no_grad():
+        observation_array = np.array(observation_list)
+        observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=model.device, requires_grad=False)
+        predict_action_probs_logits_tensor, predict_action_Qs_tensor, predict_winning_prob_tensor = model(observation_tensor)
+        predict_action_probs_tensor = torch.softmax(predict_action_probs_logits_tensor, dim=1)
+        predict_action_probs_list = predict_action_probs_tensor.cpu().numpy()
+        predict_action_Qs_list = predict_action_Qs_tensor.cpu().numpy()
+        predict_winning_prob_list = predict_winning_prob_tensor.cpu().numpy()
+    for data_idx, (action_probs, action_Qs, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob) in enumerate(zip(action_probs_list, action_Qs_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list)):
+        if data_idx >= num_data_print_per_inference:
+            break
+        logging.info(f'action_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Qs={",".join(["%.4f" % item for item in action_Qs])}\npredict_action_Qs={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')

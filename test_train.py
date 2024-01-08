@@ -69,18 +69,7 @@ def train_process(params, n_loop, log_level):
             logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
 
         if train_step_num % num_inference_per_step == 0:
-            logging.info(f'start predict for train_step {train_step_num}')
-            with torch.no_grad():
-                predict_action_probs_logits_tensor, predict_action_Qs_tensor, predict_winning_prob_tensor = model(observation_tensor)
-                logging.info(f'finished predict for train_step {train_step_num}')
-                predict_action_probs_tensor = torch.softmax(predict_action_probs_logits_tensor, dim=1)
-                predict_action_probs_list = predict_action_probs_tensor.cpu().numpy()
-                predict_action_Qs_list = predict_action_Qs_tensor.cpu().numpy()
-                predict_winning_prob_list = predict_winning_prob_tensor.cpu().numpy()
-            for data_idx, (action_probs, action_Qs, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob) in enumerate(zip(action_probs_list, action_Qs_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list)):
-                if data_idx >= num_data_print_per_inference:
-                    break
-                logging.info(f'action_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Qs={",".join(["%.4f" % item for item in action_Qs])}\npredict_action_Qs={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
+            log_inference(observation_list, action_probs_list, action_Qs_list, winning_prob_list, model, num_data_print_per_inference)
 
         if train_step_num >= num_train_steps:
             break

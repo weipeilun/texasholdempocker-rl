@@ -293,7 +293,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
 
 
 # 模型训练（主进程）
-def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread):
+def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, num_inference_per_step, num_data_print_per_inference, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread):
     assert train_per_step > 0, 'train_per_step must > 0.'
 
     next_train_step = first_train_data_step
@@ -314,6 +314,9 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
                 if train_step_num % log_step_num == 0:
                     logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
+
+                if train_step_num % num_inference_per_step == 0:
+                    log_inference(observation_list, action_probs_list, action_Qs_list, winning_prob_list, model, num_data_print_per_inference)
 
                 # 避免训练数据过多重复
                 next_train_step += train_per_step
