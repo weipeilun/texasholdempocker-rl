@@ -31,7 +31,7 @@ model_param_dict:
     n_actions: 4
     num_output_class: 22
     device: 'cuda:0'
-    embedding_dim: 640
+    embedding_dim: 512
     positional_embedding_dim: 128
     transformer_head_dim: 64
     num_layers: 16
@@ -41,7 +41,7 @@ model_param_dict:
     gamma: 0.9
     batch_size: 256
     base_learning_rate: 0.000001
-    max_learning_rate: 0.00001
+    max_learning_rate: 0.0001
     step_size_up: 1000
     step_size_down: 4000
     l2_weight: 0.0
