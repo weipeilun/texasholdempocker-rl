@@ -22,7 +22,7 @@ model_param_dict:
     num_layers: 4
     base_learning_rate: 0.000001
     max_learning_rate: 0.0001
-    l2_weight: 0.00001
+    l2_weight: 0.0
     save_train_data: False
     batch_size: 2
 

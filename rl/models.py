@@ -403,7 +403,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.device = device
 
         # to normalize embedding for transformer
-        self.actual_embedding_dim = embedding_dim + positional_embedding_dim
+        self.actual_embedding_dim = int(embedding_dim + positional_embedding_dim)
 
         # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players
         embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1)
@@ -419,20 +419,20 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           num_other_player_fields=num_other_player_fields,
                                           device=self.device)
 
-        assert int(embedding_dim + positional_embedding_dim) % transformer_head_dim == 0, f'embedding_dim({embedding_dim}) + positional_embedding_dim({positional_embedding_dim}) * 3 must be divisible by transformer_head_dim({transformer_head_dim}).'
-        num_transformer_head = int(embedding_dim + positional_embedding_dim) // transformer_head_dim
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim + positional_embedding_dim, nhead=num_transformer_head, batch_first=True)
+        assert self.actual_embedding_dim % transformer_head_dim == 0, f'embedding_dim({embedding_dim}) + positional_embedding_dim({positional_embedding_dim}) * 3 must be divisible by transformer_head_dim({transformer_head_dim}).'
+        num_transformer_head = self.actual_embedding_dim // transformer_head_dim
+        encoder_layer = nn.TransformerEncoderLayer(d_model=self.actual_embedding_dim, nhead=num_transformer_head, batch_first=True)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers)
 
         self.action_logits_softmax = torch.nn.Softmax(dim=-1)
         self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
 
         # 预测action的概率分布
-        self.action_prob_dense = nn.Linear(embedding_dim + positional_embedding_dim, num_output_class, bias=False)
+        self.action_prob_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=False)
         # 预测action的Q值分布
-        self.action_Q_dense = nn.Linear(embedding_dim + positional_embedding_dim, num_output_class, bias=True)
+        self.action_Q_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=True)
         # 预测'客观胜率'
-        self.winning_prob_dense = nn.Linear(embedding_dim + positional_embedding_dim, 1, bias=True)
+        self.winning_prob_dense = nn.Linear(self.actual_embedding_dim, 1, bias=True)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
