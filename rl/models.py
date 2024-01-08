@@ -424,7 +424,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(d_model=self.actual_embedding_dim, nhead=num_transformer_head, batch_first=True)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers)
 
-        self.action_logits_softmax = torch.nn.Softmax(dim=-1)
+        # self.action_logits_softmax = torch.nn.Softmax(dim=-1)
         self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
 
         # 预测action的概率分布
@@ -444,10 +444,10 @@ class TransformerAlphaGoZeroModel(nn.Module):
         # x = x.reshape(x.shape[0], -1)
 
         action_prob_logits = self.action_prob_dense(x[:, 0, :])
-        action_prob = self.action_logits_softmax(action_prob_logits)
+        # action_prob = self.action_logits_softmax(action_prob_logits)
 
         action_Q_logits = self.action_Q_dense(x[:, 1, :])
 
         winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
         winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
-        return action_prob, action_Q_logits, winning_prob
+        return action_prob_logits, action_Q_logits, winning_prob

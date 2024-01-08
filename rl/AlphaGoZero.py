@@ -136,9 +136,9 @@ class AlphaGoZero(nn.Module, BaseRLModel):
             winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=self.device, requires_grad=False)
 
         self.model.train()
-        action_prob, action_Q_logits, winning_prob_logits = self.model(observation_tensor)
+        action_prob_logits, action_Q_logits, winning_prob_logits = self.model(observation_tensor)
 
-        action_probs_loss = self.action_prob_loss(action_prob, action_probs_tensor)
+        action_probs_loss = self.action_prob_loss(action_prob_logits, action_probs_tensor)
         action_Q_loss = self.action_Q_loss(action_Q_logits, action_Q_tensor)
         winning_prob_loss = self.winning_prob_loss(winning_prob_logits, winning_prob_tensor)
         assert not torch.any(torch.isnan(action_probs_loss)) and not torch.any(torch.isnan(action_Q_loss)) and not torch.any(torch.isnan(winning_prob_loss)) and not torch.any(torch.isinf(action_probs_loss)) and not torch.any(torch.isinf(action_Q_loss)) and not torch.any(torch.isinf(winning_prob_loss)), ValueError('loss is nan or inf')
