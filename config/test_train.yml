@@ -8,10 +8,10 @@ eval_task_num_games: 1000
 train_data_path: data/history.txt_
 
 # train process params
-log_step_num: 5   # show loss per steps
+log_step_num: 20   # show loss per steps
 num_inference_per_step: 50   # show prediction result per steps
 num_data_print_per_inference: 2  # number of result to print per prediction
-num_train_steps: 10000  # train until steps
+num_train_steps: 1000000  # train until steps
 
 # model params
 model_param_dict:
