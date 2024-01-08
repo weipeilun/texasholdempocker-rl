@@ -402,6 +402,9 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.historical_action_sequence_length = historical_action_sequence_length
         self.device = device
 
+        # to normalize embedding for transformer
+        self.actual_embedding_dim = embedding_dim + positional_embedding_dim
+
         # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players
         embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1)
 
@@ -435,6 +438,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
         x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
+        # to normalize embedding
+        x = x * math.sqrt(self.actual_embedding_dim)
         x = self.transform_encoder(x)
         # x = x.reshape(x.shape[0], -1)
 
