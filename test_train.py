@@ -71,8 +71,9 @@ def train_process(params, n_loop, log_level):
         if train_step_num % num_inference_per_step == 0:
             logging.info(f'start predict for train_step {train_step_num}')
             with torch.no_grad():
-                predict_action_probs_tensor, predict_action_Qs_tensor, predict_winning_prob_tensor = model(observation_tensor)
+                predict_action_probs_logits_tensor, predict_action_Qs_tensor, predict_winning_prob_tensor = model(observation_tensor)
                 logging.info(f'finished predict for train_step {train_step_num}')
+                predict_action_probs_tensor = torch.softmax(predict_action_probs_logits_tensor, dim=2)
                 predict_action_probs_list = predict_action_probs_tensor.cpu().numpy()
                 predict_action_Qs_list = predict_action_Qs_tensor.cpu().numpy()
                 predict_winning_prob_list = predict_winning_prob_tensor.cpu().numpy()

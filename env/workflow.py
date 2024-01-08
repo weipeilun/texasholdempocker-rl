@@ -241,7 +241,8 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
         with torch.no_grad():
             observation_array = np.array(predict_send_batch_list)
             observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=model.device, requires_grad=False)
-            action_probs_tensor, action_Q_tensor, winning_prob_tensor = predict_send_model(observation_tensor)
+            action_probs_logits_tensor, action_Q_tensor, winning_prob_tensor = predict_send_model(observation_tensor)
+            action_probs_tensor = torch.softmax(action_probs_logits_tensor, dim=2)
             action_probs_list = action_probs_tensor.cpu().numpy()
             action_Q_list = action_Q_tensor.cpu().numpy()
             winning_prob_list = winning_prob_tensor.cpu().numpy()
