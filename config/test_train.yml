@@ -1,28 +1,30 @@
 # workflow params
-num_choices: 30
+num_choices: 1
 num_predict_batch_process: 2
 predict_batch_size: 4
 game_loop_thread_multiple: 2.5
 num_train_eval_process: 5
 eval_task_num_games: 1000
-train_data_path: data/history.txt
+train_data_path: data/history.txt_
 
 # train process params
-log_step_num: 200   # show loss per steps
-num_inference_per_step: 500   # show prediction result per steps
-num_data_print_per_inference: 10  # number of result to print per prediction
+log_step_num: 5   # show loss per steps
+num_inference_per_step: 50   # show prediction result per steps
+num_data_print_per_inference: 2  # number of result to print per prediction
 num_train_steps: 10000  # train until steps
 
 # model params
 model_param_dict:
-    device: 'cuda:0'
-    embedding_dim: [512, 640]
-    positional_embedding_dim: [128, 256]
+    device: 'cpu'
+    embedding_dim: 256
+    positional_embedding_dim: 128
     transformer_head_dim: 64
-    num_layers: [16, 20, 24]
-    max_learning_rate: [0.000005, 0.00003, 0.00005]
-    l2_weight: [0.0005, 0.002, 0.005]
+    num_layers: 4
+    base_learning_rate: 0.000001
+    max_learning_rate: 0.0001
+    l2_weight: 0.006
     save_train_data: False
+    batch_size: 2
 
 # checkpoints
 model_save_checkpoint_path_format: models/test_train_%d.pth

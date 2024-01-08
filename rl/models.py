@@ -3,7 +3,7 @@ This file includes the torch models. We wrap the three
 models into one class for convenience.
 """
 
-import numpy as np
+import math
 import torch
 from torch import nn
 from env.constants import *
@@ -58,6 +58,7 @@ class EnvEmbedding(nn.Module):
             for _ in range(num_fields):
                 field_start_idx_list.append(current_start_idx)
             current_start_idx += num_dims
+        self.actual_embedding_dim = self.embedding_dim
         self.field_start_idx_array = nn.Parameter(torch.tensor(field_start_idx_list, dtype=torch.int32), requires_grad=False)
         self.field_embedding = nn.Embedding(num_embeddings=num_starters + sum(item[1] for item in field_dim_list), embedding_dim=embedding_dim)
 
@@ -91,6 +92,7 @@ class EnvEmbedding(nn.Module):
             # card_embedding_idx_3 = torch.zeros(self.embedding_sequence_len - 2 - len(card_segments) * 2, dtype=torch.int64)
             # self.card_embedding_idx = nn.Parameter(torch.cat([card_embedding_idx_1, card_embedding_idx_2, card_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
 
+            self.actual_embedding_dim += self.positional_embedding_dim
             self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len, embedding_dim=self.positional_embedding_dim)
             self.position_embedding_idx = nn.Parameter(torch.arange(num_starters + self.embedding_sequence_len, dtype=torch.int64).unsqueeze(0), requires_grad=False)
 
@@ -102,10 +104,10 @@ class EnvEmbedding(nn.Module):
             game_status_tensor = torch.hstack((self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1), item_idx_modified_array))
         else:
             game_status_tensor = item_idx_modified_array
-        game_status_embedding = self.field_embedding(game_status_tensor)
+        game_status_embedding = self.field_embedding(game_status_tensor) * math.sqrt(self.actual_embedding_dim)
 
         if self.do_position_embedding and self.num_starters + self.embedding_sequence_len > 0:
-            position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
+            position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1)) * math.sqrt(self.actual_embedding_dim)
             return game_status_embedding, position_embedding
         else:
             return game_status_embedding
