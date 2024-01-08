@@ -53,10 +53,6 @@ def train_process(params, n_loop, log_level):
         winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=device, requires_grad=False)
         try:
             action_probs_loss, action_Q_loss, winning_prob_loss = model.learn(observation_tensor, action_probs_tensor, action_Qs_tensor, winning_prob_tensor)
-            embedding = model.model.env_embedding.field_embedding.weight[0].cpu().detach().numpy()[:6]
-            trans_l0 = model.model.transform_encoder.layers._modules['0'].linear1.weight[0].cpu().detach().numpy()[:6]
-            trans_l3 = model.model.transform_encoder.layers._modules['3'].linear1.weight[0].cpu().detach().numpy()[:6]
-            action_prob = model.model.action_prob_dense.weight[0].cpu().detach().numpy()[:6]
         except ValueError as e:
             logging.error(f'ValueError in model.learn: {e}')
             signal.alarm(0)
@@ -65,6 +61,10 @@ def train_process(params, n_loop, log_level):
         train_step_num += 1
 
         if train_step_num % log_step_num == 0:
+            embedding = model.model.env_embedding.field_embedding.weight[0].cpu().detach().numpy()[:6]
+            trans_l0 = model.model.transform_encoder.layers._modules['0'].linear1.weight[0].cpu().detach().numpy()[:6]
+            trans_l3 = model.model.transform_encoder.layers._modules['3'].linear1.weight[0].cpu().detach().numpy()[:6]
+            action_prob = model.model.action_prob_dense.weight[0].cpu().detach().numpy()[:6]
             logging.info(f'embedding:{embedding}, trans_l0={trans_l0}, trans_l3={trans_l3}, action_prob={action_prob}')
             logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
 
