@@ -428,7 +428,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
 
         # 预测action的概率分布
-        self.action_prob_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=False)
+        self.action_prob_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=True)
         # 预测action的Q值分布
         self.action_Q_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=True)
         # 预测'客观胜率'
