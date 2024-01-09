@@ -1,5 +1,5 @@
 import sys
-from .errors import ActionError
+from .errors import ValueError
 from .constants import *
 
 
@@ -25,19 +25,19 @@ class DummyAgent(object):
         self.game_result = GamePlayerResult.DEFAULT    # win/even/lose
 
     def validate_action(self, action, current_round_min_value, current_round_raise_min_value, raised_value):
-        assert action is not None, ActionError(f"Critical: action can not be None.")
-        assert self.status == PlayerStatus.ONBOARD, ActionError(f'Only onboard player can take action, current player status:{self.status}')
+        assert action is not None, ValueError(f"Critical: action can not be None.")
+        assert self.status == PlayerStatus.ONBOARD, ValueError(f'Only onboard player can take action, current player status:{self.status}')
 
-        assert isinstance(action[0], PlayerActions) and isinstance(action[1], int), ActionError(f'Wrong action type: ({type(action[0])}, {type(action[1])})')
+        assert isinstance(action[0], PlayerActions) and isinstance(action[1], int), ValueError(f'Wrong action type: ({type(action[0])}, {type(action[1])})')
 
         if action[1] % self.small_bind != 0:
-            raise ActionError(f'Action value is not a multiple of small bind ({self.small_bind}), which is {action[1]}')
+            raise ValueError(f'Action value is not a multiple of small bind ({self.small_bind}), which is {action[1]}')
 
         if action[0] == PlayerActions.RAISE and current_round_min_value - raised_value >= action[1]:
-            raise ActionError(f'Try to raise {action[1]} but need to be at least {current_round_min_value - raised_value}')
+            raise ValueError(f'Try to raise {action[1]} but need to be at least {current_round_min_value - raised_value}')
 
         if action[0] == PlayerActions.CHECK_CALL and current_round_min_value - raised_value < action[1]:
-            raise ActionError(f'Try to call {action[1]} but need to be no more than {current_round_min_value - raised_value}')
+            raise ValueError(f'Try to call {action[1]} but need to be no more than {current_round_min_value - raised_value}')
 
     def act(self, action, current_round_min_value, current_round_raise_min_value, raised_value):
         """

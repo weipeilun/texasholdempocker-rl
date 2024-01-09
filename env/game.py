@@ -646,22 +646,23 @@ class GameEnv(object):
         self.share_value_to_winner(share_value_sum, winner_set, winner_value_dict)
         return 0, spare_player_value_dict
 
-    @staticmethod
-    def share_value_to_winner(share_value_sum, winner_set, winner_value_dict):
+    def share_value_to_winner(self, share_value_sum, winner_set, winner_value_dict):
         if share_value_sum > 0:
             share_value_left = share_value_sum
-            winner_share_value = floor(share_value_sum / len(winner_set))
-            last_winner_player_name = None
+            winner_share_value = floor((share_value_sum / len(winner_set)) // self.small_blind) * self.small_blind
             for winner_player_name in winner_set:
                 if winner_player_name in winner_value_dict:
                     winner_value_dict[winner_player_name] = int(winner_value_dict[winner_player_name] + winner_share_value)
                 else:
                     winner_value_dict[winner_player_name] = int(winner_share_value)
                 share_value_left -= winner_share_value
-                last_winner_player_name = winner_player_name
 
+            # according to the TDA rule: the odd chip goes to the first seat left of the button
             if share_value_left > 0:
-                winner_value_dict[last_winner_player_name] = int(winner_value_dict[last_winner_player_name] + share_value_left)
+                share_player_name = self.button_player_name
+                while share_player_name not in winner_set:
+                    share_player_name = self.get_next_player_name(self.button_player_name)
+                winner_value_dict[share_player_name] = int(winner_value_dict[share_player_name] + share_value_left)
 
     @staticmethod
     def get_biggest_card_combinations(board_cards, hand_cards):
