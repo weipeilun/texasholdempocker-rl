@@ -372,6 +372,9 @@ class Env:
 
         return np.array(sorted_item_list, dtype=np.int32)
 
+    def get_valid_action_info(self):
+        return self._env.get_valid_action_info()
+
     def get_obs(self, infoset):
         """
         This function obtains observations with imperfect information

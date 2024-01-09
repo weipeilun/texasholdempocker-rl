@@ -10,7 +10,7 @@ from env.constants import *
 
 
 class MCTS:
-    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False, pid=None, thread_name=None):
+    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, small_blind, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False, pid=None, thread_name=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.player_name_predict_in_queue_dict = player_name_predict_in_queue_dict
@@ -19,6 +19,7 @@ class MCTS:
         self.workflow_lock = workflow_lock
         self.workflow_signal_queue = workflow_signal_queue
         self.workflow_ack_signal_queue = workflow_ack_signal_queue
+        self.small_blind = small_blind
         self.n_simulation = n_simulation
         self.c_puct = c_puct    # 模型预测的高值大概率是更好的，要更多的探索。这是模型的p值到env的Q值的乘数，注意将U和Q保持在相同数量级上。todo：动态调整c_puct
         self.tau = tau
@@ -44,7 +45,7 @@ class MCTS:
         self.small_range = self.big_range / self.num_small_range_bins
 
         self.init_root_n_simulation = init_root_n_simulation
-        self.max_init_root_num_simulation = int(self.init_root_n_simulation) * self.n_actions
+        assert self.init_root_n_simulation >= 1, ValueError(f'init_root_n_simulation must be greater or equal than 1 to init root')
 
         self.default_action_probs = np.ones(self.n_actions, dtype=np.float32) / self.n_actions
         self.default_action_Qs = np.zeros(self.n_actions, dtype=np.float32)
@@ -81,7 +82,7 @@ class MCTS:
 
             new_env = env.new_random()
 
-            action_bin, action = self._choose_action(action_prob, num_simulation=i, do_log=True)
+            action_bin, action = self._choose_action(action_prob, new_env, num_simulation=i, do_log=True)
             if self.file_writer_choice is not None:
                 self.file_writer_choice.write(f'{i},{action_bin}\n')
             observation_, reward_dict, terminated, info = new_env.step(action)
@@ -95,6 +96,7 @@ class MCTS:
                                                      workflow_lock=self.workflow_lock,
                                                      workflow_signal_queue=self.workflow_signal_queue,
                                                      workflow_ack_signal_queue=self.workflow_ack_signal_queue,
+                                                     small_blind = self.small_blind,
                                                      n_simulation=self.n_simulation,
                                                      c_puct=self.c_puct,
                                                      tau=self.tau,
@@ -136,17 +138,24 @@ class MCTS:
         action_probs = pow_N_to_taus / sum_N_to_taus
         return action_probs
 
-    def get_action(self, action_probs, use_argmax=False):
+    def get_action(self, action_probs, env, use_argmax=False):
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left = env.get_valid_action_info()
+        valid_action_probs = np.copy(action_probs)
+        valid_action_probs[action_mask_list] = 0
+
         if use_argmax:
-            action_idx = int(np.argmax(action_probs).tolist())
-            return self.map_model_action_to_actual_action_and_value(action_idx)
+            action_idx = int(np.argmax(valid_action_probs).tolist())
+            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left)
         else:
+            sum_probs = sum(valid_action_probs)
+            valid_action_probs /= sum_probs
+
             random_num = random.random()
             cumulative_prob = 0
-            for i, prob in enumerate(action_probs):
+            for i, prob in enumerate(valid_action_probs):
                 cumulative_prob += prob
                 if random_num <= cumulative_prob:
-                    return self.map_model_action_to_actual_action_and_value(i)
+                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left)
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def get_player_action_reward(self, reward, acting_player_name):
@@ -155,26 +164,33 @@ class MCTS:
         player_result_value, reward_value, net_win_value = reward[acting_player_name]
         return reward_value
 
-    def _choose_action(self, p_array, num_simulation=None, do_log=False):
-        if num_simulation is not None and num_simulation < self.max_init_root_num_simulation:
+    def _choose_action(self, p_array, env, num_simulation=None, do_log=False):
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left = env.get_valid_action_info()
+        num_valid_actions = len(action_mask_list) - sum(action_mask_list)
+        if num_simulation is not None and num_simulation < (self.init_root_n_simulation * num_valid_actions):
             # init root node
-            action_bin = num_simulation % self.n_actions
+            target_valid_bin = num_simulation % num_valid_actions
+            action_bin = 0
+            tmp_bin = 0
+            for action_mask in action_mask_list:
+                if not action_mask:
+                    if tmp_bin == target_valid_bin:
+                        break
+                    else:
+                        tmp_bin += 1
+                action_bin += 1
         else:
             # 这是核心的蒙特卡洛搜索树算法
             # 注意此处原生的蒙特卡洛搜索树要求U(s, a) ∝ sqrt(ln(sum_N) / N(s, a))
-            # 在没有遍历完子树的所有节点的情况下，随机选择一个没有遍历过的节点
+            # 在没有遍历完子树的所有节点的情况下，随机选择一个没有遍历过的节点 todo:这点重新检查
             # AlphaGo Zero修改U(s, a) ∝ P(s, a) * sqrt(sum_N) / (1 + N(s, a))
             # 所以在没有遍历完子树的所有节点的情况下，要选择一个没遍历过的P(s, a)最大的节点
             # todo: 非完全信息博弈场景，每次模拟都面向一个新的随机隐藏信息，所以每次模拟的q都和历史模拟的q不一样。所以本质上这的MCTS在物理意义上是不成立的（exploitation-exploration过程中exploitation是不严格成立的）。但在应用中可能有效的假设在于：对历史隐藏信息统计的q在当前隐藏信息下仍然是有效的。
             sum_N = sum(self.children_n_array)
-            if sum_N < self.n_actions:
-                action_bin = -1
-                tmp_max_p = -1
-                for i, p in enumerate(p_array):
-                    if self.children_n_array[i] == 0:
-                        if action_bin == -1 or p > tmp_max_p:
-                            action_bin = i
-                            tmp_max_p = p
+            if sum_N == 0:
+                valid_p_array = np.copy(p_array)
+                valid_p_array[action_mask_list] = 0
+                action_bin = int(np.argmax(valid_p_array).tolist())
             else:
                 # sqrt_sum_N_of_b_array = np.sqrt(sum_N - self.children_n_array)
                 sqrt_sum_N_of_b_array = np.sqrt(sum_N)
@@ -193,32 +209,29 @@ class MCTS:
                     if self.file_writer_r is not None:
                         self.file_writer_r.write(','.join('%.3f' % i for i in R_array) + '\n')
 
-                action_bin = int(np.argmax(R_array).tolist())
+                valid_R_array = np.copy(R_array)
+                valid_R_array -= min(valid_R_array)
+                valid_R_array[action_mask_list] = 0
+                action_bin = int(np.argmax(valid_R_array).tolist())
 
-        action, action_value = self.map_model_action_to_actual_action_and_value(action_bin)
+        action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left)
         return action_bin, (action, action_value)
 
-    def map_model_action_to_actual_action_and_value(self, action_bin):
-        def generate_value_by_bin_number(bin_num):
-            if bin_num < self.num_small_range_bins:
-                bin_start = self.small_range * bin_num
-                bin_thres = self.small_range
-            else:
-                big_bin_num = bin_num - self.num_small_range_bins + 1
-                bin_start = self.big_range * big_bin_num
-                bin_thres = self.big_range
-            return random.random() * bin_thres + bin_start
-
-        if action_bin == 0:
-            return PlayerActions.FOLD.value, 0.
-        elif action_bin == 1:
-            return PlayerActions.CHECK.value, 0.
-        elif 2 <= action_bin < self.n_actions - 1:
-            return PlayerActions.RAISE.value, generate_value_by_bin_number(action_bin - 2)
-        elif action_bin == self.n_actions - 1:
-            return PlayerActions.RAISE.value, 1.
+    def map_model_action_to_actual_action_and_value(self, action_bin, action_value_or_ranges_list, acting_player_value_left):
+        assert action_value_or_ranges_list[action_bin] is not None, ValueError(f'None action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
+        action, action_value_or_range = action_value_or_ranges_list[action_bin]
+        if isinstance(action_value_or_range, int):
+            return action, action_value_or_range
+        elif isinstance(action_value_or_range, tuple):
+            # 重要：把随机切分的下注比例映射到small_blind的整数倍，int型
+            range_start, range_end = action_value_or_range
+            choice_proportion = range_start + (range_end - range_start) * random.random()
+            value_choice = acting_player_value_left * choice_proportion
+            multiple_of_small_bind = round(value_choice / self.small_blind)
+            action_value = multiple_of_small_bind * self.small_blind
+            return action, action_value
         else:
-            raise ValueError(f"action should be in [0, {self.n_actions}), which is {action_bin}")
+            raise ValueError(f'Error action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
 
     def expand(self, observation, env):
         if self.children is None:
@@ -229,7 +242,7 @@ class MCTS:
 
         acting_player_name = env._acting_player_name
         action_prob, action_Qs, _ = self.predict(observation, acting_player_name)
-        action_bin, action = self._choose_action(action_prob)
+        action_bin, action = self._choose_action(action_prob, env)
 
         observation_, reward_dict, terminated, info = env.step(action)
         if not terminated:
@@ -242,6 +255,7 @@ class MCTS:
                                                  workflow_lock=self.workflow_lock,
                                                  workflow_signal_queue=self.workflow_signal_queue,
                                                  workflow_ack_signal_queue=self.workflow_ack_signal_queue,
+                                                 small_blind = self.small_blind,
                                                  n_simulation=self.n_simulation,
                                                  c_puct=self.c_puct,
                                                  tau=self.tau,

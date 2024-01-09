@@ -23,6 +23,10 @@ mcts_log_to_file: True
 model_param_dict:
     device: 'cpu'
     batch_size: 8
+    embedding_dim: 64
+    positional_embedding_dim: 32
+    transformer_head_dim: 16
+    num_layers: 2
 
 # simulation params
 simulation_recurrent_params:

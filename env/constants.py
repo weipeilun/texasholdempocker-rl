@@ -26,13 +26,11 @@ class CardDecor(Enum):
 
 # betting round action
 class PlayerActions(Enum):
-    CHECK = 0
-    RAISE = 1
-    CALL = 2
-    FOLD = 3
-    BIG_BLIND_RAISE = 4
-    SMALL_BLIND_RAISE = 5
-    NOT_AN_ACTION = 6
+    FOLD = 0
+    CHECK_CALL = 1
+    RAISE = 2
+    BIG_BLIND_RAISE = 3
+    SMALL_BLIND_RAISE = 4
 
 # players status
 class PlayerStatus(Enum):
@@ -68,6 +66,22 @@ class WorkflowStatus(Enum):
     REGISTERING_TRAIN_MODEL = 5
     DEFAULT = 0
     UNDEFINED = -1
+
+# model action bin dict
+ACTION_BINS_DICT = [
+    (PlayerActions.FOLD, (0, 0)),
+    (PlayerActions.CHECK_CALL, (0, 0)),
+    (PlayerActions.RAISE, (0., 0.0125)),
+    (PlayerActions.RAISE, (0.0125, 0.025)),
+    (PlayerActions.RAISE, (0.025, 0.05)),
+    (PlayerActions.RAISE, (0.05, 0.1)),
+    (PlayerActions.RAISE, (0.1, 0.2)),
+    (PlayerActions.RAISE, (0.2, 0.4)),
+    (PlayerActions.RAISE, (0.4, 0.6)),
+    (PlayerActions.RAISE, (0.6, 0.8)),
+    (PlayerActions.RAISE, (0.8, 1.)),
+    (PlayerActions.RAISE, (1., 1.)),
+]
 
 
 NUM_CARDS = len(CardFigure) * len(CardDecor)
