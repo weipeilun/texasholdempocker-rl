@@ -31,7 +31,7 @@ class DummyAgent(object):
         assert isinstance(action[0], PlayerActions) and isinstance(action[1], int), ActionError(f'Wrong action type: ({type(action[0])}, {type(action[1])})')
 
         if action[1] % self.small_bind != 0:
-            raise ActionError(f'Action value is not a multiple of small bind ({self.small_bind}), which is {self.action[1]}')
+            raise ActionError(f'Action value is not a multiple of small bind ({self.small_bind}), which is {action[1]}')
 
         if action[0] == PlayerActions.RAISE and current_round_min_value - raised_value >= action[1]:
             raise ActionError(f'Try to raise {action[1]} but need to be at least {current_round_min_value - raised_value}')
