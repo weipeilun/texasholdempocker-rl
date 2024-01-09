@@ -1,6 +1,4 @@
 import logging
-import time
-import traceback
 import numpy as np
 from tools.biner import *
 from .cards import *
