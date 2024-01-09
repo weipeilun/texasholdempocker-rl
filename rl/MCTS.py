@@ -140,6 +140,7 @@ class MCTS:
 
     def get_action(self, action_probs, env, use_argmax=False):
         action_mask_list, action_value_or_ranges_list, acting_player_value_left = env.get_valid_action_info()
+        # 目前get_action都是跟在simulate之后的，认为此处的归一化是多余步骤，但为get_action方法独立的正确性仍然保留归一化
         valid_action_probs = np.copy(action_probs)
         valid_action_probs[action_mask_list] = 0
 
