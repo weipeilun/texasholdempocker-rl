@@ -218,7 +218,7 @@ class MCTS:
 
                 valid_R_array = np.copy(R_array)
                 # + 0.01 to make a difference between invalid value and min value in log
-                valid_R_array -= min(valid_R_array) + 0.01
+                valid_R_array -= min(valid_R_array) - 0.01
                 valid_R_array[action_mask_list] = 0
                 action_bin = int(np.argmax(valid_R_array).tolist())
                 
