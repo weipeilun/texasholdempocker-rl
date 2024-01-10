@@ -62,12 +62,7 @@ class MCTS:
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
 
-        final_r_filename = "log/final_r.csv"
-        try:
-            os.remove(final_r_filename)
-        except Exception:
-            pass
-        self.file_writer_final_r = open(final_r_filename, "a", encoding='UTF-8')
+        self.file_writer_final_r = open("log/final_r.csv", "a", encoding='UTF-8')
         if self.log_to_file and self.pid == 0:
             self.file_writer_n = open(f"log/n.csv", "w", encoding='UTF-8')
             self.file_writer_q = open(f"log/q.csv", "w", encoding='UTF-8')
