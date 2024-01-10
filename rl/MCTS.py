@@ -35,7 +35,7 @@ class MCTS:
         self.file_writer_n_term = None
         self.file_writer_choice = None
         # 最后一步的R很重要，要拉倒很接近的数值上才能说明整个MCTS是有效的。因此强制输出最后一步的R到日志。
-        self.file_writer_final_r = None
+        self.file_writer_final_valid_r = None
 
         self.children = None
 
@@ -62,7 +62,7 @@ class MCTS:
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
 
-        self.file_writer_final_r = open("log/final_r.csv", "a", encoding='UTF-8')
+        self.file_writer_final_valid_r = open("log/final_valid_r.csv", "a", encoding='UTF-8')
         if self.log_to_file and self.pid == 0:
             self.file_writer_n = open(f"log/n.csv", "w", encoding='UTF-8')
             self.file_writer_q = open(f"log/q.csv", "w", encoding='UTF-8')
@@ -122,7 +122,7 @@ class MCTS:
             if self.file_writer_q is not None:
                 self.file_writer_q.write(','.join('%.3f' % i for i in self.children_q_array) + '\n')
 
-        self.file_writer_final_r.close()
+        self.file_writer_final_valid_r.close()
         if self.log_to_file and self.pid == 0:
             self.file_writer_n.close()
             self.file_writer_q.close()
@@ -208,9 +208,6 @@ class MCTS:
                 U_array = self.c_puct * p_array * N_term_array
                 R_array = U_array + self.children_q_array
 
-                # log to file
-                if num_simulation is not None and num_simulation == self.n_simulation - 1:
-                    self.file_writer_final_r.write(','.join('%.3f' % i for i in R_array) + '\n')
                 if do_log:
                     if self.file_writer_n_term is not None:
                         self.file_writer_n_term.write(','.join('%.3f' % i for i in N_term_array) + '\n')
@@ -223,6 +220,10 @@ class MCTS:
                 valid_R_array -= min(valid_R_array)
                 valid_R_array[action_mask_list] = 0
                 action_bin = int(np.argmax(valid_R_array).tolist())
+                
+                # force log to file
+                if num_simulation is not None and num_simulation == self.n_simulation - 1:
+                    self.file_writer_final_valid_r.write(','.join('%.3f' % i for i in valid_R_array) + '\n')
 
         action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left)
         return action_bin, (action, action_value)
