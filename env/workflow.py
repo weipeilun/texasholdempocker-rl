@@ -304,8 +304,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
         logging.info(f'Found historical train data from {historical_data_filename}. Train with this first.')
         # load data and train
         data_generator = train_data_generator(historical_data_filename)
-        for observation_list, action_probs_list, action_Qs_list, winning_prob_list in data_generator:
-            model.store_transition(observation_list, action_probs_list, action_Qs_list, winning_prob_list, save_train_data=False)
+        for observation_list, action_probs_list, action_Qs_list, action_masks_list, winning_prob_list in data_generator:
+            model.store_transition(observation_list, action_probs_list, action_Qs_list, action_masks_list, winning_prob_list, save_train_data=False)
             step_counter.increment()
 
             if step_counter.get_value() >= next_train_step:
@@ -411,12 +411,12 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 logging.info(f"train_game_loop_thread {thread_name} detect interrupt")
                 break
 
-            action = mcts.get_action(action_probs, env=env, use_argmax=False)
+            action, action_mask_idx = mcts.get_action(action_probs, env=env, use_argmax=False)
             t1 = time.time()
             # logging.info(f'train_game_loop_thread {thread_name} MCTS took action:({action[0]}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
-            game_train_data_queue.put((game_id, ([observation, action_probs, action_Qs], info)))
+            game_train_data_queue.put((game_id, ([observation, action_probs, action_Qs, action_mask_idx], info)))
 
             if not terminated:
                 observation = observation_
@@ -477,7 +477,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
                     logging.info(f"eval_game_loop_thread {thread_name} detect interrupt")
                     break
 
-                action = mcts.get_action(action_probs, env=env, use_argmax=True)
+                action, _ = mcts.get_action(action_probs, env=env, use_argmax=True)
                 t1 = time.time()
                 # logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, eval_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
 

@@ -65,7 +65,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=base_learning_rate, max_lr=max_learning_rate, step_size_up=step_size_up, step_size_down=step_size_down, mode="triangular", cycle_momentum=False)
 
         self.action_prob_loss = torch.nn.CrossEntropyLoss()
-        self.action_Q_loss = torch.nn.MSELoss()
+        self.action_Q_loss = torch.nn.MSELoss(reduction='none')
         self.winning_prob_loss = torch.nn.MSELoss()
 
         self.memory_lock = Lock()
@@ -105,53 +105,60 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         action_Q_logits = action_Q_logits.cpu().numpy().tolist()[0]
         return action_prob, action_Q_logits
 
-    def store_transition(self, observation, action_probs, action_Qs, winning_prob, save_train_data=True):
+    def store_transition(self, observation, action_probs, action_Qs, action_masks, winning_prob, save_train_data=True):
         if self.save_train_data and save_train_data:
             observation_str = ','.join([str(i) for i in observation.tolist()])
             action_prob_str = ','.join(['%.5f' % prob for prob in action_probs])
             action_Q_str = ','.join(['%.5f' % Q for Q in action_Qs])
+            action_mask_str = ','.join(['%d' % Q for Q in action_masks])
             winning_prob_str = '%.8f' % winning_prob
-            result_str = f'{observation_str}\n{action_prob_str}\n{action_Q_str}\n{winning_prob_str}\n\n'
+            result_str = f'{observation_str}\n{action_prob_str}\n{action_Q_str}\n{action_mask_str}\n{winning_prob_str}\n\n'
             self.train_file.write(result_str)
 
         with self.memory_lock:
-            self.memory.store([observation, action_probs, action_Qs, winning_prob])
+            self.memory.store([observation, action_probs, action_Qs, action_masks, winning_prob])
 
-    def learn(self, observation_list=None, action_probs_list=None, action_Q_list=None, winning_prob_list=None):
-        if observation_list is None or action_probs_list is None or action_Q_list is None or winning_prob_list is None:
+    def learn(self, observation_list=None, action_probs_list=None, action_Q_list=None, action_masks_list=None, winning_prob_list=None):
+        if observation_list is None or action_probs_list is None or action_Q_list is None or action_masks_list is None or winning_prob_list is None:
             sample_idx_np, _, data_batch = self.memory.sample(self.batch_size)
             # weight_tensor = torch.from_numpy(weight_np).to(self.device)
 
             observation_list = list()
             action_probs_list = list()
             action_Q_list = list()
+            action_masks_list = list()
             winning_prob_list = list()
-            for observation, action_probs, action_Qs, winning_prob in data_batch:
+            for observation, action_probs, action_Qs, masks, winning_prob in data_batch:
                 observation_list.append(observation)
                 action_probs_list.append(action_probs)
                 action_Q_list.append(action_Qs)
+                action_masks_list.append(masks)
                 winning_prob_list.append(winning_prob)
 
         observation_array = np.array(observation_list)
         action_probs_array = np.array(action_probs_list)
         action_Q_array = np.array(action_Q_list)
+        action_masks_array = np.array(action_masks_list)
         winning_prob_array = np.array(winning_prob_list)
         observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.device, requires_grad=False)
         action_probs_tensor = torch.tensor(action_probs_array, dtype=torch.float32, device=self.device, requires_grad=False)
         action_Q_tensor = torch.tensor(action_Q_array, dtype=torch.float32, device=self.device, requires_grad=False)
+        action_masks_tensor = torch.tensor(action_masks_array, dtype=torch.int32, device=self.device, requires_grad=False).bool()
         winning_prob_tensor = torch.tensor(winning_prob_array, dtype=torch.float32, device=self.device, requires_grad=False)
 
         self.model.train()
         action_prob_logits, action_Q_logits, winning_prob_logits = self.model(observation_tensor)
 
         action_probs_loss = self.action_prob_loss(action_prob_logits, action_probs_tensor)
-        action_Q_loss = self.action_Q_loss(action_Q_logits, action_Q_tensor)
+        action_Q_loss_items = self.action_Q_loss(action_Q_logits, action_Q_tensor)
         winning_prob_loss = self.winning_prob_loss(winning_prob_logits, winning_prob_tensor)
-        assert not torch.any(torch.isnan(action_probs_loss)) and not torch.any(torch.isnan(action_Q_loss)) and not torch.any(torch.isnan(winning_prob_loss)) and not torch.any(torch.isinf(action_probs_loss)) and not torch.any(torch.isinf(action_Q_loss)) and not torch.any(torch.isinf(winning_prob_loss)), ValueError('loss is nan or inf')
+        action_valid_Q_loss_items = torch.masked_select(action_Q_loss_items, action_masks_tensor)
+        action_Q_loss = torch.mean(action_valid_Q_loss_items)
         action_probs_loss_float = action_probs_loss.item()
         action_Q_loss_float = action_Q_loss.item()
         winning_prob_loss_float = winning_prob_loss.item()
         over_all_loss = action_probs_loss + action_Q_loss * 0.1 + winning_prob_loss
+        assert not torch.any(torch.isnan(over_all_loss)), ValueError('loss is nan')
 
         self.optimizer.zero_grad()
         over_all_loss.backward()
@@ -176,9 +183,11 @@ class AlphaGoZero(nn.Module, BaseRLModel):
             predict_action_probs_list = predict_action_probs_tensor.cpu().detach().numpy()
             predict_action_Qs_list = action_Q_logits.cpu().detach().numpy()
             predict_winning_prob_list = winning_prob_logits.cpu().detach().numpy()
-            for data_idx, (action_probs, action_Qs, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob) in enumerate(zip(action_probs_list, action_Q_list, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list)):
+            for data_idx, (action_probs, action_Qs_array, winning_prob, predict_action_probs, predict_action_Qs, predict_winning_prob, masks) in enumerate(zip(action_probs_list, action_Q_array, winning_prob_list, predict_action_probs_list, predict_action_Qs_list, predict_winning_prob_list, action_masks_list)):
                 if data_idx >= self.num_data_print_per_inference:
                     break
-                logging.info(f'predictions:\naction_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Qs={",".join(["%.4f" % item for item in action_Qs])}\npredict_action_Qs={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
+                action_Qs_array = action_Qs_array[np.nonzero(masks)]
+                predict_action_Qs = predict_action_Qs[np.nonzero(masks)]
+                logging.info(f'predictions:\naction_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Qs={",".join(["%.4f" % item for item in action_Qs_array.tolist()])}\npredict_action_Qs={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
 
         return action_probs_loss_float, action_Q_loss_float, winning_prob_loss_float

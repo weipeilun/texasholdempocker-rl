@@ -150,9 +150,11 @@ class MCTS:
         valid_action_probs = np.copy(action_probs)
         valid_action_probs[action_mask_list] = 0
 
+        action_mask_int_list = [int(not mask) for mask in action_mask_list]
+
         if use_argmax:
             action_idx = int(np.argmax(valid_action_probs).tolist())
-            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left)
+            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left), action_mask_int_list
         else:
             sum_probs = sum(valid_action_probs)
             valid_action_probs /= sum_probs
@@ -162,7 +164,7 @@ class MCTS:
             for i, prob in enumerate(valid_action_probs):
                 cumulative_prob += prob
                 if random_num <= cumulative_prob:
-                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left)
+                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left), action_mask_int_list
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def get_player_action_reward(self, reward, acting_player_name):
