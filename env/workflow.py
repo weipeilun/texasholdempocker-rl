@@ -404,7 +404,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 break
 
             t0 = time.time()
-            mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, small_blind=small_blind, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, model_Q_epsilon=mcts_model_Q_epsilon, log_to_file=mcts_log_to_file, pid=pid, thread_name=thread_name)
+            mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, small_blind=small_blind, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, model_Q_epsilon=mcts_model_Q_epsilon, log_to_file=mcts_log_to_file, pid=pid, thread_name=thread_name)
             action_probs, action_Qs = mcts.simulate(observation=observation, env=env)
             # 用于接收中断信号
             if action_probs is None:
@@ -470,7 +470,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
                 t0 = time.time()
                 # 在eval时不使用dirichlet_noice以增加随机性，设置tau为0即在play步骤中丢弃随机性使用argmax
-                mcts = MCTS(n_actions, is_root=True, player_name_predict_in_queue_dict=player_name_predict_in_queue_dict, predict_out_queue=model_predict_out_queue, small_blind=small_blind, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, model_Q_epsilon=mcts_model_Q_epsilon, log_to_file=False, pid=pid, thread_name=thread_name)
+                mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, small_blind=small_blind, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, model_Q_epsilon=mcts_model_Q_epsilon, log_to_file=False, pid=pid, thread_name=thread_name)
                 action_probs, _ = mcts.simulate(observation=observation, env=env)
                 # 用于接收中断信号
                 if action_probs is None:

@@ -2,18 +2,17 @@ import math
 import random
 import logging
 import numpy as np
-
-import torch.nn
+import os
 from tools import interrupt
 from queue import Empty
 from env.constants import *
 
 
 class MCTS:
-    def __init__(self, n_actions, is_root, player_name_predict_in_queue_dict, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, small_blind, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False, pid=None, thread_name=None):
+    def __init__(self, n_actions, is_root, predict_in_queue, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, small_blind, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False, pid=None, thread_name=None):
         self.n_actions = n_actions
         self.is_root = is_root
-        self.player_name_predict_in_queue_dict = player_name_predict_in_queue_dict
+        self.predict_in_queue = predict_in_queue
         self.predict_out_queue = predict_out_queue
         self.apply_dirichlet_noice = apply_dirichlet_noice
         self.workflow_lock = workflow_lock
@@ -35,6 +34,8 @@ class MCTS:
         self.file_writer_r = None
         self.file_writer_n_term = None
         self.file_writer_choice = None
+        # 最后一步的R很重要，要拉倒很接近的数值上才能说明整个MCTS是有效的。因此强制输出最后一步的R到日志。
+        self.file_writer_final_r = None
 
         self.children = None
 
@@ -61,6 +62,12 @@ class MCTS:
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
 
+        final_r_filename = "log/final_r.csv"
+        try:
+            os.remove(final_r_filename)
+        except Exception:
+            pass
+        self.file_writer_final_r = open(final_r_filename, "a", encoding='UTF-8')
         if self.log_to_file and self.pid == 0:
             self.file_writer_n = open(f"log/n.csv", "w", encoding='UTF-8')
             self.file_writer_q = open(f"log/q.csv", "w", encoding='UTF-8')
@@ -69,8 +76,8 @@ class MCTS:
             self.file_writer_n_term = open(f"log/n_term.csv", "w", encoding='UTF-8')
             self.file_writer_choice = open(f"log/choice.csv", "w", encoding='UTF-8')
 
-        acting_player_name = env._acting_player_name
-        action_prob, action_Qs, _ = self.predict(observation, acting_player_name)
+        acting_player_name = env.acting_player_name
+        action_prob, action_Qs, _ = self.predict(observation)
         if self.is_root and self.apply_dirichlet_noice:
             dirichlet_noise = np.random.dirichlet(action_prob)
             action_prob = (1 - self.dirichlet_noice_epsilon) * action_prob + self.dirichlet_noice_epsilon * dirichlet_noise
@@ -83,20 +90,22 @@ class MCTS:
             new_env = env.new_random()
 
             action_bin, action = self._choose_action(action_prob, new_env, num_simulation=i, do_log=True)
+
             if self.file_writer_choice is not None:
                 self.file_writer_choice.write(f'{i},{action_bin}\n')
+
             observation_, reward_dict, terminated, info = new_env.step(action)
             if not terminated:
                 if self.children[action_bin] is None:
                     self.children[action_bin] = MCTS(self.n_actions,
                                                      is_root=False,
-                                                     player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict,
+                                                     predict_in_queue=self.predict_in_queue,
                                                      predict_out_queue=self.predict_out_queue,
                                                      apply_dirichlet_noice=False,
                                                      workflow_lock=self.workflow_lock,
                                                      workflow_signal_queue=self.workflow_signal_queue,
                                                      workflow_ack_signal_queue=self.workflow_ack_signal_queue,
-                                                     small_blind = self.small_blind,
+                                                     small_blind=self.small_blind,
                                                      n_simulation=self.n_simulation,
                                                      c_puct=self.c_puct,
                                                      tau=self.tau,
@@ -117,6 +126,8 @@ class MCTS:
                 self.file_writer_n.write(','.join('%d' % i for i in self.children_n_array) + '\n')
             if self.file_writer_q is not None:
                 self.file_writer_q.write(','.join('%.3f' % i for i in self.children_q_array) + '\n')
+
+        self.file_writer_final_r.close()
         if self.log_to_file and self.pid == 0:
             self.file_writer_n.close()
             self.file_writer_q.close()
@@ -202,6 +213,9 @@ class MCTS:
                 U_array = self.c_puct * p_array * N_term_array
                 R_array = U_array + self.children_q_array
 
+                # log to file
+                if num_simulation is not None and num_simulation == self.n_simulation - 1:
+                    self.file_writer_final_r.write(','.join('%.3f' % i for i in R_array) + '\n')
                 if do_log:
                     if self.file_writer_n_term is not None:
                         self.file_writer_n_term.write(','.join('%.3f' % i for i in N_term_array) + '\n')
@@ -241,8 +255,8 @@ class MCTS:
             self.children_n_array = np.zeros(self.n_actions)
             self.children_q_array = np.zeros(self.n_actions)
 
-        acting_player_name = env._acting_player_name
-        action_prob, action_Qs, _ = self.predict(observation, acting_player_name)
+        acting_player_name = env.acting_player_name
+        action_prob, action_Qs, _ = self.predict(observation)
         action_bin, action = self._choose_action(action_prob, env)
 
         observation_, reward_dict, terminated, info = env.step(action)
@@ -250,7 +264,7 @@ class MCTS:
             if self.children[action_bin] is None:
                 self.children[action_bin] = MCTS(self.n_actions,
                                                  is_root=False,
-                                                 player_name_predict_in_queue_dict=self.player_name_predict_in_queue_dict,
+                                                 predict_in_queue=self.predict_in_queue,
                                                  predict_out_queue=self.predict_out_queue,
                                                  apply_dirichlet_noice=False,
                                                  workflow_lock=self.workflow_lock,
@@ -275,7 +289,7 @@ class MCTS:
 
         return reward_dict
 
-    def predict(self, observation, acting_player_name):
+    def predict(self, observation):
         # 仅支持多线程下的批量预测
         action_prob = self.default_action_probs
         action_Qs = self.default_action_Qs
@@ -291,7 +305,7 @@ class MCTS:
             except Empty:
                 pass
 
-        self.player_name_predict_in_queue_dict[acting_player_name].put((observation, self.pid))
+        self.predict_in_queue.put((observation, self.pid))
         while True:
             if interrupt.interrupt_callback():
                 logging.info(f"MCTS.predict{self.pid} detect interrupt")

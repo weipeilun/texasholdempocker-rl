@@ -10,18 +10,24 @@ historical_data_filename: data/history.txt
 
 # train process params
 first_train_data_step: 500
-train_per_step: 32
+train_per_step: 4
 eval_model_per_step: 5000
 log_step_num: 200
 
 # game params
 small_blind: 25
 big_blind: 50
+# puct越大，对N（mcts节点选择次数）系数影响越大，对模型概率预测影响越大，即对“应该选哪个”（直觉）的相对影响越大，对环境反馈（客观事实）的相对影响就越小。
+# 所以原则是：在保持模型和N的影响力的前提下（即结合场景调节对环境反馈的系数，这也让MCTS有效），尽量减小。1以减小num_mcts_simulation_per_step，即减少算力；2以减小模型badcase对后续训练数据的影响（对某一个类过高的直觉估计会导致过多执行该类，即在训练数据中N变大）。
+# 如何判断puct的影响力有效：
+# 1. 看N，每个类最重要保证一定的统计意义
+# 2. 看R，每个类最终要拉到很接近的数值上
+# 3. 看Q，每个类最终要符合环境的物理意义
 num_mcts_simulation_per_step: 800
-mcts_c_puct: 1
+mcts_c_puct: 5
 mcts_tau: 1
 mcts_dirichlet_noice_epsilon: 0.3
-mcts_model_Q_epsilon: 0.01
+mcts_model_Q_epsilon: 0.01  # 当模型更有效后，适当调大这个值
 mcts_log_to_file: False
 
 # model params
@@ -39,15 +45,17 @@ model_param_dict:
     epsilon: 0.05
     epsilon_max: 0.8
     gamma: 0.9
-    batch_size: 128
+    batch_size: 64
     base_learning_rate: 0.000001
-    max_learning_rate: 0.0001
+    max_learning_rate: 0.00001
     step_size_up: 1000
     step_size_down: 4000
     l2_weight: 0.0
     num_bins: 10
     save_train_data: True
-    transition_buffer_len: 10000
+    # 要保证足够大，以使模型迭代过程以一种渐变的方式进行（包含历史数据），保证v和v-1版本模型保持一定连贯性，可令新模型结果不会太差。
+    # 建议大于eval_model_per_step * train_per_step * 2
+    transition_buffer_len: 50000
     num_inference_per_step: 500   # show prediction result per steps
     num_data_print_per_inference: 5  # number of result to print per inference
 

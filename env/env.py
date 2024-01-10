@@ -333,7 +333,7 @@ class Env:
         return self._env.get_winner()
 
     @property
-    def _acting_player_name(self):
+    def acting_player_name(self):
         """
         The player that is active. It can be landlord,
         landlod_down, or landlord_up.
