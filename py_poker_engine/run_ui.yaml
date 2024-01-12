@@ -1,0 +1,8 @@
+ante: 0
+blind_structure: null
+initial_stack: 10000
+max_round: 10
+small_blind: 25
+ai_players:
+- name: ai_player
+  path: py_poker_engine/alpha_go_zero_player.py
