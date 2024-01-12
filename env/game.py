@@ -12,7 +12,10 @@ deck = []
 for figure in CardFigure:
     for decor in CardDecor:
         deck.append(Card(figure, decor))
+deck_reverse_dict = {card: idx for idx, card in enumerate(deck)}
 
+
+# 注意GameEnv中所有value的物理含义都是：当前轮中/当前行动中下注到某个特定数额，不是增量下注数额
 class GameEnv(object):
 
     COMPARE_RULES = [
@@ -26,11 +29,12 @@ class GameEnv(object):
             [CardCombinations.ONES],
         ]
 
-    def __init__(self, num_players, init_value=100_000, small_blind=25, big_blind=50):
+    def __init__(self, num_players, init_value=100_000, small_blind=25, big_blind=50, settle_automatically=True):
         self.initial_num_players = num_players
         self.initial_init_value = init_value
         self.small_blind = small_blind
         self.big_blind = big_blind
+        self.settle_automatically = settle_automatically
 
         self.num_players = self.initial_num_players
         self.init_value = self.initial_init_value
@@ -64,12 +68,12 @@ class GameEnv(object):
         self.game_infoset = None
 
         # 总下注金额
-        self.all_round_overall_value = 0
+        self.pot_value = 0
 
         self.ignore_all_async_tasks = False
 
     def new_random(self):
-        new_env = GameEnv(self.initial_num_players, self.initial_init_value, self.small_blind, self.big_blind)
+        new_env = GameEnv(self.initial_num_players, self.initial_init_value, self.small_blind, self.big_blind, self.settle_automatically)
 
         new_env.players = copy.deepcopy(self.players)
 
@@ -98,7 +102,7 @@ class GameEnv(object):
         new_env.info_sets = copy.deepcopy(self.info_sets)
         new_env.game_infoset = copy.deepcopy(self.game_infoset)
 
-        new_env.all_round_overall_value = self.all_round_overall_value
+        new_env.pot_value = self.pot_value
 
         new_env.ignore_all_async_tasks = True
 
@@ -262,22 +266,23 @@ class GameEnv(object):
         self.winner = None
 
         self.current_round = 0
-        self.current_round_min_value = self.big_blind
-        self.current_round_raise_min_value = self.big_blind
-        self.current_round_action_dict = {player_name: None for player_name in self.players.keys()}
-        self.current_round_value_dict = {player_name: 0 for player_name in self.players.keys()}
-        self.historical_round_action_list = [blind_round_action_dict]
-        self.historical_round_value_list = [blind_round_value_dict]
-        
+        self.current_round_min_value = max(small_blind_actual_bet, big_blind_actual_bet)
+        self.current_round_raise_min_value = max(small_blind_actual_bet, big_blind_actual_bet)
+        self.current_round_action_dict = {player_name: blind_round_action_dict.get(player_name, None) for player_name in self.players.keys()}
+        self.current_round_value_dict = {player_name: blind_round_value_dict.get(player_name, 0) for player_name in self.players.keys()}
+        self.historical_round_action_list = []
+        self.historical_round_value_list = []
+
+        # player_name, action, action_value, action_delta_value
         self.all_round_player_action_value_dict = dict()
-        self.all_round_player_action_value_dict[-1] = [
-            (small_bind_player_name, PlayerActions.SMALL_BLIND_RAISE, small_blind_actual_bet, self.players[small_bind_player_name].value_left),
-            (big_bind_player_name, PlayerActions.BIG_BLIND_RAISE, big_blind_actual_bet, self.players[big_bind_player_name].value_left),
+        self.all_round_player_action_value_dict[self.current_round] = [
+            (small_bind_player_name, PlayerActions.SMALL_BLIND_RAISE, small_blind_actual_bet, small_blind_actual_bet),
+            (big_bind_player_name, PlayerActions.BIG_BLIND_RAISE, big_blind_actual_bet, max(big_blind_actual_bet - small_blind_actual_bet, small_blind_actual_bet)),
         ]
 
         self.info_sets = {player_name: InfoSet(player_name, self.player_init_value_dict, self.init_value) for player_name in self.players.keys()}
 
-        self.all_round_overall_value = big_blind_actual_bet + small_blind_actual_bet
+        self.pot_value = big_blind_actual_bet + small_blind_actual_bet
 
         self.card_play_init(seed=seed, cards_dict=cards_dict)
 
@@ -298,6 +303,15 @@ class GameEnv(object):
 
         # Randomly shuffle the deck
         _deck = deck.copy()
+        # 避免cards_dict元素指定不完全时发牌重复
+        deck_idx_to_drop_list = []
+        if cards_dict is not None:
+            for cards in cards_dict.values():
+                for card in cards:
+                    deck_idx_to_drop_list.append(deck_reverse_dict[card])
+        deck_idx_to_drop_list.sort(reverse=True)
+        for deck_idx in deck_idx_to_drop_list:
+            _deck.pop(deck_idx)
         np.random.shuffle(_deck)
 
         for i, player_name in enumerate(self.players.keys()):
@@ -340,9 +354,9 @@ class GameEnv(object):
 
         acting_player_info_sets.current_round = self.current_round
 
-        acting_player_info_sets.call_min_value = self.current_round_min_value - self.current_round_value_dict[self.acting_player_name]
+        acting_player_info_sets.call_delta_min_value = self.current_round_min_value - self.current_round_value_dict[self.acting_player_name]
 
-        acting_player_info_sets.raise_min_value = self.current_round_min_value + self.current_round_raise_min_value - self.current_round_value_dict[self.acting_player_name]
+        acting_player_info_sets.raise_delta_min_value = self.current_round_min_value + self.current_round_raise_min_value - self.current_round_value_dict[self.acting_player_name]
 
         acting_player_info_sets.all_round_player_action_value_dict = deepcopy(self.all_round_player_action_value_dict)
 
@@ -399,6 +413,8 @@ class GameEnv(object):
             if player.value_left <= 0:
                 player.status = PlayerStatus.BUSTED
 
+        return winner_value_dict
+
     def step(self, action):
         if self.game_over:
             return
@@ -413,19 +429,16 @@ class GameEnv(object):
 
         if action[0] != PlayerActions.FOLD:
             action_value = action[1]
-            current_round_player_value = current_round_player_historical_value + action_value
             if self.players[self.acting_player_name].status == PlayerStatus.ONBOARD:
-                assert current_round_player_value >= self.current_round_min_value, f'Invalid bet value:{action_value}, must greater or equal than {self.current_round_min_value}'
-                if action[0] == PlayerActions.RAISE:
-                    assert current_round_player_value - self.current_round_min_value >= self.current_round_raise_min_value, f'Invalid bet value:{action_value}, must greater or equal than current_round_min_value + current_round_raise_min_value:{self.current_round_min_value + self.current_round_raise_min_value}'
-            self.current_round_raise_min_value = max(self.current_round_raise_min_value, current_round_player_value - self.current_round_min_value)
-            self.current_round_min_value = max(self.current_round_min_value, current_round_player_value)
+                assert action_value >= self.current_round_min_value, f'Invalid bet value:{action_value}, must greater or equal than {self.current_round_min_value}'
+            self.current_round_raise_min_value = max(self.current_round_raise_min_value, action_value - self.current_round_min_value)
+            self.current_round_min_value = max(self.current_round_min_value, action_value)
 
         self.current_round_action_dict[self.acting_player_name] = action[0]
-        self.current_round_value_dict[self.acting_player_name] = current_round_player_historical_value + action[1]
+        self.current_round_value_dict[self.acting_player_name] = action[1]
 
         # 用于计算reward
-        self.all_round_overall_value += action[1]
+        self.pot_value += action[2]
 
         # 用于infoset记录游戏进程
         if self.current_round in self.all_round_player_action_value_dict:
@@ -470,7 +483,10 @@ class GameEnv(object):
             if self.current_round == 3 or num_onboard_allin_player <= 1 or num_onboard_player == 0 or (is_all_player_finished_valid and num_onboard_player <= 1):
                 # game finished
                 logging.debug(f'game finished')
-                self.finish_game()
+                if self.settle_automatically:
+                    self.finish_game()
+                else:
+                    self.game_over = True
                 logging.debug([f'{player_name}:{int(player.value_left)},{player.status.name}' for player_name, player in self.players.items()])
             else:
                 # round finished
@@ -523,11 +539,9 @@ class GameEnv(object):
             for player_name in self.players.keys():
                 if player_name in action_dict and player_name in value_dict:
                     player_action = action_dict[player_name]
-                    if player_action != PlayerActions.BIG_BLIND_RAISE and player_action != PlayerActions.SMALL_BLIND_RAISE:
-                        # 盲注轮不算玩家allin
-                        player_value = value_dict[player_name]
-                        if player_action is not None and player_action != PlayerActions.FOLD and player_value < current_round_max_value:
-                            allin_player_value_list.append((player_name, player_value))
+                    player_value = value_dict[player_name]
+                    if player_action is not None and player_action != PlayerActions.FOLD and player_value < current_round_max_value:
+                        allin_player_value_list.append((player_name, player_value))
 
             spare_value_dict = value_dict.copy()
             if len(allin_player_value_list) > 0:
@@ -889,7 +903,7 @@ class GameEnv(object):
         acting_player_agent = self.players[self.acting_player_name]
         current_round_acting_player_historical_value = self.current_round_value_dict[self.acting_player_name]
         value_to_call = self.current_round_min_value - current_round_acting_player_historical_value
-        min_value_to_raise = self.current_round_min_value + self.current_round_raise_min_value - current_round_acting_player_historical_value
+        min_value_to_raise = self.current_round_min_value + self.current_round_raise_min_value
         min_value_proportion_to_raise = min_value_to_raise / acting_player_agent.value_left
         for player_action, (range_start, range_end) in ACTION_BINS_DICT:
             if player_action == PlayerActions.RAISE:
@@ -947,9 +961,9 @@ class InfoSet(object):
         # Current round
         self.current_round = None
         # Current round call min value
-        self.call_min_value = None
+        self.call_delta_min_value = None
         # Current round raise min value
-        self.raise_min_value = None
+        self.raise_delta_min_value = None
         # All moves of all players in historical rounds. It is a dict with str-->(int, int)
         self.all_round_player_action_value_dict = None
         # Current status of all players. A dict

@@ -3,7 +3,6 @@ import random
 
 import yaml
 import argparse
-import numpy as np
 
 
 def update_concurrent(target_dict, new_dict):

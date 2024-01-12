@@ -1,7 +1,7 @@
 import logging
 import time
 
-import torch
+import traceback
 import os
 from threading import Thread
 from env.env import *
@@ -395,7 +395,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
             except Empty:
                 continue
 
-        observation, info = env.reset(game_id, seed=seed)
+        observation = env.reset(game_id, seed=seed)
         logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
 
         while True:
@@ -461,7 +461,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
                 continue
 
         if game_id is not None and seed is not None:
-            observation, info = env.reset(game_id, seed=seed)
+            observation = env.reset(game_id, seed=seed)
 
             while True:
                 if interrupt.interrupt_callback():

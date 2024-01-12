@@ -8,7 +8,7 @@ class Env:
     """
     Doudizhu multi-agent wrapper
     """
-    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False):
+    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=True):
         """
         Here, we use dummy agents.
         This is because, in the orignial game, the players
@@ -22,6 +22,7 @@ class Env:
         self.winning_probability_generating_task_queue = winning_probability_generating_task_queue
         self.num_bins = num_bins
         self.ignore_all_async_tasks = ignore_all_async_tasks
+        self.settle_automatically = settle_automatically
 
         self.num_players = num_players
         assert num_players <= MAX_PLAYER_NUMBER, f'There are up to {MAX_PLAYER_NUMBER} players in the game, received {num_players}'
@@ -34,7 +35,7 @@ class Env:
 
         # Initialize the internal environment
         if game_env is None:
-            self._env = GameEnv(self.num_players, self.init_value, small_blind=self.small_blind, big_blind=self.big_blind)
+            self._env = GameEnv(self.num_players, self.init_value, small_blind=self.small_blind, big_blind=self.big_blind, settle_automatically=settle_automatically)
         else:
             self._env = game_env
 
@@ -47,15 +48,15 @@ class Env:
         self.player_value_left_to_pool_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
         self.player_value_left_to_player_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
 
-        self.call_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
-        # 以下，因为call_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
-        self.call_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
-        self.call_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        self.call_delta_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
+        # 以下，因为call_delta_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
+        self.call_delta_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        self.call_delta_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
 
-        self.raise_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
-        # 以下，因为raise_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
-        self.raise_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
-        self.raise_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        self.raise_delta_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
+        # 以下，因为raise_delta_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
+        self.raise_delta_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        self.raise_delta_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
 
         # 玩家间特征
         self.player_value_left_to_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
@@ -80,7 +81,7 @@ class Env:
 
         infoset = self._game_infoset
 
-        return self.get_obs(infoset), {}
+        return self.get_obs(infoset)
 
     # 修改经典step框架，异步计算reward
     def step(self, action):
@@ -105,15 +106,20 @@ class Env:
 
             self.reward_cal_task_set.add(task_key)
 
-        if self._game_over:
-            done = True
-            reward = self._get_final_reward()
-            logging.debug(f'reward={reward}')
-            # obs = self.get_obs(self._env.info_sets, is_last_round=True)
-            obs = None
+        if self.game_over:
+            if self.settle_automatically:
+                done = True
+                reward = self._get_final_reward()
+                logging.debug(f'reward={reward}')
+                # obs = self.get_obs(self._env.info_sets, is_last_round=True)
+                obs = None
 
-            if not self.ignore_all_async_tasks:
-                self.reward_cal_task_set.clear()
+                if not self.ignore_all_async_tasks:
+                    self.reward_cal_task_set.clear()
+            else:
+                done = True
+                reward = None
+                obs = None
         else:
             done = False
             # reward = self._get_reward(game_id, step_id, acted_player_name, self.reward_cal_task_dict)
@@ -341,7 +347,7 @@ class Env:
         return self._env.acting_player_name
 
     @property
-    def _game_over(self):
+    def game_over(self):
         """ Returns a Boolean
         """
         return self._env.game_over
@@ -427,9 +433,9 @@ class Env:
 
         game_init_value = infoset.game_init_value
         # 当前玩家本轮call最小下注价值
-        acting_player_call_min_value = infoset.call_min_value
+        acting_player_call_delta_min_value = infoset.call_delta_min_value
         # 当前玩家本轮raise最小下注价值
-        acting_player_raise_min_value = infoset.raise_min_value
+        acting_player_raise_delta_min_value = infoset.raise_delta_min_value
 
         acting_player_init_value = infoset.player_value_init_dict[infoset.player_name]
         acting_player_value_left = infoset.player_status_value_left_dict[infoset.player_name][1]
@@ -441,39 +447,39 @@ class Env:
         # 提示当前行为的局势相对性的激进/保守偏好
         player_value_left_to_player = acting_player_value_left / acting_player_init_value
         # 提示当前最小跟注行为的绝对参照风险
-        call_min_value_to_game_init_value = acting_player_call_min_value / game_init_value
+        call_delta_min_value_to_game_init_value = acting_player_call_delta_min_value / game_init_value
         # 提示当前最小跟注行为的相对局势风险
-        call_min_value_to_player_init_value = acting_player_call_min_value / acting_player_init_value
+        call_delta_min_value_to_player_init_value = acting_player_call_delta_min_value / acting_player_init_value
         # 提示当前最小跟注行为对玩家离场的风险
-        call_min_value_to_player_value_left = acting_player_call_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
+        call_delta_min_value_to_player_value_left = acting_player_call_delta_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
         # 提示当前最小加注行为的绝对参照风险
-        raise_min_value_to_game_init_value = acting_player_raise_min_value / game_init_value
+        raise_delta_min_value_to_game_init_value = acting_player_raise_delta_min_value / game_init_value
         # 提示当前最小加注行为的相对局势风险
-        raise_min_value_to_player_init_value = acting_player_raise_min_value / acting_player_init_value
+        raise_delta_min_value_to_player_init_value = acting_player_raise_delta_min_value / acting_player_init_value
         # 提示当前最小加注行为对玩家离场的风险
-        raise_min_value_to_player_value_left = acting_player_raise_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
+        raise_delta_min_value_to_player_value_left = acting_player_raise_delta_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
 
         # 分桶
         player_init_value_to_pool_bin = self.player_init_value_to_pool_cutter.cut(player_init_value_to_pool)
         player_value_left_to_pool_bin = self.player_value_left_to_pool_cutter.cut(player_value_left_to_pool)
         player_value_left_to_player_bin = self.player_value_left_to_player_cutter.cut(player_value_left_to_player)
-        call_min_value_to_game_init_value_bin = self.call_min_value_to_game_init_value_cutter.cut(call_min_value_to_game_init_value)
-        call_min_value_to_player_init_value_bin = self.call_min_value_to_player_init_value_cutter.cut(call_min_value_to_player_init_value)
-        call_min_value_to_player_value_left_bin = self.call_min_value_to_player_value_left_cutter.cut(call_min_value_to_player_value_left)
-        raise_min_value_to_game_init_value_bin = self.raise_min_value_to_game_init_value_cutter.cut(raise_min_value_to_game_init_value)
-        raise_min_value_to_player_init_value_bin = self.raise_min_value_to_player_init_value_cutter.cut(raise_min_value_to_player_init_value)
-        raise_min_value_to_player_value_left_bin = self.raise_min_value_to_player_value_left_cutter.cut(raise_min_value_to_player_value_left)
+        call_delta_min_value_to_game_init_value_bin = self.call_delta_min_value_to_game_init_value_cutter.cut(call_delta_min_value_to_game_init_value)
+        call_delta_min_value_to_player_init_value_bin = self.call_delta_min_value_to_player_init_value_cutter.cut(call_delta_min_value_to_player_init_value)
+        call_delta_min_value_to_player_value_left_bin = self.call_delta_min_value_to_player_value_left_cutter.cut(call_delta_min_value_to_player_value_left)
+        raise_delta_min_value_to_game_init_value_bin = self.raise_delta_min_value_to_game_init_value_cutter.cut(raise_delta_min_value_to_game_init_value)
+        raise_delta_min_value_to_player_init_value_bin = self.raise_delta_min_value_to_player_init_value_cutter.cut(raise_delta_min_value_to_player_init_value)
+        raise_delta_min_value_to_player_value_left_bin = self.raise_delta_min_value_to_player_value_left_cutter.cut(raise_delta_min_value_to_player_value_left)
 
         acting_player_status = (
             player_init_value_to_pool_bin,
             player_value_left_to_pool_bin,
             player_value_left_to_player_bin,
-            call_min_value_to_game_init_value_bin,
-            call_min_value_to_player_init_value_bin,
-            call_min_value_to_player_value_left_bin,
-            raise_min_value_to_game_init_value_bin,
-            raise_min_value_to_player_init_value_bin,
-            raise_min_value_to_player_value_left_bin
+            call_delta_min_value_to_game_init_value_bin,
+            call_delta_min_value_to_player_init_value_bin,
+            call_delta_min_value_to_player_value_left_bin,
+            raise_delta_min_value_to_game_init_value_bin,
+            raise_delta_min_value_to_player_init_value_bin,
+            raise_delta_min_value_to_player_value_left_bin
         )
 
         for current_player_name, player_init_value in infoset.player_value_init_dict.items():

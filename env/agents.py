@@ -31,11 +31,14 @@ class DummyAgent(object):
         if action[1] % self.small_bind != 0:
             raise ValueError(f'Action value is not a multiple of small bind ({self.small_bind}), which is {action[1]}')
 
-        if action[0] == PlayerActions.RAISE and current_round_min_value - raised_value >= action[1]:
-            raise ValueError(f'Try to raise {action[1]} but need to be at least {current_round_min_value - raised_value}')
+        if action[0] in (PlayerActions.RAISE, PlayerActions.CHECK_CALL):
+            assert 0 <= action[1] - raised_value <= self.value_left, ValueError(f'Try to raise a delta {action[1] - raised_value} but need to be no less than 0 and no more than {self.value_left}')
 
-        if action[0] == PlayerActions.CHECK_CALL and current_round_min_value - raised_value < action[1]:
-            raise ValueError(f'Try to call {action[1]} but need to be no more than {current_round_min_value - raised_value}')
+            if action[0] == PlayerActions.RAISE and current_round_min_value + current_round_raise_min_value > action[1]:
+                raise ValueError(f'Try to raise {action[1]} but need to be at least {current_round_min_value + current_round_raise_min_value}')
+
+            if action[0] == PlayerActions.CHECK_CALL and current_round_min_value > action[1]:
+                raise ValueError(f'Try to call {action[1]} but need to be no more than {current_round_min_value}')
 
     def act(self, action, current_round_min_value, current_round_raise_min_value, raised_value):
         """
@@ -43,28 +46,33 @@ class DummyAgent(object):
         """
         self.validate_action(action, current_round_min_value, current_round_raise_min_value, raised_value)
 
-        self.set_action(action)
+        self.set_action(action, raised_value)
 
-        return [*self.action, self.value_left]
+        return self.action
 
-    def set_action(self, action):
+    def set_action(self, action, raised_value):
         actual_action, actual_action_value = action
+        # 此处实际执行的action算增量
+        actual_delta_action_value = max(actual_action_value - raised_value, 0)
         if actual_action == PlayerActions.CHECK_CALL:
             # call but no enough value left, treat as all in
-            if actual_action_value >= self.value_left:
-                actual_action_value = self.value_left
+            if actual_delta_action_value >= self.value_left:
+                actual_delta_action_value = self.value_left
+                actual_action_value = actual_delta_action_value + raised_value
                 self.status = PlayerStatus.ALLIN
         elif actual_action == PlayerActions.RAISE:
             # raise but no enough value left, treat as all in
-            if actual_action_value >= self.value_left:
-                actual_action_value = self.value_left
+            if actual_delta_action_value >= self.value_left:
+                actual_delta_action_value = self.value_left
+                actual_action_value = actual_delta_action_value + raised_value
                 self.status = PlayerStatus.ALLIN
         elif actual_action == PlayerActions.FOLD:
+            actual_action_value = raised_value
             self.status = PlayerStatus.FOLDED
 
-        self.action = (actual_action, actual_action_value)
-        self.value_left -= actual_action_value
-        self.value_bet += actual_action_value
+        self.action = (actual_action, actual_action_value, actual_delta_action_value)
+        self.value_left -= actual_delta_action_value
+        self.value_bet += actual_delta_action_value
 
     def reset_action(self):
         self.action = None
