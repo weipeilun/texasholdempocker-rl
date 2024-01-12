@@ -914,7 +914,7 @@ class GameEnv(object):
                         action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, acting_player_agent.value_left + current_round_acting_player_historical_value))
                     else:
                         action_value_or_ranges_list.append((PlayerActions.RAISE, acting_player_agent.value_left + current_round_acting_player_historical_value))
-                if min_value_proportion_to_game_start > max_value_proportion_to_game_start or min_value_proportion_to_game_start > range_end or max_value_proportion_to_game_start < range_start:
+                elif min_value_proportion_to_game_start > max_value_proportion_to_game_start or min_value_proportion_to_game_start > range_end or max_value_proportion_to_game_start < range_start:
                     action_mask_list.append(True)
                     action_value_or_ranges_list.append(None)
                 else:
