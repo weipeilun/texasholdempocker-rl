@@ -902,37 +902,37 @@ class GameEnv(object):
         action_value_or_ranges_list = []
         acting_player_agent = self.players[self.acting_player_name]
         current_round_acting_player_historical_value = self.current_round_value_dict[self.acting_player_name]
-        value_to_call = self.current_round_min_value - current_round_acting_player_historical_value
+        delta_value_to_call = self.current_round_min_value - current_round_acting_player_historical_value
         min_value_to_raise = self.current_round_min_value + self.current_round_raise_min_value
-        min_value_proportion_to_raise = min_value_to_raise / acting_player_agent.value_left
+        min_value_proportion_to_game_start = min_value_to_raise / acting_player_agent.value_game_start
         for player_action, (range_start, range_end) in ACTION_BINS_DICT:
             if player_action == PlayerActions.RAISE:
                 if range_start == 1.:
                     action_mask_list.append(False)
-                    if acting_player_agent.value_left <= value_to_call:
+                    if acting_player_agent.value_left <= delta_value_to_call:
                         action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, acting_player_agent.value_left))
                     else:
                         action_value_or_ranges_list.append((PlayerActions.RAISE, acting_player_agent.value_left))
-                elif min_value_proportion_to_raise < range_start:
+                elif min_value_proportion_to_game_start < range_start:
                     action_mask_list.append(False)
                     action_value_or_ranges_list.append((PlayerActions.RAISE, (range_start, range_end)))
-                elif min_value_proportion_to_raise <= range_end:
+                elif min_value_proportion_to_game_start <= range_end:
                     action_mask_list.append(False)
-                    action_value_or_ranges_list.append((PlayerActions.RAISE, (min_value_proportion_to_raise, range_end)))
+                    action_value_or_ranges_list.append((PlayerActions.RAISE, (min_value_proportion_to_game_start, range_end)))
                 else:
                     action_mask_list.append(True)
                     action_value_or_ranges_list.append(None)
             elif player_action == PlayerActions.CHECK_CALL:
-                if value_to_call < acting_player_agent.value_left:
+                if delta_value_to_call < acting_player_agent.value_left:
                     action_mask_list.append(False)
-                    action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, value_to_call))
+                    action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, delta_value_to_call))
                 else:
                     action_mask_list.append(True)
                     action_value_or_ranges_list.append(None)
             else:
                 action_mask_list.append(False)
                 action_value_or_ranges_list.append((PlayerActions.FOLD, 0))
-        return action_mask_list, action_value_or_ranges_list, acting_player_agent.value_left
+        return action_mask_list, action_value_or_ranges_list, acting_player_agent.value_game_start
 
 class InfoSet(object):
     """

@@ -145,7 +145,7 @@ class MCTS:
         return action_probs
 
     def get_action(self, action_probs, env, use_argmax=False):
-        action_mask_list, action_value_or_ranges_list, acting_player_value_left = env.get_valid_action_info()
+        action_mask_list, action_value_or_ranges_list, acting_player_value_game_start = env.get_valid_action_info()
         # 目前get_action都是跟在simulate之后的，认为此处的归一化是多余步骤，但为get_action方法独立的正确性仍然保留归一化
         valid_action_probs = np.copy(action_probs)
         valid_action_probs[action_mask_list] = 0
@@ -154,7 +154,7 @@ class MCTS:
 
         if use_argmax:
             action_idx = int(np.argmax(valid_action_probs).tolist())
-            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left), action_mask_int_list
+            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_game_start), action_mask_int_list
         else:
             sum_probs = sum(valid_action_probs)
             valid_action_probs /= sum_probs
@@ -164,7 +164,7 @@ class MCTS:
             for i, prob in enumerate(valid_action_probs):
                 cumulative_prob += prob
                 if random_num <= cumulative_prob:
-                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left), action_mask_int_list
+                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_game_start), action_mask_int_list
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def get_player_action_reward(self, reward, acting_player_name):
@@ -174,7 +174,7 @@ class MCTS:
         return reward_value
 
     def _choose_action(self, p_array, env, num_simulation=None, do_log=False):
-        action_mask_list, action_value_or_ranges_list, acting_player_value_left = env.get_valid_action_info()
+        action_mask_list, action_value_or_ranges_list, acting_player_value_game_start = env.get_valid_action_info()
         num_valid_actions = len(action_mask_list) - sum(action_mask_list)
         if num_simulation is not None and num_simulation < (self.init_root_n_simulation * num_valid_actions):
             # init root node
@@ -228,10 +228,10 @@ class MCTS:
                 if num_simulation is not None and num_simulation == self.n_simulation - 1:
                     self.file_writer_final_valid_r.write(','.join('%.3f' % i for i in valid_R_array) + '\n')
 
-        action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left)
+        action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_game_start)
         return action_bin, (action, action_value)
 
-    def map_model_action_to_actual_action_and_value(self, action_bin, action_value_or_ranges_list, acting_player_value_left):
+    def map_model_action_to_actual_action_and_value(self, action_bin, action_value_or_ranges_list, acting_player_value_game_start):
         assert action_value_or_ranges_list[action_bin] is not None, ValueError(f'None action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
         action, action_value_or_range = action_value_or_ranges_list[action_bin]
         if isinstance(action_value_or_range, int):
@@ -240,7 +240,7 @@ class MCTS:
             # 重要：把随机切分的下注比例映射到small_blind的整数倍，int型
             range_start, range_end = action_value_or_range
             choice_proportion = range_start + (range_end - range_start) * random.random()
-            value_choice = acting_player_value_left * choice_proportion
+            value_choice = acting_player_value_game_start * choice_proportion
             multiple_of_small_bind = round(value_choice / self.small_blind)
             action_value = multiple_of_small_bind * self.small_blind
             return action, action_value
