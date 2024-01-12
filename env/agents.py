@@ -22,7 +22,7 @@ class DummyAgent(object):
         self.value_win = 0
         self.game_result = GamePlayerResult.DEFAULT    # win/even/lose
 
-    def validate_action(self, action, current_round_min_value, current_round_raise_min_value, raised_value):
+    def validate_action(self, action, current_round_min_value, raised_value):
         assert action is not None, ValueError(f"Critical: action can not be None.")
         assert self.status == PlayerStatus.ONBOARD, ValueError(f'Only onboard player can take action, current player status:{self.status}')
 
@@ -34,17 +34,17 @@ class DummyAgent(object):
         if action[0] in (PlayerActions.RAISE, PlayerActions.CHECK_CALL):
             assert 0 <= action[1] - raised_value <= self.value_left, ValueError(f'Try to raise a delta {action[1] - raised_value} but need to be no less than 0 and no more than {self.value_left}')
 
-            if action[0] == PlayerActions.RAISE and current_round_min_value + current_round_raise_min_value > action[1]:
-                raise ValueError(f'Try to raise {action[1]} but need to be at least {current_round_min_value + current_round_raise_min_value}')
+            if action[0] == PlayerActions.RAISE and action[1] <= current_round_min_value:
+                raise ValueError(f'Try to raise {action[1]} but need to be greater than {current_round_min_value}')
 
-            if action[0] == PlayerActions.CHECK_CALL and current_round_min_value > action[1]:
-                raise ValueError(f'Try to call {action[1]} but need to be at least {current_round_min_value}')
+            if action[0] == PlayerActions.CHECK_CALL and action[1] > current_round_min_value:
+                raise ValueError(f'Try to call {action[1]} but need to be no more than {current_round_min_value}')
 
-    def act(self, action, current_round_min_value, current_round_raise_min_value, raised_value):
+    def act(self, action, current_round_min_value, raised_value):
         """
         Simply return the action that is set previously.
         """
-        self.validate_action(action, current_round_min_value, current_round_raise_min_value, raised_value)
+        self.validate_action(action, current_round_min_value, raised_value)
 
         self.set_action(action, raised_value)
 

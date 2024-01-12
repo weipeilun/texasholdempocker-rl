@@ -423,7 +423,7 @@ class GameEnv(object):
         current_round_player_historical_value = self.current_round_value_dict[self.acting_player_name]
 
         current_round = self.current_round
-        action = self.players[self.acting_player_name].act(action, self.current_round_min_value, self.current_round_raise_min_value, current_round_player_historical_value)
+        action = self.players[self.acting_player_name].act(action, self.current_round_min_value, current_round_player_historical_value)
 
         logging.debug(f'player:{self.acting_player_name} took action:({action[0].name}, {action[1]})')
 
