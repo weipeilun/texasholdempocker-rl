@@ -910,9 +910,9 @@ class GameEnv(object):
                 if range_start == 1.:
                     action_mask_list.append(False)
                     if acting_player_agent.value_left <= delta_value_to_call:
-                        action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, acting_player_agent.value_left))
+                        action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, acting_player_agent.value_left + current_round_acting_player_historical_value))
                     else:
-                        action_value_or_ranges_list.append((PlayerActions.RAISE, acting_player_agent.value_left))
+                        action_value_or_ranges_list.append((PlayerActions.RAISE, acting_player_agent.value_left + current_round_acting_player_historical_value))
                 elif min_value_proportion_to_game_start < range_start:
                     action_mask_list.append(False)
                     action_value_or_ranges_list.append((PlayerActions.RAISE, (range_start, range_end)))
@@ -925,7 +925,7 @@ class GameEnv(object):
             elif player_action == PlayerActions.CHECK_CALL:
                 if delta_value_to_call < acting_player_agent.value_left:
                     action_mask_list.append(False)
-                    action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, delta_value_to_call))
+                    action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, self.current_round_min_value))
                 else:
                     action_mask_list.append(True)
                     action_value_or_ranges_list.append(None)

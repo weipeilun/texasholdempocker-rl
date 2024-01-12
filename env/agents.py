@@ -38,7 +38,7 @@ class DummyAgent(object):
                 raise ValueError(f'Try to raise {action[1]} but need to be at least {current_round_min_value + current_round_raise_min_value}')
 
             if action[0] == PlayerActions.CHECK_CALL and current_round_min_value > action[1]:
-                raise ValueError(f'Try to call {action[1]} but need to be no more than {current_round_min_value}')
+                raise ValueError(f'Try to call {action[1]} but need to be at least {current_round_min_value}')
 
     def act(self, action, current_round_min_value, current_round_raise_min_value, raised_value):
         """
