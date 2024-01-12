@@ -7,8 +7,7 @@ from torch.multiprocessing import Manager, Process, Condition
 
 if __name__ == '__main__':
     log_level = logging.INFO
-    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-                        datefmt='%Y-%m-%d,%H:%M:%S')
+    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
     logger.setLevel(log_level)
 

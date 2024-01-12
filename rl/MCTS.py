@@ -2,10 +2,9 @@ import math
 import random
 import logging
 import numpy as np
-import os
+import torch
 from tools import interrupt
 from queue import Empty
-from env.constants import *
 
 
 class MCTS:
@@ -56,6 +55,26 @@ class MCTS:
         self.children_n_array = None
         self.children_q_array = None
 
+    def new_child(self):
+        return MCTS(self.n_actions,
+                    is_root=False,
+                    predict_in_queue=self.predict_in_queue,
+                    predict_out_queue=self.predict_out_queue,
+                    apply_dirichlet_noice=False,
+                    workflow_lock=self.workflow_lock,
+                    workflow_signal_queue=self.workflow_signal_queue,
+                    workflow_ack_signal_queue=self.workflow_ack_signal_queue,
+                    small_blind=self.small_blind,
+                    n_simulation=self.n_simulation,
+                    c_puct=self.c_puct,
+                    tau=self.tau,
+                    dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
+                    model_Q_epsilon=self.model_Q_epsilon,
+                    init_root_n_simulation=self.init_root_n_simulation,
+                    log_to_file=self.log_to_file,
+                    pid=self.pid,
+                    thread_name=self.thread_name)
+
     def simulate(self, observation, env):
         self.children = [None] * self.n_actions
         self.children_w_array = np.zeros(self.n_actions)
@@ -92,24 +111,7 @@ class MCTS:
             observation_, reward_dict, terminated, info = new_env.step(action)
             if not terminated:
                 if self.children[action_bin] is None:
-                    self.children[action_bin] = MCTS(self.n_actions,
-                                                     is_root=False,
-                                                     predict_in_queue=self.predict_in_queue,
-                                                     predict_out_queue=self.predict_out_queue,
-                                                     apply_dirichlet_noice=False,
-                                                     workflow_lock=self.workflow_lock,
-                                                     workflow_signal_queue=self.workflow_signal_queue,
-                                                     workflow_ack_signal_queue=self.workflow_ack_signal_queue,
-                                                     small_blind=self.small_blind,
-                                                     n_simulation=self.n_simulation,
-                                                     c_puct=self.c_puct,
-                                                     tau=self.tau,
-                                                     dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
-                                                     model_Q_epsilon=self.model_Q_epsilon,
-                                                     init_root_n_simulation=self.init_root_n_simulation,
-                                                     log_to_file=self.log_to_file,
-                                                     pid=self.pid,
-                                                     thread_name=self.thread_name)
+                    self.children[action_bin] = self.new_child()
                 reward_dict = self.children[action_bin].expand(observation_, new_env)
             player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
@@ -145,7 +147,7 @@ class MCTS:
         return action_probs
 
     def get_action(self, action_probs, env, use_argmax=False):
-        action_mask_list, action_value_or_ranges_list, acting_player_value_game_start = env.get_valid_action_info()
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = env.get_valid_action_info()
         # 目前get_action都是跟在simulate之后的，认为此处的归一化是多余步骤，但为get_action方法独立的正确性仍然保留归一化
         valid_action_probs = np.copy(action_probs)
         valid_action_probs[action_mask_list] = 0
@@ -154,7 +156,7 @@ class MCTS:
 
         if use_argmax:
             action_idx = int(np.argmax(valid_action_probs).tolist())
-            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_game_start), action_mask_int_list
+            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value), action_mask_int_list
         else:
             sum_probs = sum(valid_action_probs)
             valid_action_probs /= sum_probs
@@ -164,7 +166,7 @@ class MCTS:
             for i, prob in enumerate(valid_action_probs):
                 cumulative_prob += prob
                 if random_num <= cumulative_prob:
-                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_game_start), action_mask_int_list
+                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value), action_mask_int_list
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def get_player_action_reward(self, reward, acting_player_name):
@@ -174,7 +176,7 @@ class MCTS:
         return reward_value
 
     def _choose_action(self, p_array, env, num_simulation=None, do_log=False):
-        action_mask_list, action_value_or_ranges_list, acting_player_value_game_start = env.get_valid_action_info()
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = env.get_valid_action_info()
         num_valid_actions = len(action_mask_list) - sum(action_mask_list)
         if num_simulation is not None and num_simulation < (self.init_root_n_simulation * num_valid_actions):
             # init root node
@@ -228,10 +230,10 @@ class MCTS:
                 if num_simulation is not None and num_simulation == self.n_simulation - 1:
                     self.file_writer_final_valid_r.write(','.join('%.3f' % i for i in valid_R_array) + '\n')
 
-        action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_game_start)
+        action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value)
         return action_bin, (action, action_value)
 
-    def map_model_action_to_actual_action_and_value(self, action_bin, action_value_or_ranges_list, acting_player_value_game_start):
+    def map_model_action_to_actual_action_and_value(self, action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value):
         assert action_value_or_ranges_list[action_bin] is not None, ValueError(f'None action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
         action, action_value_or_range = action_value_or_ranges_list[action_bin]
         if isinstance(action_value_or_range, int):
@@ -240,9 +242,10 @@ class MCTS:
             # 重要：把随机切分的下注比例映射到small_blind的整数倍，int型
             range_start, range_end = action_value_or_range
             choice_proportion = range_start + (range_end - range_start) * random.random()
-            value_choice = acting_player_value_game_start * choice_proportion
-            multiple_of_small_bind = round(value_choice / self.small_blind)
-            action_value = multiple_of_small_bind * self.small_blind
+            delta_value_choice = acting_player_value_left * choice_proportion
+            multiple_of_small_bind = round(delta_value_choice / self.small_blind)
+            delta_action_value = multiple_of_small_bind * self.small_blind
+            action_value = current_round_acting_player_historical_value + delta_action_value
             return action, action_value
         else:
             raise ValueError(f'Error action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
@@ -261,24 +264,7 @@ class MCTS:
         observation_, reward_dict, terminated, info = env.step(action)
         if not terminated:
             if self.children[action_bin] is None:
-                self.children[action_bin] = MCTS(self.n_actions,
-                                                 is_root=False,
-                                                 predict_in_queue=self.predict_in_queue,
-                                                 predict_out_queue=self.predict_out_queue,
-                                                 apply_dirichlet_noice=False,
-                                                 workflow_lock=self.workflow_lock,
-                                                 workflow_signal_queue=self.workflow_signal_queue,
-                                                 workflow_ack_signal_queue=self.workflow_ack_signal_queue,
-                                                 small_blind = self.small_blind,
-                                                 n_simulation=self.n_simulation,
-                                                 c_puct=self.c_puct,
-                                                 tau=self.tau,
-                                                 dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
-                                                 model_Q_epsilon=self.model_Q_epsilon,
-                                                 init_root_n_simulation=self.init_root_n_simulation,
-                                                 log_to_file=self.log_to_file,
-                                                 pid=self.pid,
-                                                 thread_name=self.thread_name)
+                self.children[action_bin] = self.new_child()
             reward_dict = self.children[action_bin].expand(observation_, env)
         player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
@@ -315,4 +301,66 @@ class MCTS:
                 break
             except Empty:
                 continue
+        return action_prob, action_Qs, winning_prob
+
+
+class SingleThreadMCTS(MCTS):
+    def __init__(self, n_actions, is_root, apply_dirichlet_noice, small_blind, model, n_simulation=2000, c_puct=1.,
+                 tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False):
+        self.n_actions = n_actions
+        self.is_root = is_root
+        self.apply_dirichlet_noice = apply_dirichlet_noice
+        self.small_blind = small_blind
+        self.model = model
+        self.n_simulation = n_simulation
+        self.c_puct = c_puct  # 模型预测的高值大概率是更好的，要更多的探索。这是模型的p值到env的Q值的乘数，注意将U和Q保持在相同数量级上。todo：动态调整c_puct
+        self.tau = tau
+        self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
+        self.model_Q_epsilon = model_Q_epsilon  # 用来平衡模型的价值和env的价值
+        self.log_to_file = log_to_file
+
+        super().__init__(n_actions=self.n_actions,
+                         is_root=self.is_root,
+                         predict_in_queue=None,
+                         predict_out_queue=None,
+                         apply_dirichlet_noice=self.apply_dirichlet_noice,
+                         workflow_lock=None,
+                         workflow_signal_queue=None,
+                         workflow_ack_signal_queue=None,
+                         small_blind=self.small_blind,
+                         n_simulation=self.n_simulation,
+                         c_puct=self.c_puct,
+                         tau=self.tau,
+                         dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
+                         model_Q_epsilon=self.model_Q_epsilon,
+                         init_root_n_simulation=init_root_n_simulation,
+                         log_to_file=self.log_to_file,
+                         pid=None,
+                         thread_name=None
+                         )
+
+    def new_child(self):
+        return SingleThreadMCTS(n_actions=self.n_actions,
+                                is_root=self.is_root,
+                                apply_dirichlet_noice=self.apply_dirichlet_noice,
+                                small_blind=self.small_blind,
+                                model=self.model,
+                                n_simulation=self.n_simulation,
+                                c_puct=self.c_puct,
+                                tau=self.tau,
+                                dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
+                                model_Q_epsilon=self.model_Q_epsilon,
+                                log_to_file=self.log_to_file,
+                                )
+
+    def predict(self, observation):
+        # 单线程预测
+        with torch.no_grad():
+            observation_array = np.array([observation])
+            observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.model.device, requires_grad=False)
+            action_probs_logits_tensor, action_Q_tensor, winning_prob_tensor = self.model(observation_tensor)
+            action_probs_tensor = torch.softmax(action_probs_logits_tensor, dim=1)
+            action_prob = action_probs_tensor.cpu().numpy()[0]
+            action_Qs = action_Q_tensor.cpu().numpy()[0]
+            winning_prob = winning_prob_tensor.cpu().numpy()[0]
         return action_prob, action_Qs, winning_prob

@@ -128,6 +128,7 @@ class Env:
         return obs, reward, done, info
 
     def new_random(self):
+        # new_random只会在MCTS模拟中用到，所以设置settle_automatically为True
         return Env(winning_probability_generating_task_queue=None,
                    num_bins=self.num_bins,
                    num_players=self.num_players,
@@ -135,7 +136,8 @@ class Env:
                    small_blind=self.small_blind,
                    big_blind=self.big_blind,
                    game_env=self._env.new_random(),
-                   ignore_all_async_tasks=True)
+                   ignore_all_async_tasks=True,
+                   settle_automatically=True)
 
     def close(self):
         pass

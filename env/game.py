@@ -73,7 +73,8 @@ class GameEnv(object):
         self.ignore_all_async_tasks = False
 
     def new_random(self):
-        new_env = GameEnv(self.initial_num_players, self.initial_init_value, self.small_blind, self.big_blind, self.settle_automatically)
+        # new_random只会在MCTS模拟中用到，所以设置settle_automatically为True
+        new_env = GameEnv(self.initial_num_players, self.initial_init_value, self.small_blind, self.big_blind, settle_automatically=True)
 
         new_env.players = copy.deepcopy(self.players)
 
@@ -903,9 +904,8 @@ class GameEnv(object):
         acting_player_agent = self.players[self.acting_player_name]
         current_round_acting_player_historical_value = self.current_round_value_dict[self.acting_player_name]
         delta_value_to_call = self.current_round_min_value - current_round_acting_player_historical_value
-        min_value_to_raise = self.current_round_min_value + self.current_round_raise_min_value
-        min_value_proportion_to_game_start = min_value_to_raise / acting_player_agent.value_game_start
-        max_value_proportion_to_game_start = acting_player_agent.value_left / acting_player_agent.value_game_start
+        delta_min_value_to_raise = self.current_round_min_value + self.current_round_raise_min_value - current_round_acting_player_historical_value
+        delta_min_value_proportion_to_raise = delta_min_value_to_raise / acting_player_agent.value_left
         for player_action, (range_start, range_end) in ACTION_BINS_DICT:
             if player_action == PlayerActions.RAISE:
                 if range_start == 1.:
@@ -914,14 +914,15 @@ class GameEnv(object):
                         action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, acting_player_agent.value_left + current_round_acting_player_historical_value))
                     else:
                         action_value_or_ranges_list.append((PlayerActions.RAISE, acting_player_agent.value_left + current_round_acting_player_historical_value))
-                elif min_value_proportion_to_game_start > max_value_proportion_to_game_start or min_value_proportion_to_game_start > range_end or max_value_proportion_to_game_start < range_start:
+                elif delta_min_value_proportion_to_raise < range_start:
+                    action_mask_list.append(False)
+                    action_value_or_ranges_list.append((PlayerActions.RAISE, (range_start, range_end)))
+                elif delta_min_value_proportion_to_raise <= range_end:
+                    action_mask_list.append(False)
+                    action_value_or_ranges_list.append((PlayerActions.RAISE, (delta_min_value_proportion_to_raise, range_end)))
+                else:
                     action_mask_list.append(True)
                     action_value_or_ranges_list.append(None)
-                else:
-                    action_mask_list.append(False)
-                    actual_range_start = min_value_proportion_to_game_start if min_value_proportion_to_game_start > range_start else max_value_proportion_to_game_start if max_value_proportion_to_game_start < range_end else range_start
-                    actual_range_end = max_value_proportion_to_game_start if max_value_proportion_to_game_start < range_end else min_value_proportion_to_game_start if min_value_proportion_to_game_start > range_start else range_end
-                    action_value_or_ranges_list.append((PlayerActions.RAISE, (actual_range_start, actual_range_end)))
             elif player_action == PlayerActions.CHECK_CALL:
                 if delta_value_to_call < acting_player_agent.value_left:
                     action_mask_list.append(False)
@@ -932,7 +933,7 @@ class GameEnv(object):
             else:
                 action_mask_list.append(False)
                 action_value_or_ranges_list.append((PlayerActions.FOLD, 0))
-        return action_mask_list, action_value_or_ranges_list, acting_player_agent.value_game_start
+        return action_mask_list, action_value_or_ranges_list, acting_player_agent.value_left, current_round_acting_player_historical_value
 
 class InfoSet(object):
     """
