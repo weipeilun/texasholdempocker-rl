@@ -27,7 +27,7 @@ num_mcts_simulation_per_step: 800
 mcts_c_puct: 10
 mcts_tau: 1
 mcts_dirichlet_noice_epsilon: 0.3
-mcts_model_Q_epsilon: 0.01  # 当模型更有效后，适当调大这个值
+mcts_model_Q_epsilon: 0.3  # 当模型更有效后，适当调大这个值
 mcts_log_to_file: False
 
 # model params
