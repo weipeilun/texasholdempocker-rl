@@ -16,6 +16,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
         # MCTS依赖ENV做模拟，在此必须初始化env并在每一步中做状态校验
         self.env = None
         self.player_name = None
+        self.player_id = None
         self.params = parse_params()[1]
         # 相同的player在declare_action之后会马上收到一个receive_game_update_message，将其忽略
         self.has_just_taken_action = False
@@ -53,7 +54,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
                                 c_puct=self.mcts_c_puct,
                                 tau=0,
                                 model_Q_epsilon=self.mcts_model_Q_epsilon,
-                                log_to_file=False)
+                                pid=self.player_id)
         action_probs, action_Qs = mcts.simulate(observation=self.observation, env=self.env)
         action, action_mask_idx = mcts.get_action(action_probs, env=self.env, use_argmax=True)
 
@@ -68,6 +69,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
         for seat in game_info['seats']:
             if seat['uuid'] == self.uuid:
                 self.player_name = seat['name']
+                self.player_id = GET_PLAYER_ID_BY_NAME(self.player_name)
             self.uuid_player_name_dict[seat['uuid']] = seat['name']
 
         if self.env is None:

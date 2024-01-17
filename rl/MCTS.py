@@ -34,7 +34,7 @@ class MCTS:
         self.file_writer_n_term = None
         self.file_writer_choice = None
         # 最后一步的R很重要，要拉倒很接近的数值上才能说明整个MCTS是有效的。因此强制输出最后一步的R到日志。
-        self.file_writer_final_valid_r = None
+        self.file_writer_final_status = None
 
         self.children = None
 
@@ -81,7 +81,7 @@ class MCTS:
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
 
-        self.file_writer_final_valid_r = open("log/final_valid_r.csv", "a", encoding='UTF-8')
+        self.file_writer_final_status = open("log/final_valid_r.csv", "a", encoding='UTF-8')
         if self.log_to_file and self.pid == 0:
             self.file_writer_n = open(f"log/n.csv", "w", encoding='UTF-8')
             self.file_writer_q = open(f"log/q.csv", "w", encoding='UTF-8')
@@ -95,6 +95,7 @@ class MCTS:
         if self.is_root and self.apply_dirichlet_noice:
             dirichlet_noise = np.random.dirichlet(action_prob)
             action_prob = (1 - self.dirichlet_noice_epsilon) * action_prob + self.dirichlet_noice_epsilon * dirichlet_noise
+        self.file_writer_final_status.write(','.join('%.3f' % i for i in action_prob) + '\n')
 
         for i in range(self.n_simulation):
             if interrupt.interrupt_callback():
@@ -124,7 +125,7 @@ class MCTS:
             if self.file_writer_q is not None:
                 self.file_writer_q.write(','.join('%.3f' % i for i in self.children_q_array) + '\n')
 
-        self.file_writer_final_valid_r.close()
+        self.file_writer_final_status.close()
         if self.log_to_file and self.pid == 0:
             self.file_writer_n.close()
             self.file_writer_q.close()
@@ -228,7 +229,9 @@ class MCTS:
                 
                 # force log to file
                 if num_simulation is not None and num_simulation == self.n_simulation - 1:
-                    self.file_writer_final_valid_r.write(','.join('%.3f' % i for i in valid_R_array) + '\n')
+                    self.file_writer_final_status.write(','.join('%.3f' % i for i in U_array) + '\n')
+                    self.file_writer_final_status.write(','.join('%.3f' % i for i in valid_R_array) + '\n')
+                    self.file_writer_final_status.write(','.join('%d' % i for i in self.children_n_array) + '\n\n')
 
         action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value)
         return action_bin, (action, action_value)
@@ -306,7 +309,7 @@ class MCTS:
 
 class SingleThreadMCTS(MCTS):
     def __init__(self, n_actions, is_root, apply_dirichlet_noice, small_blind, model, n_simulation=2000, c_puct=1.,
-                 tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False):
+                 tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, pid=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.apply_dirichlet_noice = apply_dirichlet_noice
@@ -317,7 +320,7 @@ class SingleThreadMCTS(MCTS):
         self.tau = tau
         self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
         self.model_Q_epsilon = model_Q_epsilon  # 用来平衡模型的价值和env的价值
-        self.log_to_file = log_to_file
+        self.pid = pid
 
         super().__init__(n_actions=self.n_actions,
                          is_root=self.is_root,
@@ -334,8 +337,8 @@ class SingleThreadMCTS(MCTS):
                          dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                          model_Q_epsilon=self.model_Q_epsilon,
                          init_root_n_simulation=init_root_n_simulation,
-                         log_to_file=self.log_to_file,
-                         pid=None,
+                         log_to_file=True,
+                         pid=self.pid,
                          thread_name=None
                          )
 
@@ -350,7 +353,7 @@ class SingleThreadMCTS(MCTS):
                                 tau=self.tau,
                                 dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                                 model_Q_epsilon=self.model_Q_epsilon,
-                                log_to_file=self.log_to_file,
+                                pid=self.pid,
                                 )
 
     def predict(self, observation):
