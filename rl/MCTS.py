@@ -81,7 +81,7 @@ class MCTS:
         self.children_n_array = np.zeros(self.n_actions)
         self.children_q_array = np.zeros(self.n_actions)
 
-        self.file_writer_final_status = open("log/final_valid_r.csv", "a", encoding='UTF-8')
+        self.file_writer_final_status = open("log/final_status.csv", "a", encoding='UTF-8')
         if self.log_to_file and self.pid == 0:
             self.file_writer_n = open(f"log/n.csv", "w", encoding='UTF-8')
             self.file_writer_q = open(f"log/q.csv", "w", encoding='UTF-8')
