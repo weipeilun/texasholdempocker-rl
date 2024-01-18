@@ -309,7 +309,7 @@ class MCTS:
 
 class SingleThreadMCTS(MCTS):
     def __init__(self, n_actions, is_root, apply_dirichlet_noice, small_blind, model, n_simulation=2000, c_puct=1.,
-                 tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, pid=None):
+                 tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False, pid=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.apply_dirichlet_noice = apply_dirichlet_noice
@@ -320,6 +320,7 @@ class SingleThreadMCTS(MCTS):
         self.tau = tau
         self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
         self.model_Q_epsilon = model_Q_epsilon  # 用来平衡模型的价值和env的价值
+        self.log_to_file = log_to_file  # 用来平衡模型的价值和env的价值
         self.pid = pid
 
         super().__init__(n_actions=self.n_actions,
@@ -337,7 +338,7 @@ class SingleThreadMCTS(MCTS):
                          dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                          model_Q_epsilon=self.model_Q_epsilon,
                          init_root_n_simulation=init_root_n_simulation,
-                         log_to_file=True,
+                         log_to_file=log_to_file,
                          pid=self.pid,
                          thread_name=None
                          )
@@ -353,6 +354,7 @@ class SingleThreadMCTS(MCTS):
                                 tau=self.tau,
                                 dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                                 model_Q_epsilon=self.model_Q_epsilon,
+                                log_to_file=self.log_to_file,
                                 pid=self.pid,
                                 )
 

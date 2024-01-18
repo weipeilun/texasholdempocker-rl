@@ -42,6 +42,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
         self.num_mcts_simulation_per_step = self.params['num_mcts_simulation_per_step']
         self.mcts_c_puct = self.params['mcts_c_puct']
         self.mcts_model_Q_epsilon = self.params['mcts_model_Q_epsilon']
+        self.mcts_log_to_file = self.params['mcts_log_to_file']
 
     #  we define the logic to make an action through this method. (so this method would be the core of your AI)
     def declare_action(self, valid_actions, hole_card, round_state):
@@ -54,6 +55,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
                                 c_puct=self.mcts_c_puct,
                                 tau=0,
                                 model_Q_epsilon=self.mcts_model_Q_epsilon,
+                                log_to_file=self.mcts_log_to_file,
                                 pid=self.player_id)
         action_probs, action_Qs = mcts.simulate(observation=self.observation, env=self.env)
         action, action_mask_idx = mcts.get_action(action_probs, env=self.env, use_argmax=True)
