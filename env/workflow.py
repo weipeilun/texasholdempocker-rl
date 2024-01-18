@@ -21,9 +21,10 @@ def save_model(model, path):
     logging.info(f'model saved to {path}')
 
 
-def save_model_by_state_dict(model_state_dict, path):
+def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path):
     models_dict = dict()
     models_dict['model'] = model_state_dict
+    models_dict['optimizer'] = optimizer_state_dict
     torch.save(models_dict, path)
     logging.info(f'model saved to {path}')
 
@@ -320,7 +321,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
         # eval
         new_state_dict = get_state_dict_from_model(model)
-        eval_model_queue.put(new_state_dict)
+        new_optimizer_state_dict = get_optimizer_state_dict_from_model(model)
+        eval_model_queue.put((new_state_dict, new_optimizer_state_dict))
         next_eval_step = train_step_num + eval_model_per_step
         logging.info(f'Finished training historical data, train step: {train_step_num}, next eval step: {next_eval_step}')
     else:
@@ -357,7 +359,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
             if train_step_num >= next_eval_step:
                 new_state_dict = get_state_dict_from_model(model)
-                eval_model_queue.put(new_state_dict)
+                new_optimizer_state_dict = get_optimizer_state_dict_from_model(model)
+                eval_model_queue.put((new_state_dict, new_optimizer_state_dict))
                 next_eval_step += eval_model_per_step
                 logging.info(f'Triggered eval task at train step: {train_step_num}, next eval step: {next_eval_step}')
 

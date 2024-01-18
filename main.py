@@ -146,6 +146,7 @@ if __name__ == '__main__':
     workflow_status = WorkflowStatus.DEFAULT
     best_model_state_dict = get_state_dict_from_model(model)
     new_model_state_dict = None
+    new_optimizer_state_dict = None
     best_model_update_state_queue_list, new_model_update_state_queue_list = get_best_new_queues_for_eval(update_model_param_queue_list)
     best_model_workflow_queue_list, new_model_workflow_queue_list = get_best_new_queues_for_eval(workflow_queue_list)
     best_model_workflow_ack_queue_list, new_model_workflow_ack_queue_list = get_best_new_queues_for_eval(workflow_ack_queue_list)
@@ -164,13 +165,13 @@ if __name__ == '__main__':
         if workflow_status == WorkflowStatus.TRAINING:
             # 接收新的eval任务，停掉train任务中的MCTS模拟过程
             try:
-                new_model_state_dict = eval_model_queue.get(block=False)
+                new_model_state_dict, new_optimizer_state_dict = eval_model_queue.get(block=False)
                 eval_task_id += 1
 
                 workflow_status = switch_workflow_default(WorkflowStatus.TRAIN_FINISH_WAIT, workflow_queue_list, workflow_ack_queue_list)
                 logging.info(f"Main thread switched workflow to {workflow_status.name}")
 
-                save_model_by_state_dict(new_model_state_dict, model_eval_snapshot_path_format % eval_task_id)
+                save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id)
             except Empty:
                 time.sleep(1.)
         elif workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
@@ -234,7 +235,7 @@ if __name__ == '__main__':
             # batch predict切换模型，继续开始train任务
             if is_update_old_model:
                 # 在此处切换新旧模型pointer
-                save_model_by_state_dict(new_model_state_dict, model_best_checkpoint_path)
+                save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path)
 
                 for best_model_update_state_queue in best_model_update_state_queue_list:
                     best_model_update_state_queue.put(new_model_state_dict)
