@@ -17,9 +17,9 @@ model_param_dict:
     embedding_dim: [512, 256]
     positional_embedding_dim: [128, 256]
     transformer_head_dim: 64
-    num_layers: [6, 8, 10]
-    base_learning_rate: [0.0001, 0.00001, 0.000001]
-    max_learning_rate: [0.0001, 0.0003, 0.0005]
+    num_layers: [6, 8, 10, 12]
+    base_learning_rate: [0.00001, 0.000001]
+    max_learning_rate: [0.00005, 0.0001]
     save_train_data: False
     batch_size: 64
     num_inference_per_step: 500   # show prediction result per steps
