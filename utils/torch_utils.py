@@ -1,9 +1,26 @@
+import torch
+
 
 def _clone_state_dict(state_dict):
-    new_state_dict = dict()
-    for key, state_tensor in state_dict.items():
-        new_state_dict[key] = state_tensor.clone().cpu()
-    return new_state_dict
+    if isinstance(state_dict, dict):
+        new_state = dict()
+        for key, state in state_dict.items():
+            if isinstance(state, torch.Tensor):
+                new_state[key] = state.clone().cpu()
+            elif isinstance(state, (dict, list, tuple)):
+                new_state[key] = _clone_state_dict(state)
+            else:
+                new_state[key] = state
+    else:
+        new_state = list()
+        for state in state_dict:
+            if isinstance(state, torch.Tensor):
+                new_state.append(state.clone().cpu())
+            elif isinstance(state, (dict, list, tuple)):
+                new_state.append(_clone_state_dict(state))
+            else:
+                new_state.append(state)
+    return new_state
 
 
 def get_state_dict_from_model(model):
