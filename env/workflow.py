@@ -418,7 +418,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             action, action_mask_idx = mcts.get_action(action_probs, env=env, use_argmax=False)
             t1 = time.time()
-            logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %.4f), cost:%.2fs, ' % (action[1], t1 - t0))
+            logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %d), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
             game_train_data_queue.put((game_id, ([observation, action_probs, action_Qs, action_mask_idx], info)))
