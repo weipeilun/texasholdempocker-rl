@@ -3,6 +3,7 @@ from queue import Empty
 from env.constants import GET_PLAYER_NAME
 from tools import interrupt
 import torch
+import random
 import numpy as np
 
 
@@ -76,6 +77,25 @@ def get_player_name_model_dict(best_model_entity, new_model_entity):
 def get_new_model_player_name():
     return GET_PLAYER_NAME(1)
 
+
+# 左右互搏的玩家区分
+# 如果修改玩家数量要修改这块
+def map_action_bin_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, small_blind):
+    assert action_value_or_ranges_list[action_bin] is not None, ValueError(f'None action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
+    action, action_value_or_range = action_value_or_ranges_list[action_bin]
+    if isinstance(action_value_or_range, int):
+        return action, action_value_or_range
+    elif isinstance(action_value_or_range, tuple):
+        # 重要：把随机切分的下注比例映射到small_blind的整数倍，int型
+        range_start, range_end = action_value_or_range
+        choice_proportion = range_start + (range_end - range_start) * random.random()
+        delta_value_choice = acting_player_value_left * choice_proportion
+        multiple_of_small_bind = round(delta_value_choice / small_blind)
+        delta_action_value = multiple_of_small_bind * small_blind
+        action_value = current_round_acting_player_historical_value + delta_action_value
+        return action, action_value
+    else:
+        raise ValueError(f'Error action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
 
 def log_inference(observation_list, action_probs_list, action_Qs_list, winning_prob_list, model, num_data_print_per_inference):
     with torch.no_grad():

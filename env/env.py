@@ -1,8 +1,10 @@
 import logging
+import random
 import numpy as np
 from tools.biner import *
 from .cards import *
 from .game import GameEnv, deck
+from utils.workflow_utils import map_action_bin_to_actual_action_and_value
 
 class Env:
     """
@@ -503,6 +505,105 @@ class Env:
                                                                             player_value_left_to_init_value_bin,
                                                                             player_init_value_to_acting_player_init_value_bin)
         return acting_player_status, all_player_current_status_list
+
+
+class RandomEnv(Env):
+
+    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=True, action_probs=None, round_probs=None):
+        Env.__init__(self, winning_probability_generating_task_queue=winning_probability_generating_task_queue, num_bins=num_bins, num_players=num_players, init_value=init_value, small_blind=small_blind, big_blind=big_blind, num_player_fields=num_player_fields, game_env=game_env, ignore_all_async_tasks=ignore_all_async_tasks, settle_automatically=settle_automatically)
+
+        if action_probs is not None:
+            self.action_probs = action_probs
+        else:
+            self.action_probs = np.asarray([0., 0.4, 0.3, 0.1, 0.05, 0.05, 0.05, 0.02, 0.02, 0.004, 0.004, 0.002])
+
+        if round_probs is not None:
+            self.round_probs = round_probs
+        else:
+            self.round_probs = np.asarray([0.01, 0.09, 0.2, 0.3, 0.4])
+
+    def __generate_random_step(self, action_probs, force_check=False):
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = self.get_valid_action_info()
+        if force_check and not action_mask_list[1]:
+            return PlayerActions.CHECK_CALL, current_round_acting_player_historical_value
+        else:
+            valid_action_probs = np.copy(action_probs)
+            valid_action_probs[action_mask_list] = 0
+
+            sum_probs = sum(valid_action_probs)
+            valid_action_probs /= sum_probs
+
+            random_num = random.random()
+            cumulative_prob = 0
+            for i, prob in enumerate(valid_action_probs):
+                cumulative_prob += prob
+                if random_num <= cumulative_prob:
+                    return map_action_bin_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind)
+            raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
+
+    def take_step_to_round(self, max_round):
+        result = None
+        current_round = 0
+        while current_round <= max_round:
+            num_bets = 0
+            num_check = 0
+            early_break = False
+            while True:
+                if num_bets >= 2:
+                    force_check = True
+                else:
+                    force_check = False
+                action = self.__generate_random_step(self.action_probs, force_check=force_check)
+                if action[0] == PlayerActions.RAISE:
+                    num_bets += 1
+                elif action[0] == PlayerActions.CHECK_CALL:
+                    num_check += 1
+                    if current_round == max_round:
+                        # 最后一轮，不能连续check，不能bet后check，会导致回合结束
+                        if num_check > 1 or (num_bets > 0 and num_check > 0):
+                            early_break = True
+                            break
+
+                result = self._env.step(action)
+                if current_round != self._env.current_round:
+                    break
+            if early_break:
+                break
+            else:
+                current_round = self._env.current_round
+        return result
+
+    def reset(self, game_id, seed=None, cards_dict=None):
+        obs = Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
+        random_num = random.random()
+        cumulative_prob = 0
+        target_round = None
+        for i, prob in enumerate(self.round_probs):
+            cumulative_prob += prob
+            if random_num <= cumulative_prob:
+                if i == 0:
+                    return obs
+                else:
+                    target_round = i - 1
+                    break
+        assert target_round is not None, f'self.round_probs should be a probability distribution, but={self.round_probs}'
+
+        task_key = self.take_step_to_round(target_round)
+        while self.game_over:
+            # 避免生成已经结束的游戏
+            # all in会导致提前结束，走不到想要的round
+            Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
+            task_key = self.take_step_to_round(target_round)
+
+        acted_round_num, acted_player_name = task_key
+        if not self.ignore_all_async_tasks and task_key not in self.reward_cal_task_set:
+            player_hand_card = self._env.info_sets[acted_player_name].player_hand_cards
+            game_infoset = self._env.game_infoset
+            self._gen_cal_reward_task(acted_player_name, acted_round_num, player_hand_card, game_infoset)
+
+            self.reward_cal_task_set.add(task_key)
+
+        return self.get_obs(self._game_infoset)
 
 
 def get_card_representations(list_cards, num_cards):

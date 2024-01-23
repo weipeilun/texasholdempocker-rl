@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from tools import interrupt
 from queue import Empty
+from utils.workflow_utils import map_action_bin_to_actual_action_and_value
 
 
 class MCTS:
@@ -157,7 +158,7 @@ class MCTS:
 
         if use_argmax:
             action_idx = int(np.argmax(valid_action_probs).tolist())
-            return self.map_model_action_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value), action_mask_int_list
+            return map_action_bin_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind), action_mask_int_list
         else:
             sum_probs = sum(valid_action_probs)
             valid_action_probs /= sum_probs
@@ -167,7 +168,7 @@ class MCTS:
             for i, prob in enumerate(valid_action_probs):
                 cumulative_prob += prob
                 if random_num <= cumulative_prob:
-                    return self.map_model_action_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value), action_mask_int_list
+                    return map_action_bin_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind), action_mask_int_list
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def get_player_action_reward(self, reward, acting_player_name):
@@ -233,25 +234,8 @@ class MCTS:
                     self.file_writer_final_status.write(','.join('%.3f' % i for i in valid_R_array) + '\n')
                     self.file_writer_final_status.write(','.join('%d' % i for i in self.children_n_array) + '\n\n')
 
-        action, action_value = self.map_model_action_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value)
+        action, action_value = map_action_bin_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind)
         return action_bin, (action, action_value)
-
-    def map_model_action_to_actual_action_and_value(self, action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value):
-        assert action_value_or_ranges_list[action_bin] is not None, ValueError(f'None action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
-        action, action_value_or_range = action_value_or_ranges_list[action_bin]
-        if isinstance(action_value_or_range, int):
-            return action, action_value_or_range
-        elif isinstance(action_value_or_range, tuple):
-            # 重要：把随机切分的下注比例映射到small_blind的整数倍，int型
-            range_start, range_end = action_value_or_range
-            choice_proportion = range_start + (range_end - range_start) * random.random()
-            delta_value_choice = acting_player_value_left * choice_proportion
-            multiple_of_small_bind = round(delta_value_choice / self.small_blind)
-            delta_action_value = multiple_of_small_bind * self.small_blind
-            action_value = current_round_acting_player_historical_value + delta_action_value
-            return action, action_value
-        else:
-            raise ValueError(f'Error action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
 
     def expand(self, observation, env):
         if self.children is None:
