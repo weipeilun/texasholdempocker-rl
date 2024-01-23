@@ -533,6 +533,7 @@ class RandomEnv(Env):
             valid_action_probs[action_mask_list] = 0
 
             sum_probs = sum(valid_action_probs)
+            assert sum_probs > 0, ZeroDivisionError(f"all action_probs are masked due to a forced all in by other player")
             valid_action_probs /= sum_probs
 
             random_num = random.random()
@@ -593,21 +594,19 @@ class RandomEnv(Env):
                     break
         assert target_round is not None, f'self.round_probs should be a probability distribution, but={self.round_probs}'
 
+        task_key = None
         while True:
             # 强制设置的概率中包含0，可能会导致self.get_valid_action_info()中mask时把所有有效数值全置为0，导致无法生成有效的action
             # 这是因为其他玩家的raise把当前玩家逼到只能allin或fold
             # 而这种情况导致无法到达指定的round，认为是无效的初始对局
             try:
                 task_key = self.take_step_to_round(target_round)
-                if self.game_over:
-                    # 避免生成已经结束的游戏
-                    # all in会导致提前结束，走不到想要的round
-                    Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
-                    raise Exception(f'Game over, but take_step_to_round={target_round}')
-            except:
-                pass
-            finally:
-                break
+            except ZeroDivisionError:
+                Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
+                continue
+            except Exception as e:
+                raise e
+            break
 
         acted_round_num, acted_player_name = task_key
         if not self.ignore_all_async_tasks and task_key not in self.reward_cal_task_set:
