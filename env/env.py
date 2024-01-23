@@ -567,6 +567,9 @@ class RandomEnv(Env):
                 result = self._env.step(action)
                 if current_round != self._env.current_round:
                     break
+                if self.game_over:
+                    early_break = True
+                    break
             if early_break:
                 break
             else:
