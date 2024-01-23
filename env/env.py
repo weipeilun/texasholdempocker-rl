@@ -533,7 +533,7 @@ class RandomEnv(Env):
             valid_action_probs[action_mask_list] = 0
 
             sum_probs = sum(valid_action_probs)
-            if sum_probs > 0:
+            if sum_probs == 0:
                 raise ZeroDivisionError(f"all action_probs are masked due to a forced all in by other player")
             valid_action_probs /= sum_probs
 
