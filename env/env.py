@@ -515,7 +515,9 @@ class RandomEnv(Env):
         if action_probs is not None:
             self.action_probs = action_probs
         else:
-            self.action_probs = np.asarray([0., 0.4, 0.3, 0.1, 0.05, 0.05, 0.05, 0.02, 0.02, 0.004, 0.004, 0.002])
+            # fold会导致游戏提前结束
+            # allin后跟call或allin都会导致游戏提前结束
+            self.action_probs = np.asarray([0., 0.4, 0.3, 0.1, 0.05, 0.05, 0.05, 0.02, 0.02, 0.005, 0.005, 0.])
 
         if round_probs is not None:
             self.round_probs = round_probs
