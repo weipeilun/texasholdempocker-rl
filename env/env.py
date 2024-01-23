@@ -602,6 +602,9 @@ class RandomEnv(Env):
             # 而这种情况导致无法到达指定的round，认为是无效的初始对局
             try:
                 task_key = self.take_step_to_round(target_round)
+                if self.game_over:
+                    Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
+                    continue
             except ZeroDivisionError:
                 Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
                 continue
