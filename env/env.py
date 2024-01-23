@@ -525,7 +525,7 @@ class RandomEnv(Env):
     def __generate_random_step(self, action_probs, force_check=False):
         action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = self.get_valid_action_info()
         if force_check and not action_mask_list[1]:
-            return PlayerActions.CHECK_CALL, current_round_acting_player_historical_value
+            return PlayerActions.CHECK_CALL, self._env.current_round_min_value
         else:
             valid_action_probs = np.copy(action_probs)
             valid_action_probs[action_mask_list] = 0
