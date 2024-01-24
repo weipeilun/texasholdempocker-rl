@@ -67,6 +67,11 @@ class WorkflowStatus(Enum):
     DEFAULT = 0
     UNDEFINED = -1
 
+
+class ChoiceMethod(Enum):
+    ARGMAX = 'argmax'
+    PROBABILITY = 'probability'
+
 # model action bin dict
 ACTION_BINS_DICT = [
     (PlayerActions.FOLD, (0, 0)),

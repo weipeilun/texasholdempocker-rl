@@ -10,4 +10,4 @@ model_param_dict:
     device: 'cpu'
 
 # checkpoints
-model_init_checkpoint_path: models/eval_4.pth
+model_init_checkpoint_path: models/best.pth

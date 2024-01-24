@@ -375,7 +375,7 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
 
 # 游戏对弈（train_eval_process进程）
-def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, model_predict_in_queue, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, mcts_log_to_file, pid, thread_name):
+def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, model_predict_in_queue, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, mcts_log_to_file, mcts_choice_method, pid, thread_name):
     # 训练线程，使用RandomEnv，来生成更离散的数据，避免模型过拟合导致训练数据过于集中
     env = RandomEnv(winning_probability_generating_task_queue, num_bins, num_players=MAX_PLAYER_NUMBER, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue, model_predict_in_queue)
@@ -410,14 +410,14 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             t0 = time.time()
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} start MCTS simulation step {game_step_id}')
-            mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, small_blind=small_blind, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, model_Q_epsilon=mcts_model_Q_epsilon, log_to_file=mcts_log_to_file, pid=pid, thread_name=thread_name)
+            mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, small_blind=small_blind, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, model_Q_epsilon=mcts_model_Q_epsilon, choice_method=mcts_choice_method, log_to_file=mcts_log_to_file, pid=pid, thread_name=thread_name)
             action_probs, action_Qs = mcts.simulate(observation=observation, env=env)
             # 用于接收中断信号
             if action_probs is None:
                 logging.info(f"train_game_loop_thread {thread_name} detect interrupt")
                 break
 
-            action, action_mask_idx = mcts.get_action(action_probs, env=env, use_argmax=False)
+            action, action_mask_idx = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.PROBABILITY)
             t1 = time.time()
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %d), cost:%.2fs, ' % (action[1], t1 - t0))
 
@@ -435,7 +435,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
 
 # 游戏对弈（train_eval_process进程）
-def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, pid, thread_name):
+def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_reward_queue, eval_workflow_signal_queue, eval_workflow_ack_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new, model_predict_out_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, pid, thread_name):
     env = Env(None, num_bins, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue_best, model_predict_in_queue_new)
 
@@ -477,14 +477,14 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
                 t0 = time.time()
                 # 在eval时不使用dirichlet_noice以增加随机性，设置tau为0即在play步骤中丢弃随机性使用argmax
-                mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, small_blind=small_blind, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, model_Q_epsilon=mcts_model_Q_epsilon, log_to_file=False, pid=pid, thread_name=thread_name)
+                mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, small_blind=small_blind, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, model_Q_epsilon=mcts_model_Q_epsilon, choice_method=mcts_choice_method, log_to_file=False, pid=pid, thread_name=thread_name)
                 action_probs, _ = mcts.simulate(observation=observation, env=env)
                 # 用于接收中断信号
                 if action_probs is None:
                     logging.info(f"eval_game_loop_thread {thread_name} detect interrupt")
                     break
 
-                action, _ = mcts.get_action(action_probs, env=env, use_argmax=True)
+                action, _ = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.ARGMAX)
                 t1 = time.time()
                 # logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, eval_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
 

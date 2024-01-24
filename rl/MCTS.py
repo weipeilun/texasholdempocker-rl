@@ -3,13 +3,15 @@ import random
 import logging
 import numpy as np
 import torch
+from env.constants import *
+from utils.math_utils import *
 from tools import interrupt
 from queue import Empty
 from utils.workflow_utils import map_action_bin_to_actual_action_and_value
 
 
 class MCTS:
-    def __init__(self, n_actions, is_root, predict_in_queue, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, small_blind, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False, pid=None, thread_name=None):
+    def __init__(self, n_actions, is_root, predict_in_queue, predict_out_queue, apply_dirichlet_noice, workflow_lock, workflow_signal_queue, workflow_ack_signal_queue, small_blind, n_simulation=2000, c_puct=1., tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, choice_method=ChoiceMethod.ARGMAX, log_to_file=False, pid=None, thread_name=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.predict_in_queue = predict_in_queue
@@ -24,6 +26,7 @@ class MCTS:
         self.tau = tau
         self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
         self.model_Q_epsilon = model_Q_epsilon  # 用来平衡模型的价值和env的价值
+        self.choice_method = ChoiceMethod(choice_method)
         self.pid = pid
         self.thread_name = thread_name
         self.log_to_file = log_to_file
@@ -72,6 +75,7 @@ class MCTS:
                     dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                     model_Q_epsilon=self.model_Q_epsilon,
                     init_root_n_simulation=self.init_root_n_simulation,
+                    choice_method=self.choice_method,
                     log_to_file=self.log_to_file,
                     pid=self.pid,
                     thread_name=self.thread_name)
@@ -148,7 +152,7 @@ class MCTS:
         action_probs = pow_N_to_taus / sum_N_to_taus
         return action_probs
 
-    def get_action(self, action_probs, env, use_argmax=False):
+    def get_action(self, action_probs, env, choice_method):
         action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = env.get_valid_action_info()
         # 目前get_action都是跟在simulate之后的，认为此处的归一化是多余步骤，但为get_action方法独立的正确性仍然保留归一化
         valid_action_probs = np.copy(action_probs)
@@ -156,20 +160,8 @@ class MCTS:
 
         action_mask_int_list = [int(not mask) for mask in action_mask_list]
 
-        if use_argmax:
-            action_idx = int(np.argmax(valid_action_probs).tolist())
-            return map_action_bin_to_actual_action_and_value(action_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind), action_mask_int_list
-        else:
-            sum_probs = sum(valid_action_probs)
-            valid_action_probs /= sum_probs
-
-            random_num = random.random()
-            cumulative_prob = 0
-            for i, prob in enumerate(valid_action_probs):
-                cumulative_prob += prob
-                if random_num <= cumulative_prob:
-                    return map_action_bin_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind), action_mask_int_list
-            raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
+        choice_idx = choose_idx_by_array(valid_action_probs, choice_method)
+        return map_action_bin_to_actual_action_and_value(choice_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind), action_mask_int_list
 
     def get_player_action_reward(self, reward, acting_player_name):
         # 注意此处要取到的值是：对于玩家的相对价值得失
@@ -203,7 +195,7 @@ class MCTS:
             if sum_N == 0:
                 valid_p_array = np.copy(p_array)
                 valid_p_array[action_mask_list] = 0
-                action_bin = int(np.argmax(valid_p_array).tolist())
+                action_bin = choose_idx_by_array(valid_p_array, self.choice_method)
             else:
                 # sqrt_sum_N_of_b_array = np.sqrt(sum_N - self.children_n_array)
                 sqrt_sum_N_of_b_array = np.sqrt(sum_N)
@@ -226,8 +218,21 @@ class MCTS:
                 # + 0.01 to make a difference between invalid value and min value in log
                 valid_R_array -= min(valid_R_array) - 0.01
                 valid_R_array[action_mask_list] = 0
-                action_bin = int(np.argmax(valid_R_array).tolist())
-                
+
+                # 如果R最大的是遍历过的桶，直接取
+                # 如果R最大的是没遍历过的桶，取所有没遍历过的桶，选取原则遵循self.choice_method
+                max_valid_R_bin = int(np.argmax(valid_R_array).tolist())
+                if self.children_n_array[max_valid_R_bin] > 0:
+                    action_bin = max_valid_R_bin
+                else:
+                    mask_bin_list = []
+                    for idx, (children_n, action_mask) in enumerate(zip(self.children_n_array, action_mask_list)):
+                        if children_n > 0 or action_mask:
+                            mask_bin_list.append(idx)
+                    valid_p_array = np.copy(p_array)
+                    valid_p_array[mask_bin_list] = 0
+                    action_bin = choose_idx_by_array(valid_p_array, self.choice_method)
+
                 # force log to file
                 if num_simulation is not None and num_simulation == self.n_simulation - 1:
                     self.file_writer_final_status.write(','.join('%.3f' % i for i in U_array) + '\n')
@@ -296,7 +301,7 @@ class MCTS:
 
 class SingleThreadMCTS(MCTS):
     def __init__(self, n_actions, is_root, apply_dirichlet_noice, small_blind, model, n_simulation=2000, c_puct=1.,
-                 tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, log_to_file=False, pid=None):
+                 tau=1, dirichlet_noice_epsilon=0.25, model_Q_epsilon=0.5, init_root_n_simulation=4, choice_method=ChoiceMethod.ARGMAX, log_to_file=False, pid=None):
         self.n_actions = n_actions
         self.is_root = is_root
         self.apply_dirichlet_noice = apply_dirichlet_noice
@@ -307,7 +312,8 @@ class SingleThreadMCTS(MCTS):
         self.tau = tau
         self.dirichlet_noice_epsilon = dirichlet_noice_epsilon  # 用来保证s0即根节点的探索性
         self.model_Q_epsilon = model_Q_epsilon  # 用来平衡模型的价值和env的价值
-        self.log_to_file = log_to_file  # 用来平衡模型的价值和env的价值
+        self.choice_method = choice_method
+        self.log_to_file = log_to_file
         self.pid = pid
 
         super().__init__(n_actions=self.n_actions,
@@ -325,6 +331,7 @@ class SingleThreadMCTS(MCTS):
                          dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                          model_Q_epsilon=self.model_Q_epsilon,
                          init_root_n_simulation=init_root_n_simulation,
+                         choice_method=choice_method,
                          log_to_file=log_to_file,
                          pid=self.pid,
                          thread_name=None
@@ -341,6 +348,7 @@ class SingleThreadMCTS(MCTS):
                                 tau=self.tau,
                                 dirichlet_noice_epsilon=self.dirichlet_noice_epsilon,
                                 model_Q_epsilon=self.model_Q_epsilon,
+                                choice_method=self.choice_method,
                                 log_to_file=self.log_to_file,
                                 pid=self.pid,
                                 )
