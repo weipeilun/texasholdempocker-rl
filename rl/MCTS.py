@@ -203,7 +203,9 @@ class MCTS:
                 # this p should be proportional to n, as an adjust factor for q if N is big enough
                 # this p will lead to a inefficient MCTS if the whole process does work
                 # powered_p_array = np.power(p_array, np.ones(self.n_actions, dtype=np.float32) * tau)
-                U_array = self.c_puct * p_array * N_term_array
+                # since poker's tree depth is much more shallow than chess, and has more flexibility action choice to chess, we delete p_array to use a default setting of MCTS, making it less act to the rule 'stick to the right moves'
+                # U_array = self.c_puct * p_array * N_term_array
+                U_array = self.c_puct * N_term_array
                 R_array = U_array + self.children_q_array
 
                 if do_log:

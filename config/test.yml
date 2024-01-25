@@ -1,7 +1,7 @@
 # workflow params
 num_predict_batch_process: 1
 
-mcts_c_puct: 2
+mcts_c_puct: 0.3
 mcts_tau: 3
 mcts_log_to_file: True
 
