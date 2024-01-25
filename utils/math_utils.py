@@ -4,16 +4,14 @@ from env.constants import ChoiceMethod
 
 
 def choose_idx_by_array(array, method):
-    new_array = np.array(array)
     if method == ChoiceMethod.ARGMAX:
-        return int(np.argmax(new_array).tolist())
+        return int(np.argmax(array).tolist())
     elif method == ChoiceMethod.PROBABILITY:
-        sum_probs = sum(new_array)
-        new_array /= sum_probs
+        sum_probs = sum(array)
 
-        random_num = random.random()
+        random_num = random.random() * sum_probs
         cumulative_prob = 0
-        for i, prob in enumerate(new_array):
+        for i, prob in enumerate(array):
             cumulative_prob += prob
             if random_num <= cumulative_prob:
                 return i

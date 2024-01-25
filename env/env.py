@@ -524,6 +524,8 @@ class RandomEnv(Env):
         else:
             self.round_probs = np.asarray([0.01, 0.09, 0.2, 0.3, 0.4])
 
+        self.target_round_step_stop_probs = [0.2, 0.25, 0.333, 0.5]
+
     def __generate_random_step(self, action_probs, force_check=False):
         action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = self.get_valid_action_info()
         if force_check and not action_mask_list[1]:
@@ -551,8 +553,18 @@ class RandomEnv(Env):
         while current_round <= max_round:
             num_bets = 0
             num_check = 0
-            early_break = False
+            stop_simulation = False
+            target_round_step_num = 0
             while True:
+                if current_round == max_round:
+                    # 最后一轮，每一步都在一个随机概率下停止模拟
+                    if target_round_step_num < len(self.target_round_step_stop_probs):
+                        random_num = random.random()
+                        if random_num <= self.target_round_step_stop_probs[target_round_step_num]:
+                            stop_simulation = True
+                            break
+                    target_round_step_num += 1
+
                 if num_bets >= 2:
                     force_check = True
                 else:
@@ -562,19 +574,19 @@ class RandomEnv(Env):
                     num_bets += 1
                 elif action[0] == PlayerActions.CHECK_CALL:
                     num_check += 1
-                    if current_round == max_round:
-                        # 最后一轮，不能连续check，不能bet后check，会导致回合结束
-                        if num_check > 1 or (num_bets > 0 and num_check > 0):
-                            early_break = True
-                            break
+                    # 最后一轮，不能连续check，不能bet后check，会导致回合结束
+                    if current_round == max_round and (num_check > 1 or (num_bets > 0 and num_check > 0)):
+                        stop_simulation = True
+                        break
 
                 result = self._env.step(action)
                 if current_round != self._env.current_round:
                     break
                 if self.game_over:
-                    early_break = True
+                    stop_simulation = True
                     break
-            if early_break:
+
+            if stop_simulation:
                 break
             else:
                 current_round = self._env.current_round
