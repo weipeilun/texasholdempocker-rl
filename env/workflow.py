@@ -235,8 +235,23 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
             except Empty:
                 continue
 
+    def queue_monitor_thread(in_queue, send_in_queue, out_queue_list):
+        while True:
+            if interrupt.interrupt_callback():
+                logging.info("performance_monitor_thread detect interrupt")
+                break
+
+            out_queue_str_list = list()
+            for idx, out_queue in enumerate(out_queue_list):
+                out_queue_str = f'out_queue{idx} qsize:{out_queue.qsize()}'
+                out_queue_str_list.append(out_queue_str)
+
+            logging.info(f'in_queue qsize:{in_queue.qsize()}, send_in_queue qsize:{send_in_queue.qsize()}, {", ".join(out_queue_str_list)}')
+            time.sleep(120)
+
     send_in_queue = Queue()
     Thread(target=send_thread, args=(send_in_queue, out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval, pid), daemon=True).start()
+    Thread(target=queue_monitor_thread, args=(in_queue, send_in_queue, out_queue_list), daemon=True).start()
 
     def predict_and_send(predict_send_model, predict_send_batch_list, predict_send_pid_list, predict_send_send_in_queue, predict_send_workflow_status):
         with torch.no_grad():

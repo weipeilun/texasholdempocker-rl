@@ -1,5 +1,5 @@
 import math
-import random
+import time
 import logging
 import numpy as np
 import torch
@@ -271,25 +271,29 @@ class MCTS:
         action_prob = self.default_action_probs
         action_Qs = self.default_action_Qs
         winning_prob = self.default_winning_prob
+        # 这个锁用于控制workflow的状态切换
+        if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
+            try:
+                workflow_status = self.workflow_signal_queue.get(block=False)
+                self.workflow_ack_signal_queue.put(workflow_status)
+
+                with self.workflow_lock:
+                    self.workflow_lock.wait()
+            except Empty:
+                pass
 
         self.predict_in_queue.put((observation, self.pid))
+        begin_time = time.time()
+        next_log_time = begin_time + 1
         while True:
             if interrupt.interrupt_callback():
                 logging.info(f"MCTS.predict{self.pid} detect interrupt")
                 break
 
-            # 这个锁用于控制workflow的状态切换
-            # batch_predict进程切换状态后等待，可能有数卡在它的缓存中，不能全部吐出
-            # 所以在predict_in_queue之后、predict_out_queue之前要可以接收workflow_signal_queue的信号
-            if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
-                try:
-                    workflow_status = self.workflow_signal_queue.get(block=False)
-                    self.workflow_ack_signal_queue.put(workflow_status)
-
-                    with self.workflow_lock:
-                        self.workflow_lock.wait()
-                except Empty:
-                    pass
+            if time.time() > next_log_time:
+                now = time.time()
+                next_log_time = now + 1
+                logging.warning(f"MCTS.predict{self.pid} waited predict_out_queue for %.2fs" % (now - begin_time))
 
             try:
                 action_prob, action_Qs, winning_prob = self.predict_out_queue.get(block=True, timeout=0.001)

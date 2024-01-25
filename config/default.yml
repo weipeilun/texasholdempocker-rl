@@ -28,7 +28,7 @@ mcts_c_puct: 2
 mcts_tau: 3
 mcts_dirichlet_noice_epsilon: 0.1  # 增加随机性，避免模型过于依赖历史数据。注意避免过大noise导致数据过脏，训练难以收敛
 mcts_model_Q_epsilon: 0.3  # 当模型更有效后，适当调大这个值
-mcts_choice_method: 'probability'  # choices: 'argmax', 'probability'
+mcts_choice_method: 'argmax'  # choices: 'argmax', 'probability'
 mcts_log_to_file: False
 
 # model params
