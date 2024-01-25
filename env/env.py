@@ -624,8 +624,9 @@ class RandomEnv(Env):
                 raise e
             break
 
-        acted_round_num, acted_player_name = task_key
-        if not self.ignore_all_async_tasks and task_key not in self.reward_cal_task_set:
+        # 此处task_key为None，表示当前游戏是初始化状态，不需要生成reward计算任务
+        if not self.ignore_all_async_tasks and task_key is not None and task_key not in self.reward_cal_task_set:
+            acted_round_num, acted_player_name = task_key
             player_hand_card = self._env.info_sets[acted_player_name].player_hand_cards
             game_infoset = self._env.game_infoset
             self._gen_cal_reward_task(acted_player_name, acted_round_num, player_hand_card, game_infoset)
