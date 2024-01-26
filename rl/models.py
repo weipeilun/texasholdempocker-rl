@@ -436,17 +436,18 @@ class TransformerAlphaGoZeroModel(nn.Module):
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
-        x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
-        # to normalize embedding
-        x = x * math.sqrt(self.actual_embedding_dim)
-        x = self.transform_encoder(x)
-        # x = x.reshape(x.shape[0], -1)
-
-        action_prob_logits = self.action_prob_dense(x[:, 0, :])
-        # action_prob = self.action_logits_softmax(action_prob_logits)
-
-        action_Q_logits = self.action_Q_dense(x[:, 1, :])
-
-        winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
-        winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
-        return action_prob_logits, action_Q_logits, winning_prob
+        # x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
+        # # to normalize embedding
+        # x = x * math.sqrt(self.actual_embedding_dim)
+        # x = self.transform_encoder(x)
+        # # x = x.reshape(x.shape[0], -1)
+        #
+        # action_prob_logits = self.action_prob_dense(x[:, 0, :])
+        # # action_prob = self.action_logits_softmax(action_prob_logits)
+        #
+        # action_Q_logits = self.action_Q_dense(x[:, 1, :])
+        #
+        # winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
+        # winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
+        # return action_prob_logits, action_Q_logits, winning_prob
+        return game_status_embedding, game_status_embedding, game_status_embedding
