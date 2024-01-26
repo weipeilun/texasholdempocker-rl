@@ -4,6 +4,8 @@ import tensorrt as trt
 
 
 trt.init_libnvinfer_plugins(None, "")
+trt.init_libnvinfer_vc_plugins(None, "")
+trt.init_libnvonnxparser(None, "")
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
 def build_engine(model_file):
