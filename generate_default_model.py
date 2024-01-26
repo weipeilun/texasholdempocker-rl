@@ -20,14 +20,14 @@ if __name__ == '__main__':
     # to regenerate new default onnx model
     torch.onnx.export(model, torch.zeros((1, 28), dtype=torch.int32).to(model.device), f'{model_name}.onnx')
 
-    TRT_LOGGER = trt.Logger(trt.Logger.INFO)
+    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
     trt_runtime = trt.Runtime(TRT_LOGGER)
 
-    onnx_model = trt.OnnxParser(TRT_LOGGER)
-    with open(f"{model_name}.onnx", 'rb') as model_file:
-        onnx_model.parse(model_file.read())
+    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
+        with open(f"{model_name}.onnx", 'rb') as model_file:
+            parser.parse(model_file.read())
 
-    engine = trt.Builder(TRT_LOGGER).build_cuda_engine(onnx_model.network)
-    trt_runtime.save_engine(engine, f"{model_name}.trt")
+        builder.build_cuda_engine(onnx_model.network)
+        trt_runtime.save_engine(engine, f"{model_name}.trt")
 
     logging.info('success')
