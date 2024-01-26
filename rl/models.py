@@ -411,6 +411,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.env_embedding = EnvEmbedding(embedding_dim,
                                           historical_action_sequence_length=historical_action_sequence_length,
                                           num_bins=num_bins,
+                                          do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
                                           embedding_sequence_len=embedding_sequence_len,
                                           num_starters=3,
