@@ -31,7 +31,7 @@ if __name__ == '__main__':
     # to regenerate new default model
     save_model(model, f'{model_name}.pth')
     # to regenerate new default onnx model
-    torch.onnx.export(model, torch.zeros(0, 28, dtype=torch.int32).to(model.device), f'{model_name}.onnx')
+    torch.onnx.export(model, torch.zeros(1, 28, dtype=torch.int32).to(model.device), f'{model_name}.onnx')
 
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
     trt_runtime = trt.Runtime(TRT_LOGGER)
