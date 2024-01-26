@@ -98,7 +98,7 @@ class EnvEmbedding(nn.Module):
 
         item_idx_modified_array = x + self.field_start_idx_array
         game_status_tensor = self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1)
-        game_status_tensor = torch.concat((game_status_tensor, item_idx_modified_array))
+        game_status_tensor = torch.concat((game_status_tensor, item_idx_modified_array), dim=1)
         # game_status_tensor = torch.hstack((self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1), item_idx_modified_array))
         # if self.num_starters > 0:
         # else:
