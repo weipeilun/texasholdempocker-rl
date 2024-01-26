@@ -26,8 +26,16 @@ if __name__ == '__main__':
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
         with open(f"{model_name}.onnx", 'rb') as model_file:
             parser.parse(model_file.read())
+        profile = builder.create_optimization_profile()
+        # profile.set_shape(input_tensor_name, (1, 3, 224, 224), (max_batch_size, 3, 224, 224), (max_batch_size, 3, 224, 224))
 
-        builder.build_cuda_engine(onnx_model.network)
-        trt_runtime.save_engine(engine, f"{model_name}.trt")
+        config = builder.create_builder_config()
+        config.add_optimization_profile(profile)
+
+        trt_model_engine = builder.build_engine(network, config)
+        # trt_model_context = trt_model_engine.create_execution_context()
+
+        # builder.build_cuda_engine(onnx_model.network)
+        trt_runtime.save_engine(trt_model_engine, f"{model_name}.trt")
 
     logging.info('success')
