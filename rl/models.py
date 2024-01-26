@@ -15,7 +15,6 @@ class EnvEmbedding(nn.Module):
 
         self.embedding_dim = embedding_dim
         self.historical_action_sequence_length = historical_action_sequence_length
-        self.do_position_embedding = do_position_embedding
         self.positional_embedding_dim = positional_embedding_dim
         self.embedding_sequence_len = embedding_sequence_len
         self.num_starters = num_starters
@@ -64,7 +63,7 @@ class EnvEmbedding(nn.Module):
         # card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
         # num_segment_diff_by_card = len(card_segments) * 2 - max(card_segments) - 1
 
-        if self.do_position_embedding and self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_sequence_length > 0:
+        if self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_sequence_length > 0:
             # 人工编码带有位置和段信息的embedding认为没有大意义
             # self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - len(card_segments), embedding_dim=self.positional_embedding_dim)
             # position_embedding_idx_1 = torch.arange(num_starters + 2, dtype=torch.int64)
@@ -95,21 +94,17 @@ class EnvEmbedding(nn.Module):
             self.position_embedding_idx = nn.Parameter(torch.arange(num_starters + self.embedding_sequence_len, dtype=torch.int64).unsqueeze(0), requires_grad=False)
 
     def forward(self, x):
-        # batch_size = x.shape[0]
-        #
-        # item_idx_modified_array = x + self.field_start_idx_array
-        # if self.num_starters > 0:
-        #     game_status_tensor = torch.hstack((self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1), item_idx_modified_array))
-        # else:
-        #     game_status_tensor = item_idx_modified_array
-        # game_status_embedding = self.field_embedding(game_status_tensor)
-        #
-        # if self.do_position_embedding and self.num_starters + self.embedding_sequence_len > 0:
-        #     position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
-        #     return game_status_embedding, position_embedding
-        # else:
-        #     return game_status_embedding
-        return x, x
+        batch_size = x.shape[0]
+
+        item_idx_modified_array = x + self.field_start_idx_array
+        if self.num_starters > 0:
+            game_status_tensor = torch.hstack((self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1), item_idx_modified_array))
+        else:
+            game_status_tensor = item_idx_modified_array
+        game_status_embedding = self.field_embedding(game_status_tensor)
+
+        position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
+        return game_status_embedding, position_embedding
 
 
 class DenseActorModel(nn.Module):
@@ -412,7 +407,6 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.env_embedding = EnvEmbedding(embedding_dim,
                                           historical_action_sequence_length=historical_action_sequence_length,
                                           num_bins=num_bins,
-                                          do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
                                           embedding_sequence_len=embedding_sequence_len,
                                           num_starters=3,
