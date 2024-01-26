@@ -103,8 +103,11 @@ class EnvEmbedding(nn.Module):
             game_status_tensor = item_idx_modified_array
         game_status_embedding = self.field_embedding(game_status_tensor)
 
-        position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
-        return game_status_embedding, position_embedding
+        if self.do_position_embedding and self.num_starters + self.embedding_sequence_len > 0:
+            position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
+            return game_status_embedding, position_embedding
+        else:
+            return game_status_embedding
 
 
 class DenseActorModel(nn.Module):
