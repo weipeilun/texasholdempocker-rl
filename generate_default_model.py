@@ -3,7 +3,7 @@ from tools.param_parser import *
 import tensorrt as trt
 
 
-# trt.init_libnvinfer_plugins(None, "")
+trt.init_libnvinfer_plugins(None, "")
 # trt.init_libnvinfer_vc_plugins(None, "")
 # trt.init_libnvonnxparser(None, "")
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -14,6 +14,14 @@ def build_engine(model_file):
     config = builder.create_builder_config()
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 20)
     parser = trt.OnnxParser(network, TRT_LOGGER)
+    # status = parser.parse_from_file(filename)
+    plugin_libs = parser.get_used_vc_plugin_libraries()
+    print(len(plugin_libs))
+    for plugin_lib in plugin_libs:
+        builder.get_plugin_registry().load_library(plugin_lib)
+    config.plugins_to_serialize = plugin_libs
+    # for plugin_lib in plugin_libs:
+    #     runtime.get_plugin_registry().load_library(plugin_lib)
 
     with open(model_file, 'rb') as model:
         assert parser.parse(model.read())
