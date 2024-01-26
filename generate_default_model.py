@@ -36,6 +36,8 @@ if __name__ == '__main__':
         # trt_model_context = trt_model_engine.create_execution_context()
 
         # builder.build_cuda_engine(onnx_model.network)
-        trt_runtime.save_engine(trt_model_engine, f"{model_name}.trt")
+        # trt_runtime.save_engine(trt_model_engine, f"{model_name}.trt")
+        with open(f"{model_name}.trt", "wb") as f:
+            f.write(trt_model_engine.serialize())
 
     logging.info('success')
