@@ -216,14 +216,14 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
     model = AlphaGoZero(**model_param_dict)
     model.eval()
 
-    def send_thread(send_in_queue, send_out_queue_list, send_out_queue_map_dict_train, send_out_queue_map_dict_eval, pid):
+    def send_thread(send_in_queue, send_out_queue_list, send_out_queue_map_dict_train, send_out_queue_map_dict_eval, logging_queue, pid):
         while True:
             if interrupt.interrupt_callback():
                 logging.info(f"predict_batch_thread_{pid}.send_thread detect interrupt")
                 break
 
             try:
-                action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.001)
 
                 for action_probs, action_Q, winning_prob, send_pid in zip(action_probs_list, action_Q_list, winning_prob_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
@@ -232,10 +232,13 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
                         send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((action_probs, action_Q, winning_prob))
                     else:
                         raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
+
+                logging_queue.put(len(action_probs_list))
             except Empty:
                 continue
 
-    def queue_monitor_thread(in_queue, send_in_queue, out_queue_list, pid):
+    def queue_monitor_thread(in_queue, send_in_queue, out_queue_list, logging_queue, pid):
+        last_log_time = time.time()
         while True:
             if interrupt.interrupt_callback():
                 logging.info("performance_monitor_thread detect interrupt")
@@ -246,12 +249,26 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
                 out_queue_str = f'out_queue{idx} qsize:{out_queue.qsize()}'
                 out_queue_str_list.append(out_queue_str)
 
-            logging.info(f'pid={pid}, in_queue qsize:{in_queue.qsize()}, send_in_queue qsize:{send_in_queue.qsize()}, {", ".join(out_queue_str_list)}')
+            num_data_predicted = 0
+            while True:
+                try:
+                    num_data_predicted += logging_queue.get(block=False)
+                except Empty:
+                    break
+
+            now = time.time()
+            time_elapsed = now - last_log_time
+            last_log_time = now
+            data_processed_per_second = num_data_predicted / time_elapsed
+            logging.info(f'pid={pid}, data_processed_per_second:{data_processed_per_second:.2f}, in_queue qsize:{in_queue.qsize()}, send_in_queue qsize:{send_in_queue.qsize()}, {", ".join(out_queue_str_list)}')
             time.sleep(120)
 
+    # 另开一个线程，cpu和gpu任务分开，防止阻塞predict_batch_process
     send_in_queue = Queue()
-    Thread(target=send_thread, args=(send_in_queue, out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval, pid), daemon=True).start()
-    Thread(target=queue_monitor_thread, args=(in_queue, send_in_queue, out_queue_list, pid), daemon=True).start()
+    # 用于输出性能指标
+    logging_queue = Queue()
+    Thread(target=send_thread, args=(send_in_queue, out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval, logging_queue, pid), daemon=True).start()
+    Thread(target=queue_monitor_thread, args=(in_queue, send_in_queue, out_queue_list, logging_queue, pid), daemon=True).start()
 
     def predict_and_send(predict_send_model, predict_send_batch_list, predict_send_pid_list, predict_send_send_in_queue, predict_send_workflow_status):
         with torch.no_grad():
@@ -288,7 +305,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
             pass
 
         try:
-            data, data_pid = in_queue.get(block=True, timeout=0.01)
+            data, data_pid = in_queue.get(block=True, timeout=0.001)
             batch_list.append(data)
             pid_list.append(data_pid)
 
