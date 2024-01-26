@@ -38,10 +38,10 @@ model_param_dict:
     n_actions: 4
     num_output_class: 12
     device: 'cuda:0'
-    embedding_dim: 512
+    embedding_dim: 128
     positional_embedding_dim: 128
     transformer_head_dim: 64
-    num_layers: 8
+    num_layers: 4
     historical_action_sequence_length: 16
     epsilon: 0.05
     epsilon_max: 0.8
@@ -124,7 +124,7 @@ simulation_recurrent_params:
     - 990
 
 # checkpoints
-model_init_checkpoint_path: models/default_train.pth
+model_init_checkpoint_path: models/tiny_train.pth
 model_last_checkpoint_path: models/last.pth
 model_eval_snapshot_path_format: models/eval_%s.pth
 model_best_checkpoint_path: models/best.pth
