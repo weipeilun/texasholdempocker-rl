@@ -64,7 +64,7 @@ class EnvEmbedding(nn.Module):
         # card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
         # num_segment_diff_by_card = len(card_segments) * 2 - max(card_segments) - 1
 
-        if self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_sequence_length > 0:
+        if self.do_position_embedding and self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_sequence_length > 0:
             # 人工编码带有位置和段信息的embedding认为没有大意义
             # self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - len(card_segments), embedding_dim=self.positional_embedding_dim)
             # position_embedding_idx_1 = torch.arange(num_starters + 2, dtype=torch.int64)
@@ -404,6 +404,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
 
         # to normalize embedding for transformer
         self.actual_embedding_dim = int(embedding_dim + positional_embedding_dim)
+        self.sqrt_of_actual_embedding_dim = math.sqrt(self.actual_embedding_dim)
 
         # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players
         embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1)
@@ -436,18 +437,17 @@ class TransformerAlphaGoZeroModel(nn.Module):
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
-        # x = torch.cat([game_status_embedding, position_segment_embedding], dim=2)
-        # # to normalize embedding
-        # x = x * math.sqrt(self.actual_embedding_dim)
-        # x = self.transform_encoder(x)
-        # # x = x.reshape(x.shape[0], -1)
-        #
-        # action_prob_logits = self.action_prob_dense(x[:, 0, :])
-        # # action_prob = self.action_logits_softmax(action_prob_logits)
-        #
-        # action_Q_logits = self.action_Q_dense(x[:, 1, :])
-        #
-        # winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
-        # winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
-        # return action_prob_logits, action_Q_logits, winning_prob
-        return game_status_embedding, game_status_embedding, game_status_embedding
+        x = torch.concat([game_status_embedding, position_segment_embedding], dim=2)
+        # to normalize embedding
+        x = x * self.sqrt_of_actual_embedding_dim
+        x = self.transform_encoder(x)
+        # x = x.reshape(x.shape[0], -1)
+
+        action_prob_logits = self.action_prob_dense(x[:, 0, :])
+        # action_prob = self.action_logits_softmax(action_prob_logits)
+
+        action_Q_logits = self.action_Q_dense(x[:, 1, :])
+
+        winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
+        winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
+        return action_prob_logits, action_Q_logits, winning_prob
