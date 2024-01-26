@@ -97,14 +97,15 @@ class EnvEmbedding(nn.Module):
         batch_size = x.shape[0]
 
         item_idx_modified_array = x + self.field_start_idx_array
-        if self.num_starters > 0:
-            game_status_tensor = torch.hstack((self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1), item_idx_modified_array))
-        else:
-            game_status_tensor = item_idx_modified_array
-        game_status_embedding = self.field_embedding(game_status_tensor)
-
-        position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
-        return game_status_embedding, position_embedding
+        # if self.num_starters > 0:
+        #     game_status_tensor = torch.hstack((self.starter_idx_array.unsqueeze(0).repeat(batch_size, 1), item_idx_modified_array))
+        # else:
+        #     game_status_tensor = item_idx_modified_array
+        # game_status_embedding = self.field_embedding(game_status_tensor)
+        #
+        # position_embedding = self.position_embedding(self.position_embedding_idx.repeat(batch_size, 1))
+        # return game_status_embedding, position_embedding
+        return item_idx_modified_array, item_idx_modified_array
 
 
 class DenseActorModel(nn.Module):
