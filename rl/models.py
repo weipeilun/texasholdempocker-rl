@@ -15,6 +15,7 @@ class EnvEmbedding(nn.Module):
 
         self.embedding_dim = embedding_dim
         self.historical_action_sequence_length = historical_action_sequence_length
+        self.do_position_embedding = do_position_embedding
         self.positional_embedding_dim = positional_embedding_dim
         self.embedding_sequence_len = embedding_sequence_len
         self.num_starters = num_starters
