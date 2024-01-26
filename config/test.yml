@@ -1,7 +1,7 @@
 # workflow params
 num_predict_batch_process: 1
 
-mcts_c_puct: 0.5
+mcts_c_puct: 0.8
 mcts_tau: 3
 mcts_log_to_file: True
 
@@ -10,4 +10,4 @@ model_param_dict:
     device: 'cpu'
 
 # checkpoints
-model_init_checkpoint_path: models/best.pth
+model_init_checkpoint_path: models/default_train.pth
