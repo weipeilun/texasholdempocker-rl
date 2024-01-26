@@ -3,6 +3,7 @@ from tools.param_parser import *
 import tensorrt as trt
 
 
+trt.init_libnvinfer_plugins(None, "")
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
 def build_engine(model_file):
