@@ -413,7 +413,7 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             # 训练中模型同步
             if train_step_num >= next_update_model_step:
                 new_state_dict = get_state_dict_from_model(model)
-                train_update_model_signal_queue.put(new_state_dict)
+                train_update_model_signal_queue.put((train_step_num, new_state_dict))
                 next_update_model_step += update_model_per_train_step
 
             if is_save_model:

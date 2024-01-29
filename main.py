@@ -179,17 +179,17 @@ if __name__ == '__main__':
                 save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id)
             except Empty:
                 # 先切换队列状态，如果队列状态不变，只在train任务中同步模型
-                train_model_state_dict = None
+                step_num, train_model_state_dict = None, None
                 while True:
                     try:
-                        train_model_state_dict = train_update_model_signal_queue.get(block=False)
+                        step_num, train_model_state_dict = train_update_model_signal_queue.get(block=False)
                     except Empty:
                         break
-                if train_model_state_dict is not None:
+                if step_num is not None and train_model_state_dict is not None:
                     for train_update_model_queue in train_update_model_queue_list:
                         train_update_model_queue.put(train_model_state_dict)
                     if receive_and_check_all_ack(workflow_status, train_update_model_ack_queue_list):
-                        logging.info(f"Model state updating workflow finished.")
+                        logging.info(f"Model state updating workflow finished at training step {step_num}.")
             finally:
                 time.sleep(0.1)
         elif workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
