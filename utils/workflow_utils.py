@@ -7,13 +7,13 @@ import random
 import numpy as np
 
 
-def map_train_thread_to_queue_info_train(thread_id, queue_info_list):
+def get_train_info(thread_id, queue_info_list):
     num_in_queue = len(queue_info_list)
     in_queue_idx = thread_id % num_in_queue
     return queue_info_list[in_queue_idx]
 
 
-def map_train_thread_to_queue_info_eval(thread_id, queue_info_list):
+def get_eval_info(thread_id, queue_info_list):
     num_in_queue = len(queue_info_list)
     num_in_queue_group = num_in_queue // 2
     in_queue_group_idx = thread_id % num_in_queue_group
@@ -60,6 +60,32 @@ def switch_workflow_default(target_workflow_status, workflow_queue_list, workflo
         workflow_queue.put(target_workflow_status)
     if not receive_and_check_all_ack(target_workflow_status, workflow_ack_queue_list):
         exit(-1)
+    return target_workflow_status
+
+
+def switch_workflow_for_predict_process_default(target_workflow_status, workflow_queue_list, workflow_ack_queue, tid_train_eval_pid_dict):
+    num_data_send = len(tid_train_eval_pid_dict)
+    for tid, pid in tid_train_eval_pid_dict.items():
+        workflow_queue_list[pid].put((tid, target_workflow_status))
+
+    num_data_received = 0
+    while True:
+        if interrupt.interrupt_callback():
+            logging.info("main loop detect interrupt")
+            exit(0)
+
+        try:
+            ack_status = workflow_ack_queue.get(block=True, timeout=0.1)
+            num_data_received += 1
+            if ack_status != target_workflow_status:
+                logging.error(f"Workflow ack idx {num_data_received} error, expect {target_workflow_status.name}, but get {ack_status.name}")
+                return False
+            else:
+                logging.info(f"Workflow received ack {target_workflow_status.name} idx {num_data_received}.")
+                if num_data_received == num_data_send:
+                    break
+        except Empty:
+            continue
     return target_workflow_status
 
 
