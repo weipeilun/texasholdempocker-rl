@@ -10,9 +10,9 @@ historical_data_filename: data/history.txt
 
 # train process params
 first_train_data_step: 500
-train_per_step: 4
-update_model_per_train_step: 10
-eval_model_per_step: 5000
+train_per_step: 16
+update_model_per_train_step: 10 # update_model_per_train_step * train_per_step = update_model_per_step
+eval_model_per_step: 3000 # eval_model_per_step * train_per_step = eval_model_per_step
 log_step_num: 200
 
 # game params
@@ -25,8 +25,8 @@ big_blind: 50
 # 2. 看R，每个类最终要拉到很接近的数值上
 # 3. 看Q，每个类最终要符合环境的物理意义
 num_mcts_simulation_per_step: 800
-mcts_c_puct: 0.8
-mcts_tau: 3
+mcts_c_puct: 2
+mcts_tau: 1
 mcts_dirichlet_noice_epsilon: 0.1  # 增加随机性，避免模型过于依赖历史数据。注意避免过大noise导致数据过脏，训练难以收敛
 mcts_model_Q_epsilon: 0.01  # 当模型更有效后，适当调大这个值
 mcts_choice_method: 'probability'  # choices: 'argmax', 'probability'
@@ -48,17 +48,16 @@ model_param_dict:
     epsilon_max: 0.8
     gamma: 0.9
     batch_size: 64
-    base_learning_rate: 0.00001
+    base_learning_rate: 0.000005
     max_learning_rate: 0.00002
-    step_size_up: 1000
-    step_size_down: 4000
+    step_size_up: 500
+    step_size_down: 2500
     l2_weight: 0.0
     num_bins: 10
     save_train_data: True
-    # 要保证足够大，以使模型迭代过程以一种渐变的方式进行（包含历史数据），保证v和v-1版本模型保持一定连贯性，可令新模型结果不会太差。
-    # 建议大于eval_model_per_step * train_per_step * 2
-    transition_buffer_len: 50000
-    num_inference_per_step: 500   # show prediction result per steps
+    # 要保证用相对较新的数据学习，以确保模型在未在旧数据过拟合前朝向新数据收敛。
+    transition_buffer_len: 800
+    num_inference_per_step: 100   # show prediction result per steps
     num_data_print_per_inference: 5  # number of result to print per inference
 
 # simulation params

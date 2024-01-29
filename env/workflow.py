@@ -223,7 +223,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 break
 
             try:
-                action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.001)
+                action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
                 for action_probs, action_Q, winning_prob, send_pid in zip(action_probs_list, action_Q_list, winning_prob_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
@@ -317,7 +317,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             pass
 
         try:
-            data, data_pid = in_queue.get(block=True, timeout=0.001)
+            data, data_pid = in_queue.get(block=True, timeout=0.01)
             batch_list.append(data)
             pid_list.append(data_pid)
 
@@ -586,7 +586,7 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
             except Empty:
                 pass
 
-    Thread(target=map_data_thread, args=(data_out_queue, data_map_queue_list, tid_process_tid_map, 0.001), daemon=True).start()
+    Thread(target=map_data_thread, args=(data_out_queue, data_map_queue_list, tid_process_tid_map, 0.01), daemon=True).start()
     Thread(target=map_data_thread, args=(workflow_game_loop_signal_queue, workflow_signal_map_queue_list, tid_process_tid_map, 0.1), daemon=True).start()
     Thread(target=map_data_thread, args=(eval_workflow_signal_queue, eval_workflow_signal_map_queue_list, tid_process_tid_map, 0.1), daemon=True).start()
 
