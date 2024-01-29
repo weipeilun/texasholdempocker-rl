@@ -207,7 +207,7 @@ def receive_game_result_thread(in_queue, env_info_dict):
 
 
 # batch预测（子进程）
-def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval, batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level):
+def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval, batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, pid, log_level):
     logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
                         datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
@@ -305,6 +305,18 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
             pass
 
         try:
+            if train_update_model_queue is not None and train_update_model_ack_queue is not None:
+                train_model_dict = train_update_model_queue.get(block=False)
+                if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
+                    model.load_state_dict(train_model_dict)
+                    logging.info(f'predict_batch_process_{pid} model training updated')
+                else:
+                    logging.info(f'predict_batch_process_{pid} model training updated skipped')
+                train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+        except Empty:
+            pass
+
+        try:
             data, data_pid = in_queue.get(block=True, timeout=0.001)
             batch_list.append(data)
             pid_list.append(data_pid)
@@ -326,7 +338,7 @@ def predict_batch_process(in_queue, out_queue_list, out_queue_map_dict_train, ou
 
 
 # 模型训练（主进程）
-def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread):
+def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread, train_update_model_signal_queue):
     assert train_per_step > 0, 'train_per_step must > 0.'
 
     next_train_step = first_train_data_step
@@ -375,6 +387,7 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
         game_id_signal_queue.put((game_id, seed))
 
+    next_update_model_step = train_step_num + update_model_per_train_step
     while True:
         if interrupt.interrupt_callback():
             if is_save_model:
@@ -389,12 +402,19 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             if train_step_num % log_step_num == 0:
                 logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
 
+            # 触发eval任务
             if train_step_num >= next_eval_step:
                 new_state_dict = get_state_dict_from_model(model)
                 new_optimizer_state_dict = get_optimizer_state_dict_from_model(model)
                 eval_model_queue.put((new_state_dict, new_optimizer_state_dict))
                 next_eval_step += eval_model_per_step
                 logging.info(f'Triggered eval task at train step: {train_step_num}, next eval step: {next_eval_step}')
+
+            # 训练中模型同步
+            if train_step_num >= next_update_model_step:
+                new_state_dict = get_state_dict_from_model(model)
+                train_update_model_signal_queue.put(new_state_dict)
+                next_update_model_step += update_model_per_train_step
 
             if is_save_model:
                 if train_step_num % 200 == 0:

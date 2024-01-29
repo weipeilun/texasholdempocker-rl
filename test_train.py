@@ -115,7 +115,7 @@ def train_process(params, n_loop, log_level):
 
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
     for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, (model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval))) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, model_predict_batch_queue_info_list)):
-        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level), daemon=True).start()
+        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, None, None, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # synchronize model to all predict_batch_process
@@ -164,14 +164,27 @@ def train_process(params, n_loop, log_level):
                 logging.info("main loop detect interrupt")
                 break
 
-            finished_eval_game_id, eval_reward_dict = eval_game_finished_reward_queue.get(block=True, timeout=1.)
+            finished_eval_game_id, eval_reward_dict = eval_game_finished_reward_queue.get(block=False)
             assert finished_eval_game_id not in finished_eval_game_id_set, f'game_id:{finished_eval_game_id} repeated for finished evaluation task'
             finished_eval_game_id_set.add(finished_eval_game_id)
 
             player_result_value, reward_value, net_win_value = eval_reward_dict[new_model_player_name]
             new_model_net_win_value_sum += net_win_value
         except Empty:
-            continue
+            # 先切换队列状态，如果队列状态不变，只在train任务中同步模型
+            train_model_state_dict = None
+            while True:
+                try:
+                    train_model_state_dict = train_update_model_signal_queue.get(block=False)
+                except Empty:
+                    break
+            if train_model_state_dict is not None:
+                for train_update_model_queue in train_update_model_queue_list:
+                    train_update_model_queue.put(train_model_state_dict)
+                if receive_and_check_all_ack(workflow_status, train_update_model_ack_queue_list):
+                    logging.info(f"Model state updating workflow finished.")
+        finally:
+            time.sleep(0.1)
 
     # eval流程收到中断处理
     if len(finished_eval_game_id_set) == eval_task_num_games:

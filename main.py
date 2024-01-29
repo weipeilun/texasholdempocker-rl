@@ -113,9 +113,13 @@ if __name__ == '__main__':
         Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, pid, log_level), daemon=True).start()
     logging.info('All train_eval_process inited.')
 
+    # 训练中更新模型参数
+    train_update_model_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+    train_update_model_ack_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
-    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, (model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval))) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, model_predict_batch_queue_info_list)):
-        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, pid, log_level), daemon=True).start()
+    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, (model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval)), train_update_model_queue, train_update_model_ack_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, model_predict_batch_queue_info_list, train_update_model_queue_list, train_update_model_ack_queue_list)):
+        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_queue_list, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
@@ -134,12 +138,14 @@ if __name__ == '__main__':
     # init training thread to separate cpu/gpu time
     is_save_model = True
     eval_model_queue = Queue()
+    train_update_model_signal_queue = Queue()
     first_train_data_step = params['first_train_data_step']
     train_per_step = params['train_per_step']
+    update_model_per_train_step = params['update_model_per_train_step']
     eval_model_per_step = params['eval_model_per_step']
     log_step_num = params['log_step_num']
     historical_data_filename = params['historical_data_filename']
-    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread), daemon=True).start()
+    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread, train_update_model_signal_queue), daemon=True).start()
 
     # to monitor performance
     Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue,), daemon=True).start()
@@ -149,8 +155,6 @@ if __name__ == '__main__':
     new_model_state_dict = None
     new_optimizer_state_dict = None
     best_model_update_state_queue_list, new_model_update_state_queue_list = get_best_new_queues_for_eval(update_model_param_queue_list)
-    best_model_workflow_queue_list, new_model_workflow_queue_list = get_best_new_queues_for_eval(workflow_queue_list)
-    best_model_workflow_ack_queue_list, new_model_workflow_ack_queue_list = get_best_new_queues_for_eval(workflow_ack_queue_list)
     eval_game_seed = int(1e9)
     eval_task_num_games = params['eval_task_num_games']
     eval_task_id = 0
@@ -174,7 +178,20 @@ if __name__ == '__main__':
 
                 save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id)
             except Empty:
-                time.sleep(1.)
+                # 先切换队列状态，如果队列状态不变，只在train任务中同步模型
+                train_model_state_dict = None
+                while True:
+                    try:
+                        train_model_state_dict = train_update_model_signal_queue.get(block=False)
+                    except Empty:
+                        break
+                if train_model_state_dict is not None:
+                    for train_update_model_queue in train_update_model_queue_list:
+                        train_update_model_queue.put(train_model_state_dict)
+                    if receive_and_check_all_ack(workflow_status, train_update_model_ack_queue_list):
+                        logging.info(f"Model state updating workflow finished.")
+            finally:
+                time.sleep(0.1)
         elif workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
             # 清空batch predict进程中的任务队列，结束train任务
             switch_workflow_default(workflow_status, workflow_game_loop_signal_queue_list, workflow_game_loop_ack_signal_queue_list)
@@ -185,7 +202,9 @@ if __name__ == '__main__':
             # 负责新模型推理的batch predict进程注册新模型
             for new_model_update_state_queue in new_model_update_state_queue_list:
                 new_model_update_state_queue.put(new_model_state_dict)
-            if not receive_and_check_all_ack(workflow_status, new_model_workflow_ack_queue_list):
+            for best_model_update_state_queue in best_model_update_state_queue_list:
+                best_model_update_state_queue.put(best_model_state_dict)
+            if not receive_and_check_all_ack(workflow_status, workflow_ack_queue_list):
                 exit(-1)
 
             workflow_status = switch_workflow_default(WorkflowStatus.EVALUATING, workflow_queue_list, workflow_ack_queue_list)
@@ -237,18 +256,14 @@ if __name__ == '__main__':
             if is_update_old_model:
                 # 在此处切换新旧模型pointer
                 save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path)
-
-                for best_model_update_state_queue in best_model_update_state_queue_list:
-                    best_model_update_state_queue.put(new_model_state_dict)
-                if not receive_and_check_all_ack(workflow_status, best_model_workflow_ack_queue_list):
-                    exit(-1)
-
                 best_model_state_dict = new_model_state_dict
-            else:
-                for new_model_update_state_queue in new_model_update_state_queue_list:
-                    new_model_update_state_queue.put(best_model_state_dict)
-                if not receive_and_check_all_ack(workflow_status, new_model_workflow_ack_queue_list):
-                    exit(-1)
+
+            # 永远使用最新模型训练
+            # todo: 考虑什么情况下需要使用旧checkpoint训练
+            for update_state_queue in update_model_param_queue_list:
+                update_state_queue.put(new_model_state_dict)
+            if not receive_and_check_all_ack(workflow_status, workflow_ack_queue_list):
+                exit(-1)
 
             workflow_status = switch_workflow_default(WorkflowStatus.TRAINING, workflow_queue_list, workflow_ack_queue_list)
             logging.info(f"Main thread switched workflow to {workflow_status.name}")
