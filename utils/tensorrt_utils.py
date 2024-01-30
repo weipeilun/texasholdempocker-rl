@@ -33,7 +33,7 @@ def build_engine(model_file):
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
     for input in inputs:
         logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
-    builder.max_batch_size = 8
+    # builder.max_batch_size = 8
     profile = builder.create_optimization_profile()
     profile.set_shape("input", (1, 28), (4, 28), (8, 28))
     config.add_optimization_profile(profile)
