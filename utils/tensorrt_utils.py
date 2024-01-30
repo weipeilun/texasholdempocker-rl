@@ -182,20 +182,16 @@ class HostDeviceMem:
 
 # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
 # If engine uses dynamic shapes, specify a profile to find the maximum input & output size.
-def allocate_buffers(engine: trt.ICudaEngine, profile_idx: Optional[int] = None, context=None):
+def allocate_buffers(engine: trt.ICudaEngine, context, profile_idx: Optional[int] = None):
     inputs = []
     outputs = []
     bindings = []
     stream = cuda_call(cudart.cudaStreamCreate())
-    if context is not None and profile_idx is not None:
-        context.set_optimization_profile_async(profile_idx, stream)
-
-        print('success')
     tensor_names = [engine.get_tensor_name(i) for i in range(engine.num_io_tensors)]
     for binding in tensor_names:
         # get_tensor_profile_shape returns (min_shape, optimal_shape, max_shape)
         # Pick out the max shape to allocate enough memory for the binding.
-        shape = engine.get_tensor_shape(binding)
+        shape = context.get_tensor_shape(binding)
         print(shape)
         shape_valid = np.all([s >= 0 for s in shape])
         if not shape_valid and profile_idx is None:
