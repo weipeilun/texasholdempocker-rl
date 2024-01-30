@@ -264,12 +264,12 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 #     else:
                 #         raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
 
-                action_probs, action_Q, winning_prob, send_pid, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                action_probs, action_Qs, winning_prob, send_pid, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
                 if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
-                    send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                    send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, action_Qs, winning_prob)))
                 elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
-                    send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                    send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, action_Qs, winning_prob)))
                 else:
                     raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
 

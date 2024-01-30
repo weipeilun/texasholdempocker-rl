@@ -200,8 +200,8 @@ if __name__ == '__main__':
                         step_num, train_model_state_dict = train_update_model_signal_queue.get(block=False)
                     except Empty:
                         break
-                tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save)
                 if step_num is not None and train_model_state_dict is not None:
+                    tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save)
                     for train_update_model_queue in train_update_model_queue_list:
                         train_update_model_queue.put(tmp_checkpoint_path)
                     if receive_and_check_ack_from_queue(workflow_status, train_update_model_ack_queue, len(train_update_model_queue_list)):
