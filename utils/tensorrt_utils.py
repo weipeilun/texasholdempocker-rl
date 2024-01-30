@@ -193,7 +193,7 @@ def allocate_buffers(engine: trt.ICudaEngine, context, profile_idx: Optional[int
     for binding in tensor_names:
         # get_tensor_profile_shape returns (min_shape, optimal_shape, max_shape)
         # Pick out the max shape to allocate enough memory for the binding.
-        shape = context.get_tensor_shape(binding)
+        shape = context.get_tensor_shape(0)
         print(shape)
         shape_valid = np.all([s >= 0 for s in shape])
         if not shape_valid and profile_idx is None:
