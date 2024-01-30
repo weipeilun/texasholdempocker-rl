@@ -248,6 +248,8 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
     engine = None
     inputs, outputs, bindings, stream = None, None, None, None
     context = None
+    input_shape = (batch_size, 28)
+    input_dim = np.prod(input_shape)
 
     def send_thread(send_in_queue, send_out_queue_list, send_out_queue_map_dict_train, send_out_queue_map_dict_eval, logging_queue, pid):
         while True:
