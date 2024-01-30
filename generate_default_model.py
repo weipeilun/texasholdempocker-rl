@@ -1,6 +1,8 @@
 from env.workflow import *
 from tools.param_parser import *
 import tensorrt as trt
+import onnxsim
+import onnx
 
 
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -40,5 +42,9 @@ if __name__ == '__main__':
     trt_model_engine = build_engine(f"{model_name}.onnx")
     with open(f"{model_name}.trt", "wb") as f:
         f.write(trt_model_engine)
+    onnx_checkpoint = onnx.load(f"{model_name}.onnx")
+    model_simple, is_simplify_success = onnxsim.simplify(onnx_checkpoint)
+    assert is_simplify_success
+    onnx.save(model_simple, f"{model_name}_simplified.onnx")
 
     logging.info('success')
