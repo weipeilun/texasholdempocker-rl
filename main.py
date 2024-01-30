@@ -162,6 +162,7 @@ if __name__ == '__main__':
     workflow_status = WorkflowStatus.DEFAULT
     best_model_trt_filename = model_init_checkpoint_path.replace('.pth', '.trt')
     new_model_trt_filename = None
+    tmp_checkpoint_path = None
     best_model_state_dict = get_state_dict_from_model(model)
     new_model_state_dict = None
     new_optimizer_state_dict = None
@@ -180,6 +181,8 @@ if __name__ == '__main__':
     while True:
         if interrupt.interrupt_callback():
             logging.info("main loop detect interrupt")
+            if os.path.exists(tmp_checkpoint_path):
+                os.remove(tmp_checkpoint_path)
             break
 
         if workflow_status == WorkflowStatus.TRAINING:
