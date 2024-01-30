@@ -26,7 +26,7 @@ if __name__ == '__main__':
     save_model(model, f'{model_name}.pth')
     # to regenerate new default onnx model
     onnx_checkpoint_tmp = f"{model_name}.onnx_tmp"
-    torch.onnx.export(model, torch.zeros(1, 28, dtype=torch.int32).to(model.device), onnx_checkpoint_tmp, opset_version=14)
+    torch.onnx.export(model, torch.zeros(4, 28, dtype=torch.int32).to(model.device), onnx_checkpoint_tmp, opset_version=14)
 
     onnx_checkpoint = f"{model_name}.onnx"
     model_simple, is_simplify_success = onnxsim.simplify(onnx.load(onnx_checkpoint_tmp))
