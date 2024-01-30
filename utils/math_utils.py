@@ -16,3 +16,7 @@ def choose_idx_by_array(array, method):
             if random_num <= cumulative_prob:
                 return i
         raise ValueError(f"array should be a probability distribution, but={array}")
+
+
+def softmax_np(x):
+    return np.exp(x) / np.sum(np.exp(x), axis=0)
