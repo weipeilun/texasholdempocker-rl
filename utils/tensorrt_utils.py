@@ -192,6 +192,7 @@ def allocate_buffers(engine: trt.ICudaEngine, profile_idx: Optional[int] = None)
         # get_tensor_profile_shape returns (min_shape, optimal_shape, max_shape)
         # Pick out the max shape to allocate enough memory for the binding.
         shape = engine.get_tensor_shape(binding) if profile_idx is None else engine.get_tensor_profile_shape(binding, profile_idx)[-1]
+        print(shape)
         shape_valid = np.all([s >= 0 for s in shape])
         if not shape_valid and profile_idx is None:
             raise ValueError(f"Binding {binding} has dynamic shape, " +\

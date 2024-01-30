@@ -34,7 +34,9 @@ def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model
 
     tmp_onnx_path = path.replace('.pth', '.onnx_tmp')
     model.load_state_dict(model_state_dict, strict=False)
-    torch.onnx.export(model, torch.zeros(1, 28, dtype=torch.int32).to(model.device), tmp_onnx_path, opset_version=14)
+    input_names = ['input']
+    dynamic_axes = {'input': {0: 'batch_size'}}
+    torch.onnx.export(model, torch.zeros(8, 28, dtype=torch.int32).to(model.device), tmp_onnx_path, opset_version=14, input_names=input_names, dynamic_axes=dynamic_axes)
 
     onnx_path = path.replace('.pth', '.onnx')
     onnx_checkpoint = onnx.load(tmp_onnx_path)
