@@ -9,17 +9,6 @@ import onnx
 
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
-def build_engine(model_file):
-    builder = trt.Builder(TRT_LOGGER)
-    network = builder.create_network(EXPLICIT_BATCH)
-    config = builder.create_builder_config()
-    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 20)
-    parser = trt.OnnxParser(network, TRT_LOGGER)
-
-    with open(model_file, 'rb') as model:
-        assert parser.parse(model.read())
-        return builder.build_serialized_network(network, config)
-
 
 if __name__ == '__main__':
     log_level = logging.INFO
