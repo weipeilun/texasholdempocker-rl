@@ -36,15 +36,16 @@ if __name__ == '__main__':
     # to regenerate new default onnx model
     torch.onnx.export(model, torch.zeros(1, 28, dtype=torch.int32).to(model.device), f'{model_name}.onnx', opset_version=14, do_constant_folding=True)
 
-    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-    trt_runtime = trt.Runtime(TRT_LOGGER)
-
-    trt_model_engine = build_engine(f"{model_name}.onnx")
-    with open(f"{model_name}.trt", "wb") as f:
-        f.write(trt_model_engine)
     onnx_checkpoint = onnx.load(f"{model_name}.onnx")
     model_simple, is_simplify_success = onnxsim.simplify(onnx_checkpoint)
     assert is_simplify_success
     onnx.save(model_simple, f"{model_name}_simplified.onnx")
+
+    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+    trt_runtime = trt.Runtime(TRT_LOGGER)
+
+    trt_model_engine = build_engine(f"{model_name}_simplified.onnx")
+    with open(f"{model_name}.trt", "wb") as f:
+        f.write(trt_model_engine)
 
     logging.info('success')
