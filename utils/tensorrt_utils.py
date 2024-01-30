@@ -20,16 +20,19 @@ def build_engine(model_file):
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(EXPLICIT_BATCH)
     config = builder.create_builder_config()
-    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 24)
+    # config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 24)
     config.max_workspace_size = GiB(8)
-    network.add_input("input.batch_size", trt.float32, (-1, 28))
     # if builder.platform_has_fast_fp16:
     #     config.set_flag(trt.BuilderFlag.FP16)
     parser = trt.OnnxParser(network, TRT_LOGGER)
 
     with open(model_file, 'rb') as model:
         assert parser.parse(model.read())
-        return builder.build_serialized_network(network, config)
+
+    inputs = [network.get_input(i) for i in range(network.num_inputs)]
+    print(inputs)
+    # network.add_input("input.batch_size", trt.float32, (-1, 28))
+    return builder.build_serialized_network(network, config)
 
 def check_cuda_err(err):
     if isinstance(err, cuda.CUresult):
