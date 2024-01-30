@@ -128,3 +128,4 @@ model_init_checkpoint_path: models/default_train.pth
 model_last_checkpoint_path: models/last.pth
 model_eval_snapshot_path_format: models/eval_%s.pth
 model_best_checkpoint_path: models/best.pth
+model_workflow_tmp_checkpoint_path: models/workflow_tmp.pth

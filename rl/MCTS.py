@@ -277,6 +277,7 @@ class MCTS:
         if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
             try:
                 workflow_status = self.workflow_signal_queue.get(block=False)
+                logging.info(f"MCTS.predict{self.pid} received workflow_status: {workflow_status.name}")
                 self.workflow_ack_signal_queue.put(workflow_status)
 
                 with self.workflow_lock:

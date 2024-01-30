@@ -160,6 +160,8 @@ if __name__ == '__main__':
     Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue,), daemon=True).start()
 
     workflow_status = WorkflowStatus.DEFAULT
+    best_model_trt_filename = model_init_checkpoint_path.replace('.pth', '.trt')
+    new_model_trt_filename = None
     best_model_state_dict = get_state_dict_from_model(model)
     new_model_state_dict = None
     new_optimizer_state_dict = None
@@ -171,6 +173,10 @@ if __name__ == '__main__':
     is_update_old_model = False
     model_eval_snapshot_path_format = params['model_eval_snapshot_path_format']
     model_best_checkpoint_path = params['model_best_checkpoint_path']
+    model_workflow_tmp_checkpoint_path = params['model_workflow_tmp_checkpoint_path']
+    model_param_dict_for_save = model_param_dict.copy()
+    model_param_dict_for_save['device'] = 'cpu'
+    model_for_save = AlphaGoZero(**model_param_dict_for_save)
     while True:
         if interrupt.interrupt_callback():
             logging.info("main loop detect interrupt")
@@ -185,7 +191,7 @@ if __name__ == '__main__':
                 workflow_status = switch_workflow_default(WorkflowStatus.TRAIN_FINISH_WAIT, workflow_queue_list, workflow_ack_queue_list)
                 logging.info(f"Main thread switched workflow to {workflow_status.name}")
 
-                save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id)
+                new_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id, model_for_save)
             except Empty:
                 # 先切换队列状态，如果队列状态不变，只在train任务中同步模型
                 step_num, train_model_state_dict = None, None
@@ -194,9 +200,10 @@ if __name__ == '__main__':
                         step_num, train_model_state_dict = train_update_model_signal_queue.get(block=False)
                     except Empty:
                         break
+                tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save)
                 if step_num is not None and train_model_state_dict is not None:
                     for train_update_model_queue in train_update_model_queue_list:
-                        train_update_model_queue.put(train_model_state_dict)
+                        train_update_model_queue.put(tmp_checkpoint_path)
                     if receive_and_check_ack_from_queue(workflow_status, train_update_model_ack_queue, len(train_update_model_queue_list)):
                         logging.info(f"Model state updating workflow finished at training step {step_num}.")
             finally:
@@ -211,9 +218,9 @@ if __name__ == '__main__':
         elif workflow_status == WorkflowStatus.REGISTERING_EVAL_MODEL:
             # 负责新模型推理的batch predict进程注册新模型
             for new_model_update_state_queue in new_model_update_state_queue_list:
-                new_model_update_state_queue.put(new_model_state_dict)
+                new_model_update_state_queue.put(new_model_trt_filename)
             for best_model_update_state_queue in best_model_update_state_queue_list:
-                best_model_update_state_queue.put(best_model_state_dict)
+                best_model_update_state_queue.put(best_model_trt_filename)
             if not receive_and_check_all_ack(workflow_status, workflow_ack_queue_list):
                 exit(-1)
 
@@ -266,13 +273,13 @@ if __name__ == '__main__':
             # batch predict切换模型，继续开始train任务
             if is_update_old_model:
                 # 在此处切换新旧模型pointer
-                save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path)
+                best_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path, model_for_save)
                 best_model_state_dict = new_model_state_dict
 
             # 永远使用最新模型训练
             # todo: 考虑什么情况下需要使用旧checkpoint训练
             for update_state_queue in update_model_param_queue_list:
-                update_state_queue.put(new_model_state_dict)
+                update_state_queue.put(new_model_trt_filename)
             if not receive_and_check_all_ack(workflow_status, workflow_ack_queue_list):
                 exit(-1)
 

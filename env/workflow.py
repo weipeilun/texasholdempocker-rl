@@ -11,6 +11,10 @@ from queue import Empty, Queue
 from rl.MCTS import MCTS
 from utils.torch_utils import *
 from utils.workflow_utils import *
+from utils.tensorrt_utils import *
+from utils.math_utils import *
+import onnxsim
+import onnx
 
 
 def save_model(model, path):
@@ -21,12 +25,31 @@ def save_model(model, path):
     logging.info(f'model saved to {path}')
 
 
-def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path):
+def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model):
     models_dict = dict()
     models_dict['model'] = model_state_dict
-    models_dict['optimizer'] = optimizer_state_dict
+    if optimizer_state_dict is not None:
+        models_dict['optimizer'] = optimizer_state_dict
     torch.save(models_dict, path)
-    logging.info(f'model saved to {path}')
+
+    tmp_onnx_path = path.replace('.pth', '.onnx_tmp')
+    model.load_state_dict(model_state_dict, strict=False)
+    torch.onnx.export(model, torch.zeros(1, 28, dtype=torch.int32).to(model.device), tmp_onnx_path, opset_version=14)
+
+    onnx_path = path.replace('.pth', '.onnx')
+    onnx_checkpoint = onnx.load(tmp_onnx_path)
+    model_simple, is_simplify_success = onnxsim.simplify(onnx_checkpoint)
+    assert is_simplify_success
+    onnx.save(model_simple, onnx_path)
+    os.remove(tmp_onnx_path)
+
+    trt_path = path.replace('.pth', '.trt')
+    trt_model_engine = build_engine(onnx_path)
+    with open(trt_path, "wb") as f:
+        f.write(trt_model_engine)
+
+    logging.info(f'model saved to {path}, {onnx_path}, {trt_path}')
+    return trt_path
 
 
 def load_model_and_synchronize(model, model_path, update_model_param_queue_list, workflow_ack_queue_list):
@@ -37,11 +60,14 @@ def load_model_and_synchronize(model, model_path, update_model_param_queue_list,
         if 'optimizer' in checkpoint:
             model.optimizer.load_state_dict(checkpoint['optimizer'])
 
-        for update_model_param_queue in update_model_param_queue_list:
-            update_model_param_queue.put(model_param)
-        for workflow_ack_queue in workflow_ack_queue_list:
-            workflow_ack_queue.get(block=True, timeout=None)
-        logging.info(f'model loaded from {model_path}')
+    if update_model_param_queue_list is not None and len(update_model_param_queue_list) > 0 and workflow_ack_queue_list is not None and len(workflow_ack_queue_list) > 0:
+        tensorrt_path = model_path.replace('.pth', '.trt')
+        if os.path.exists(tensorrt_path):
+            for update_model_param_queue in update_model_param_queue_list:
+                update_model_param_queue.put(tensorrt_path)
+            for workflow_ack_queue in workflow_ack_queue_list:
+                workflow_ack_queue.get(block=True, timeout=None)
+            logging.info(f'model loaded from {model_path}')
 
 
 # 接生成模拟数据的任务，生成模拟数据，计算胜率（子进程）
@@ -213,8 +239,13 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
-    model = AlphaGoZero(**model_param_dict)
-    model.eval()
+    # model = AlphaGoZero(**model_param_dict)
+    # model.eval()
+
+    # 使用tensorRT加速推理
+    engine = None
+    inputs, outputs, bindings, stream = None, None, None, None
+    context = None
 
     def send_thread(send_in_queue, send_out_queue_list, send_out_queue_map_dict_train, send_out_queue_map_dict_eval, logging_queue, pid):
         while True:
@@ -223,17 +254,26 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 break
 
             try:
-                action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                # action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                #
+                # for action_probs, action_Q, winning_prob, send_pid in zip(action_probs_list, action_Q_list, winning_prob_list, send_pid_list):
+                #     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
+                #         send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                #     elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
+                #         send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                #     else:
+                #         raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
 
-                for action_probs, action_Q, winning_prob, send_pid in zip(action_probs_list, action_Q_list, winning_prob_list, send_pid_list):
-                    if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
-                    elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
-                    else:
-                        raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
+                action_probs, action_Q, winning_prob, send_pid, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
-                logging_queue.put(len(action_probs_list))
+                if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
+                    send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
+                    send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                else:
+                    raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
+
+                logging_queue.put(1)
             except Empty:
                 continue
 
@@ -282,12 +322,23 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
         predict_send_send_in_queue.put((action_probs_list, action_Q_list, winning_prob_list, predict_send_pid_list, predict_send_workflow_status))
 
+    def predict_and_send_trt(data, data_pid, predict_send_send_in_queue, predict_send_workflow_status, context, bindings, inputs, outputs, stream):
+        np.copyto(inputs[0].host, data)
+        action_prob_logits, action_Qs, winning_prob = do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        action_prob_logits = np.copy(action_prob_logits)
+        action_Qs = np.copy(action_Qs)
+        winning_prob = np.copy(winning_prob)[0]
+        action_probs = softmax_np(action_prob_logits)
+        predict_send_send_in_queue.put((action_probs, action_Qs, winning_prob, data_pid, predict_send_workflow_status))
+
     batch_list = list()
     pid_list = list()
     workflow_status = WorkflowStatus.DEFAULT
     while True:
         if interrupt.interrupt_callback():
             logging.info(f"predict_batch_process_{pid} detect interrupt")
+            if inputs is not None and outputs is not None and stream is not None:
+                free_buffers(inputs, outputs, stream)
             break
 
         try:
@@ -297,8 +348,12 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             pass
 
         try:
-            model_dict = update_model_param_queue.get(block=False)
-            model.load_state_dict(model_dict)
+            # model_dict = update_model_param_queue.get(block=False)
+            # model.load_state_dict(model_dict)
+            trt_filename = update_model_param_queue.get(block=False)
+            engine = load_engine(trt_filename)
+            inputs, outputs, bindings, stream = allocate_buffers(engine)
+            context = engine.create_execution_context()
             workflow_ack_queue.put(workflow_status)
             logging.info(f'predict_batch_process_{pid} model updated')
         except Empty:
@@ -306,9 +361,13 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
         try:
             if train_update_model_queue is not None and train_update_model_ack_queue is not None:
-                train_model_dict = train_update_model_queue.get(block=False)
-                if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
-                    model.load_state_dict(train_model_dict)
+                # train_model_dict = train_update_model_queue.get(block=False)
+                # if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
+                #     model.load_state_dict(train_model_dict)
+                train_trt_filename = train_update_model_queue.get(block=False)
+                if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
+                    engine = load_engine(train_trt_filename)
+                    context = engine.create_execution_context()
                     logging.info(f'predict_batch_process_{pid} model training updated')
                 else:
                     logging.info(f'predict_batch_process_{pid} model training updated skipped')
@@ -318,19 +377,21 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
         try:
             data, data_pid = in_queue.get(block=True, timeout=0.01)
-            batch_list.append(data)
-            pid_list.append(data_pid)
-
-            if batch_size == len(batch_list):
-                predict_and_send(model, batch_list, pid_list, send_in_queue, workflow_status)
-                batch_list = list()
-                pid_list = list()
+            # batch_list.append(data)
+            # pid_list.append(data_pid)
+            #
+            # if batch_size == len(batch_list):
+            #     predict_and_send(model, batch_list, pid_list, send_in_queue, workflow_status)
+            #     batch_list = list()
+            #     pid_list = list()
+            predict_and_send_trt(data, data_pid, send_in_queue, workflow_status, context, bindings, inputs, outputs, stream)
         except Empty:
-            # 小于一个batch_size也做预测，这样会降低性能。仅在任务即将结束，即可能产生小于一个batch的数据导致死锁时使用
-            if (workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT or workflow_status == WorkflowStatus.EVAL_FINISH_WAIT) and len(batch_list) > 0:
-                predict_and_send(model, batch_list, pid_list, send_in_queue, workflow_status)
-                batch_list = list()
-                pid_list = list()
+            # # 小于一个batch_size也做预测，这样会降低性能。仅在任务即将结束，即可能产生小于一个batch的数据导致死锁时使用
+            # if (workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT or workflow_status == WorkflowStatus.EVAL_FINISH_WAIT) and len(batch_list) > 0:
+            #     predict_and_send(model, batch_list, pid_list, send_in_queue, workflow_status)
+            #     batch_list = list()
+            #     pid_list = list()
+            pass
         except:
             error_info = str(traceback.format_exc())
             logging.error(f'predict_batch_process_{pid} error: trace=%s' % error_info)
