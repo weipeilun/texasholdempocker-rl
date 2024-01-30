@@ -355,7 +355,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             inputs, outputs, bindings, stream = allocate_buffers(engine)
             context = engine.create_execution_context()
             workflow_ack_queue.put(workflow_status)
-            logging.info(f'predict_batch_process_{pid} model updated')
+            logging.info(f'predict_batch_process_{pid} model updated: {trt_filename}')
         except Empty:
             pass
 
@@ -368,7 +368,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
                     engine = load_engine(train_trt_filename)
                     context = engine.create_execution_context()
-                    logging.info(f'predict_batch_process_{pid} model training updated')
+                    logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
                 else:
                     logging.info(f'predict_batch_process_{pid} model training updated skipped')
                 train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
