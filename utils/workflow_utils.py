@@ -63,11 +63,7 @@ def switch_workflow_default(target_workflow_status, workflow_queue_list, workflo
     return target_workflow_status
 
 
-def switch_workflow_for_predict_process_default(target_workflow_status, workflow_queue_list, workflow_ack_queue, tid_train_eval_pid_dict):
-    num_data_send = len(tid_train_eval_pid_dict)
-    for tid, pid in tid_train_eval_pid_dict.items():
-        workflow_queue_list[pid].put((tid, target_workflow_status))
-
+def receive_and_check_ack_from_queue(target_workflow_status, workflow_ack_queue, num_data_send):
     num_data_received = 0
     while True:
         if interrupt.interrupt_callback():
@@ -86,6 +82,16 @@ def switch_workflow_for_predict_process_default(target_workflow_status, workflow
                     break
         except Empty:
             continue
+    return True
+
+
+def switch_workflow_for_predict_process_default(target_workflow_status, workflow_queue_list, workflow_ack_queue, tid_train_eval_pid_dict):
+    num_data_send = len(tid_train_eval_pid_dict)
+    for tid, pid in tid_train_eval_pid_dict.items():
+        workflow_queue_list[pid].put((tid, target_workflow_status))
+
+    if not receive_and_check_ack_from_queue(target_workflow_status, workflow_ack_queue, num_data_send):
+        exit(-1)
     return target_workflow_status
 
 

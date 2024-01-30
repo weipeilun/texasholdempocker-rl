@@ -124,10 +124,10 @@ if __name__ == '__main__':
 
     # 训练中更新模型参数
     train_update_model_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
-    train_update_model_ack_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+    train_update_model_ack_queue = Manager().Queue()
 
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
-    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue, train_update_model_ack_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list, train_update_model_ack_queue_list)):
+    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list)):
         Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
@@ -197,7 +197,7 @@ if __name__ == '__main__':
                 if step_num is not None and train_model_state_dict is not None:
                     for train_update_model_queue in train_update_model_queue_list:
                         train_update_model_queue.put(train_model_state_dict)
-                    if receive_and_check_all_ack(workflow_status, train_update_model_ack_queue_list):
+                    if receive_and_check_ack_from_queue(workflow_status, train_update_model_ack_queue, len(train_update_model_queue_list)):
                         logging.info(f"Model state updating workflow finished at training step {step_num}.")
             finally:
                 time.sleep(0.1)
