@@ -1,3 +1,5 @@
+import os
+
 from env.workflow import *
 from tools.param_parser import *
 import tensorrt as trt
@@ -34,17 +36,19 @@ if __name__ == '__main__':
     # to regenerate new default model
     save_model(model, f'{model_name}.pth')
     # to regenerate new default onnx model
-    torch.onnx.export(model, torch.zeros(1, 28, dtype=torch.int32).to(model.device), f'{model_name}.onnx', opset_version=15)
+    torch.onnx.export(model, torch.zeros(1, 28, dtype=torch.int32).to(model.device), f'{model_name}.onnx', opset_version=14)
 
-    onnx_checkpoint = onnx.load(f"{model_name}.onnx")
-    model_simple, is_simplify_success = onnxsim.simplify(onnx_checkpoint)
+    onnx_checkpoint_tmp = f"{model_name}.onnx_tmp"
+    onnx_checkpoint = f"{model_name}.onnx"
+    model_simple, is_simplify_success = onnxsim.simplify(onnx.load(onnx_checkpoint_tmp))
     assert is_simplify_success
-    onnx.save(model_simple, f"{model_name}_simplified.onnx")
+    onnx.save(model_simple, onnx_checkpoint)
+    os.remove(onnx_checkpoint_tmp)
 
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
     trt_runtime = trt.Runtime(TRT_LOGGER)
 
-    trt_model_engine = build_engine(f"{model_name}_simplified.onnx")
+    trt_model_engine = build_engine(onnx_checkpoint)
     with open(f"{model_name}.trt", "wb") as f:
         f.write(trt_model_engine)
 
