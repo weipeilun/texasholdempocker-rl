@@ -35,7 +35,7 @@ def build_engine(model_file):
         logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
     builder.max_batch_size = 8
     profile = builder.create_optimization_profile()
-    profile.set_shape("input", (8, 28), (2, 28), (1, 28))
+    profile.set_shape("input", (1, 28), (4, 28), (8, 28))
     config.add_optimization_profile(profile)
     return builder.build_serialized_network(network, config)
 
