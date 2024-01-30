@@ -31,13 +31,10 @@ def build_engine(model_file):
         assert parser.parse(model.read())
 
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
-    batch_size = -1
     for input in inputs:
         batch_size = input.shape[0]
         logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
-    assert batch_size > 0
-    builder.max_batch_size = batch_size
-    # network.add_input("input.batch_size", trt.float32, (-1, 28))
+    builder.max_batch_size = 8
     return builder.build_serialized_network(network, config)
 
 def check_cuda_err(err):
