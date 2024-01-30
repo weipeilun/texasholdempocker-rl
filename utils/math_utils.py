@@ -19,4 +19,4 @@ def choose_idx_by_array(array, method):
 
 
 def softmax_np(x):
-    return np.exp(x) / np.sum(np.exp(x), axis=-1)
+    return np.exp(x) / np.sum(np.exp(x), axis=-1, keepdims=True)
