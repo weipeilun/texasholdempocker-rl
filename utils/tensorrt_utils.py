@@ -2,6 +2,7 @@ import tensorrt as trt
 import argparse
 import os
 import ctypes
+import logging
 import numpy as np
 from typing import Optional, List
 from cuda import cuda, cudart
@@ -30,7 +31,12 @@ def build_engine(model_file):
         assert parser.parse(model.read())
 
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
-    print(inputs)
+    batch_size = -1
+    for input in inputs:
+        batch_size = input.shape[0]
+        logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
+    assert batch_size > 0
+    builder.max_batch_size = batch_size
     # network.add_input("input.batch_size", trt.float32, (-1, 28))
     return builder.build_serialized_network(network, config)
 
