@@ -188,7 +188,7 @@ def allocate_buffers(engine: trt.ICudaEngine, context, profile_idx: int):
     bindings = []
     stream = cuda_call(cudart.cudaStreamCreate())
     context.set_optimization_profile_async(profile_idx, stream)
-    context.set_input_shape("input", (8, 28))
+    context.set_input_shape("input", (4, 28))
     tensor_names = [engine.get_tensor_name(i) for i in range(engine.num_io_tensors)]
     for binding in tensor_names:
         # get_tensor_profile_shape returns (min_shape, optimal_shape, max_shape)
