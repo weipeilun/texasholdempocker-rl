@@ -180,6 +180,10 @@ class HostDeviceMem:
         cuda_call(cudart.cudaFreeHost(self.host.ctypes.data))
 
 
+def reset_input_shape(context, input_name: str, input_shape: tuple):
+    context.set_input_shape(input_name, input_shape)
+
+
 # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
 # If engine uses dynamic shapes, specify a profile to find the maximum input & output size.
 def allocate_buffers(engine: trt.ICudaEngine, context, profile_idx: int, input_name: str, input_shape: tuple):
