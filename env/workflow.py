@@ -90,6 +90,8 @@ def simulate_processes(in_queue, out_queue, simulation_recurrent_param_dict, pid
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
+    logging.info(f"simulate_processes {pid} pid {os.getpid()} started")
+
     # current_round: [(current_round_gen_num, num_random_generates, is_segment_end)]
     # 第一轮只遍历flop轮，其他随机，控制在10w次模拟(19600 * 5)
     # 第二轮只遍历turn轮，其他随机，控制在10w次模拟(2162 * 45)
@@ -251,6 +253,8 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                         datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
     logger.setLevel(log_level)
+
+    logging.info(f"predict_batch_process {pid} pid {os.getpid()} started")
 
     # 初始化tensorRT batch buffer
     def init_tensorrt_instances(trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict):
@@ -670,6 +674,8 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
                         datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
     logger.setLevel(log_level)
+
+    logging.info(f"train_eval_process {pid} pid {os.getpid()} started")
 
     assert len(train_eval_thread_param_list) == len(tid_process_tid_map), f'Length of train_eval_thread_param_list:{len(train_eval_thread_param_list)} must equals to length of tid_process_tid_map:{len(tid_process_tid_map)}'
 

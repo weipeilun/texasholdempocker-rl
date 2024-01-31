@@ -44,7 +44,7 @@ if __name__ == '__main__':
     winning_probability_generating_task_queue = Manager().Queue()
     game_result_out_queue = Manager().Queue()
     for pid in range(num_gen_winning_prob_cal_data_processes):
-        Process(target=simulate_processes, args=(winning_probability_generating_task_queue, game_result_out_queue, simulation_recurrent_param_dict, pid, log_level), daemon=True, name=f'simulate{pid}').start()
+        Process(target=simulate_processes, args=(winning_probability_generating_task_queue, game_result_out_queue, simulation_recurrent_param_dict, pid, log_level), daemon=True).start()
     logging.info(f'Finished init {num_gen_winning_prob_cal_data_processes} simulate_processes.')
 
     # reward receiving thread
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     is_init_train_thread = True
     is_init_eval_thread = True
     for pid, (data_out_queue, tid_process_tid_map, workflow_game_loop_signal_queue, eval_workflow_signal_queue) in enumerate(zip(predict_batch_out_queue_list, predict_batch_out_info_list, workflow_game_loop_signal_queue_list, eval_workflow_signal_queue_list)):
-        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, data_out_queue, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level), daemon=True, name=f'train_eval{pid}').start()
+        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, data_out_queue, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level), daemon=True).start()
     logging.info('All train_eval_process inited.')
 
     # 训练中更新模型参数
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
     batch_predict_model_type = ModelType(params['batch_predict_model_type'])
     for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list)):
-        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True, name=f'predict_batch{pid}').start()
+        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
