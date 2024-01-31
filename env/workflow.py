@@ -448,14 +448,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     pid_list = list()
             elif batch_predict_model_type == ModelType.TENSORRT:
                 if len(batch_list) > 0:
-                    for batch_size, (input_shape, input_dim, inputs, outputs, bindings) in batch_info_dict.items():
+                    for idx, (batch_size, (input_shape, input_dim, inputs, outputs, bindings)) in enumerate(batch_info_dict.items()):
                         if batch_size <= len(batch_list):
                             predict_and_send_trt(batch_list[:batch_size], pid_list[:batch_size], send_in_queue, workflow_status, context, bindings, batch_size, input_shape, input_dim, inputs, outputs, stream)
                             batch_list = batch_list[batch_size:].copy()
                             pid_list = pid_list[batch_size:].copy()
                             break
-                        if workflow_status == WorkflowStatus.TRAINING or workflow_status == WorkflowStatus.EVALUATING:
-                            # 训练或评估中，只以最大的batch_size做预测，以提高显卡利用率
+                        if (workflow_status == WorkflowStatus.TRAINING or workflow_status == WorkflowStatus.EVALUATING) and idx > 0:
+                            # 训练或评估中，最坏情况用top 2的batch_size做预测，以提高显卡利用率，否则等待数据
                             break
         except:
             error_info = str(traceback.format_exc())
