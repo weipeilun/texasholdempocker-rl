@@ -9,6 +9,7 @@ class ModelType(Enum):
 
 
 # card figures
+# this is identical to phevaluator.card.rank_map
 class CardFigure(Enum):
     CARD_FIGURE_2 = 0
     CARD_FIGURE_3 = 1
@@ -24,11 +25,14 @@ class CardFigure(Enum):
     CARD_FIGURE_KING = 11
     CARD_FIGURE_ACE = 12
 
+
+# card decors
+# these are identical to phevaluator.card.suit_map
 class CardDecor(Enum):
-    HEART = 0
-    SPADE = 1
-    CLUB = 2
-    DIAMOND = 3
+    CLUB = 0
+    DIAMOND = 1
+    HEART = 2
+    SPADE = 3
 
 # betting round action
 class PlayerActions(Enum):

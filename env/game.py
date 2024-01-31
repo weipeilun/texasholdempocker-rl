@@ -1,11 +1,15 @@
 import logging
 import copy
+import sys
+
 import numpy as np
 from .cards import *
 from .agents import DummyAgent
 from copy import deepcopy
 from operator import itemgetter
 from math import floor
+from phevaluator import evaluate_cards
+from utils.pokerhandevaluator_utils import *
 
 
 deck = []
@@ -557,7 +561,7 @@ class GameEnv(object):
                                 current_match_player_cards_dict[match_player_name] = self.info_sets[match_player_name].player_hand_cards
                                 # current_match_player_value_dict[match_player_name] = spare_value_dict[match_player_name]
 
-                    current_match_winner_set = GameEnv.get_winner_set(self.flop_cards, self.turn_cards, self.river_cards, current_match_player_cards_dict)
+                    current_match_winner_set = GameEnv.get_winner_set_v2(self.flop_cards, self.turn_cards, self.river_cards, current_match_player_cards_dict)
                     GameEnv.generate_game_result(current_match_winner_set, player_game_result_dict)
                     if allin_player_name in current_match_winner_set:
                         # 本轮比牌allin玩家胜利
@@ -581,7 +585,7 @@ class GameEnv(object):
                 if match_player_action != PlayerActions.FOLD and match_player_name not in all_shared_player_name_set:
                     current_match_player_cards_dict[match_player_name] = self.info_sets[match_player_name].player_hand_cards
 
-            current_match_winner_set = GameEnv.get_winner_set(self.flop_cards, self.turn_cards, self.river_cards, current_match_player_cards_dict)
+            current_match_winner_set = GameEnv.get_winner_set_v2(self.flop_cards, self.turn_cards, self.river_cards, current_match_player_cards_dict)
             GameEnv.generate_game_result(current_match_winner_set, player_game_result_dict)
             value_pot, _ = self.share_pot(current_match_winner_set, value_pot, dict(), winner_value_dict)
 
@@ -612,6 +616,28 @@ class GameEnv(object):
                 elif current_winner != historical_winner:
                     winner_player_name_list.clear()
                     winner_player_name_list.append(current_winner)
+        return set(winner_player_name_list)
+
+    # Switch to PokerHandEvaluator(https://github.com/HenryRLee/PokerHandEvaluator/tree/master/python) for better performance.
+    @staticmethod
+    def get_winner_set_v2(flop_cards, turn_cards, river_cards, player_cards_dict):
+        if len(player_cards_dict) == 1:
+            return {player_name for player_name in player_cards_dict.keys()}
+
+        hand_cards_list = [card_to_evaluator(card) for card in flop_cards]
+        hand_cards_list.append(card_to_evaluator(turn_cards[0]))
+        hand_cards_list.append(card_to_evaluator(river_cards[0]))
+
+        lowest_rank = sys.maxsize
+        winner_player_name_list = list()
+        for player_name, hand_cards in player_cards_dict.items():
+            hand_cards = [card_to_evaluator(card) for card in hand_cards]
+            player_rank = evaluate_cards(*hand_cards_list, *hand_cards)
+            if player_rank <= lowest_rank:
+                if player_rank < lowest_rank:
+                    lowest_rank = player_rank
+                    winner_player_name_list.clear()
+                winner_player_name_list.append(player_name)
         return set(winner_player_name_list)
 
     def share_pot(self, winner_set, historical_pot, player_value_dict, winner_value_dict):

@@ -20,6 +20,7 @@ mcts_tau: 1
 mcts_log_to_file: True
 
 # model params
+batch_predict_model_type: 'PyTorch'  # choices: ['PyTorch', 'TensorRT']
 model_param_dict:
     device: 'cpu'
     batch_size: 8

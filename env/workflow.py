@@ -2,7 +2,7 @@ import logging
 import time
 
 import traceback
-from cuda import cuda, cudart
+from cuda import cudart
 from threading import Thread
 from env.env import *
 from tools.data_loader import *
@@ -124,7 +124,10 @@ def simulate_processes(in_queue, out_queue, simulation_recurrent_param_dict, pid
         for i, hand_card in enumerate(current_other_player_hand_cards):
             player_hand_card_dict[i + 1] = hand_card
 
+        # todo test
         winner_player = GameEnv.get_winner_set(flop_cards, turn_cards, river_cards, player_hand_card_dict)
+        winner_player2 = GameEnv.get_winner_set_v2(flop_cards, turn_cards, river_cards, player_hand_card_dict)
+        assert winner_player == winner_player2, ValueError(f'flop_cards: {flop_cards}, turn_cards: {turn_cards}, river_cards: {river_cards}, player_hand_card_dict: {player_hand_card_dict}, winner_player: {winner_player}, winner_player2: {winner_player2}')
 
         player_game_result_dict = {0: GamePlayerResult.LOSE}
         GameEnv.generate_game_result(winner_player, player_game_result_dict)
