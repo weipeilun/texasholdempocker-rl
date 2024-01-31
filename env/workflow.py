@@ -440,7 +440,8 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                             batch_list = batch_list[batch_size:].copy()
                             pid_list = pid_list[batch_size:].copy()
                             break
-                time.sleep(0.003)
+                else:
+                    time.sleep(0.003)
         except:
             error_info = str(traceback.format_exc())
             logging.error(f'predict_batch_process_{pid} error: trace=%s' % error_info)
