@@ -356,7 +356,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
         action_prob_logits, action_Qs, winning_prob = do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
         action_prob_logits = np.copy(action_prob_logits).reshape((batch_size, -1))
         action_Qs = np.copy(action_Qs).reshape((batch_size, -1))
-        winning_prob = np.copy(winning_prob)[0]
+        winning_prob = np.copy(winning_prob)
         action_probs = softmax_np(action_prob_logits)
         predict_send_send_in_queue.put((action_probs, action_Qs, winning_prob, data_pid_list, predict_send_workflow_status))
 
