@@ -4,7 +4,7 @@ MAX_PLAYER_NUMBER = 2
 
 
 class ModelType(Enum):
-    PYTORCH = 'PYTORCH'
+    PYTORCH = 'PyTorch'
     TENSORRT = 'TensorRT'
 
 
