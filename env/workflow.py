@@ -253,18 +253,20 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
     logging.info(f"predict_batch_process {pid} pid {os.getpid()} started")
 
     # 初始化tensorRT batch buffer
-    def init_tensorrt_instances(trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict):
+    def init_tensorrt_instances(trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size):
         engine = load_engine(trt_filename)
         context = engine.create_execution_context()
         context.set_optimization_profile_async(0, stream)
-        if batch_info_dict is None:
+        if batch_info_dict is None or tensorrt_min_infer_batch_size is None:
+            # 这个参数的意思是：WAIT_FINISH状态下，数据持续流入没有中断时的最小预测batch_size
+            tensorrt_min_infer_batch_size = 4
             batch_info_dict = dict()
             for batch_size in batch_size_list:
                 input_shape = (batch_size, *feature_size_list)
                 input_dim = np.prod(input_shape)
                 inputs, outputs, bindings = allocate_buffers(engine, context, 0, 'input', input_shape)
                 batch_info_dict[batch_size] = (input_shape, input_dim, inputs, outputs, bindings)
-        return engine, context, batch_info_dict
+        return engine, context, batch_info_dict, tensorrt_min_infer_batch_size
 
     if batch_predict_model_type == ModelType.PYTORCH:
         # PyTorch在GPU不可用时使用
@@ -278,7 +280,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
         engine, context = None, None
         batch_size_list = sorted(params['predict_batch_size_list'], reverse=True)
         feature_size_list = params['predict_feature_size_list']
-        batch_info_dict = None
+        batch_info_dict, tensorrt_min_infer_batch_size = None, None
     else:
         raise ValueError(f'Invalid batch_predict_model_type: {batch_predict_model_type.name}')
 
@@ -384,7 +386,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 logging.info(f'predict_batch_process_{pid} model updated')
             elif batch_predict_model_type == ModelType.TENSORRT:
                 trt_filename = msg
-                engine, context, batch_info_dict = init_tensorrt_instances(trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict)
+                engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
                 logging.info(f'predict_batch_process_{pid} model updated: {trt_filename}')
             workflow_ack_queue.put(workflow_status)
         except Empty:
@@ -400,7 +402,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 elif batch_predict_model_type == ModelType.TENSORRT:
                     train_trt_filename = msg
                     if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
-                        engine, context, batch_info_dict = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict)
+                        engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
                         logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
                     else:
                         logging.info(f'predict_batch_process_{pid} model training updated skipped')
@@ -421,9 +423,22 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             elif batch_predict_model_type == ModelType.TENSORRT:
                 # 取空队列，永远按最大batch做预测
                 while True:
-                    data, data_pid = in_queue.get(block=False)
+                    # 一直取数，不要sleep，以提高显卡利用率
+                    data, data_pid = in_queue.get(block=True, timeout=0.001)
                     batch_list.append(data)
                     pid_list.append(data_pid)
+                    # 达到min_infer_batch_size，做预测
+                    # 这主要在WAIT_FINISH状态下，数据持续流入没有中断情况下，可以保证预测以一个最小的batch_size进行
+                    if len(batch_list) >= tensorrt_min_infer_batch_size:
+                        for batch_size, (input_shape, input_dim, inputs, outputs, bindings) in batch_info_dict.items():
+                            if batch_size <= len(batch_list):
+                                predict_and_send_trt(batch_list[:batch_size], pid_list[:batch_size], send_in_queue, workflow_status, context, bindings, batch_size, input_shape, input_dim, inputs, outputs, stream)
+                                batch_list = batch_list[batch_size:].copy()
+                                pid_list = pid_list[batch_size:].copy()
+                                break
+                            if workflow_status == WorkflowStatus.TRAINING or workflow_status == WorkflowStatus.EVALUATING:
+                                # 训练或评估中，只以最大的batch_size做预测，以提高显卡利用率
+                                break
         except Empty:
             if batch_predict_model_type == ModelType.PYTORCH:
                 # 小于一个batch_size也做预测，这样会降低性能。仅在任务即将结束，即可能产生小于一个batch的数据导致死锁时使用
@@ -442,8 +457,6 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                         if workflow_status == WorkflowStatus.TRAINING or workflow_status == WorkflowStatus.EVALUATING:
                             # 训练或评估中，只以最大的batch_size做预测，以提高显卡利用率
                             break
-                else:
-                    time.sleep(0.003)
         except:
             error_info = str(traceback.format_exc())
             logging.error(f'predict_batch_process_{pid} error: trace=%s' % error_info)
