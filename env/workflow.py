@@ -124,10 +124,7 @@ def simulate_processes(in_queue, out_queue, simulation_recurrent_param_dict, pid
         for i, hand_card in enumerate(current_other_player_hand_cards):
             player_hand_card_dict[i + 1] = hand_card
 
-        # todo test
-        winner_player = GameEnv.get_winner_set(flop_cards, turn_cards, river_cards, player_hand_card_dict)
-        winner_player2 = GameEnv.get_winner_set_v2(flop_cards, turn_cards, river_cards, player_hand_card_dict)
-        assert winner_player == winner_player2, ValueError(f'flop_cards: {[str(card) for card in flop_cards]}, turn_cards: {[str(card) for card in turn_cards]}, river_cards: {[str(card) for card in river_cards]}, player_hand_card_dict: {[f"player_name:{[str(card) for card in card_list]}" for player_name, card_list in player_hand_card_dict.items()]}, winner_player: {winner_player}, winner_player2: {winner_player2}')
+        winner_player = GameEnv.get_winner_set_v2(flop_cards, turn_cards, river_cards, player_hand_card_dict)
 
         player_game_result_dict = {0: GamePlayerResult.LOSE}
         GameEnv.generate_game_result(winner_player, player_game_result_dict)

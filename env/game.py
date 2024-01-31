@@ -624,15 +624,15 @@ class GameEnv(object):
         if len(player_cards_dict) == 1:
             return {player_name for player_name in player_cards_dict.keys()}
 
-        hand_cards_list = [card_to_evaluator(card) for card in flop_cards]
-        hand_cards_list.append(card_to_evaluator(turn_cards[0]))
-        hand_cards_list.append(card_to_evaluator(river_cards[0]))
+        public_card_list = [card_to_evaluator(card) for card in flop_cards]
+        public_card_list.append(card_to_evaluator(turn_cards[0]))
+        public_card_list.append(card_to_evaluator(river_cards[0]))
 
         lowest_rank = sys.maxsize
         winner_player_name_set = set()
-        for player_name, hand_cards in player_cards_dict.items():
-            hand_cards = [card_to_evaluator(card) for card in hand_cards]
-            player_rank = evaluate_cards(*hand_cards_list, *hand_cards)
+        for player_name, player_hand_cards in player_cards_dict.items():
+            hand_card_list = [card_to_evaluator(card) for card in player_hand_cards]
+            player_rank = evaluate_cards(*public_card_list, *hand_card_list)
             if player_rank <= lowest_rank:
                 if player_rank < lowest_rank:
                     lowest_rank = player_rank
