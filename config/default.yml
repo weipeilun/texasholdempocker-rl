@@ -1,15 +1,15 @@
 # workflow params
 num_predict_batch_process: 2
 num_gen_winning_prob_cal_data_processes: 16
-predict_batch_size: 8
+predict_batch_size: 16
 game_loop_thread_multiple: 10
 num_train_eval_process: 10
 eval_task_num_games: 1000
 update_model_bb_per_100_thres: 5.
 historical_data_filename: data/history.txt
 predict_batch_size_min: 1
-predict_batch_size_max: 32
-predict_batch_size_list: [1, 2, 4, 8, 16, 32]
+predict_batch_size_max: 64
+predict_batch_size_list: [1, 2, 4, 8, 16, 32, 64]
 predict_feature_size_list: [28, ]
 
 # train process params
