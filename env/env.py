@@ -548,7 +548,6 @@ class RandomEnv(Env):
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def take_step_to_round(self, max_round):
-        result = None
         current_round = 0
         while current_round <= max_round:
             num_bets = 0
@@ -579,7 +578,7 @@ class RandomEnv(Env):
                         stop_simulation = True
                         break
 
-                result = self._env.step(action)
+                self._env.step(action)
                 if current_round != self._env.current_round:
                     break
                 if self.game_over:
@@ -590,7 +589,6 @@ class RandomEnv(Env):
                 break
             else:
                 current_round = self._env.current_round
-        return result
 
     def reset(self, game_id, seed=None, cards_dict=None):
         obs = Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
@@ -607,13 +605,12 @@ class RandomEnv(Env):
                     break
         assert target_round is not None, f'self.round_probs should be a probability distribution, but={self.round_probs}'
 
-        task_key = None
         while True:
             # 强制设置的概率中包含0，可能会导致self.get_valid_action_info()中mask时把所有有效数值全置为0，导致无法生成有效的action
             # 这是因为其他玩家的raise把当前玩家逼到只能allin或fold
             # 而这种情况导致无法到达指定的round，认为是无效的初始对局
             try:
-                task_key = self.take_step_to_round(target_round)
+                self.take_step_to_round(target_round)
                 if self.game_over:
                     Env.reset(self, game_id=game_id, seed=seed, cards_dict=cards_dict)
                     continue
@@ -624,15 +621,7 @@ class RandomEnv(Env):
                 raise e
             break
 
-        # 此处task_key为None，表示当前游戏是初始化状态，不需要生成reward计算任务
-        if not self.ignore_all_async_tasks and task_key is not None and task_key not in self.reward_cal_task_set:
-            acted_round_num, acted_player_name = task_key
-            player_hand_card = self._env.info_sets[acted_player_name].player_hand_cards
-            game_infoset = self._env.game_infoset
-            self._gen_cal_reward_task(acted_player_name, acted_round_num, player_hand_card, game_infoset)
-
-            self.reward_cal_task_set.add(task_key)
-
+        # 注意此处游戏是初始化状态，不需要生成reward计算任务
         return self.get_obs(self._game_infoset)
 
 
