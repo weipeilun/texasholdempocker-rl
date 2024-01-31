@@ -629,16 +629,16 @@ class GameEnv(object):
         hand_cards_list.append(card_to_evaluator(river_cards[0]))
 
         lowest_rank = sys.maxsize
-        winner_player_name_list = list()
+        winner_player_name_set = set()
         for player_name, hand_cards in player_cards_dict.items():
             hand_cards = [card_to_evaluator(card) for card in hand_cards]
             player_rank = evaluate_cards(*hand_cards_list, *hand_cards)
             if player_rank <= lowest_rank:
                 if player_rank < lowest_rank:
                     lowest_rank = player_rank
-                    winner_player_name_list.clear()
-                winner_player_name_list.append(player_name)
-        return set(winner_player_name_list)
+                    winner_player_name_set.clear()
+                winner_player_name_set.add(player_name)
+        return winner_player_name_set
 
     def share_pot(self, winner_set, historical_pot, player_value_dict, winner_value_dict):
         spare_player_value_dict = player_value_dict.copy()
