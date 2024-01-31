@@ -300,7 +300,6 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                         raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
 
                 logging_queue.put(len(action_probs_list))
-                logging.info(f'pid={pid}, predicted {len(action_probs_list)} data')
             except Empty:
                 continue
 
