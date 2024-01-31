@@ -2,6 +2,12 @@ from enum import Enum
 
 MAX_PLAYER_NUMBER = 2
 
+
+class ModelType(Enum):
+    PYTORCH = 'PYTORCH'
+    TENSORRT = 'TensorRT'
+
+
 # card figures
 class CardFigure(Enum):
     CARD_FIGURE_2 = 0

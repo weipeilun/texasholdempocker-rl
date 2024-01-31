@@ -28,7 +28,7 @@ if __name__ == '__main__':
     onnx_checkpoint_tmp = f"{model_name}.onnx_tmp"
     input_names = ['input']
     dynamic_axes = {'input': {0: 'batch_size'}}
-    torch.onnx.export(model, torch.zeros(8, 28, dtype=torch.int32).to(model.device), onnx_checkpoint_tmp, opset_version=14, input_names=input_names, dynamic_axes=dynamic_axes)
+    torch.onnx.export(model, torch.zeros((params['predict_batch_size_max'], *params['predict_feature_size_list']), dtype=torch.int32).to(model.device), onnx_checkpoint_tmp, opset_version=14, input_names=input_names, dynamic_axes=dynamic_axes)
 
     onnx_checkpoint = f"{model_name}.onnx"
     model_simple, is_simplify_success = onnxsim.simplify(onnx.load(onnx_checkpoint_tmp))

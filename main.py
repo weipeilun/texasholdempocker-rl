@@ -127,12 +127,13 @@ if __name__ == '__main__':
     train_update_model_ack_queue = Manager().Queue()
 
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
+    batch_predict_model_type = params['batch_predict_model_type']
     for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list)):
-        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, predict_batch_size, model_param_dict, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
+        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
-    load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list)
+    load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list, batch_predict_model_type)
 
     # control game simulation thread, to prevent excess task produced by producer
     game_finalized_signal_queue = Queue()
@@ -181,7 +182,7 @@ if __name__ == '__main__':
     while True:
         if interrupt.interrupt_callback():
             logging.info("main loop detect interrupt")
-            if os.path.exists(tmp_checkpoint_path):
+            if tmp_checkpoint_path is not None and os.path.exists(tmp_checkpoint_path):
                 os.remove(tmp_checkpoint_path)
             break
 
@@ -194,7 +195,7 @@ if __name__ == '__main__':
                 workflow_status = switch_workflow_default(WorkflowStatus.TRAIN_FINISH_WAIT, workflow_queue_list, workflow_ack_queue_list)
                 logging.info(f"Main thread switched workflow to {workflow_status.name}")
 
-                new_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id, model_for_save)
+                new_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id, model_for_save, batch_predict_model_type, params)
             except Empty:
                 # 先切换队列状态，如果队列状态不变，只在train任务中同步模型
                 step_num, train_model_state_dict = None, None
@@ -204,9 +205,13 @@ if __name__ == '__main__':
                     except Empty:
                         break
                 if step_num is not None and train_model_state_dict is not None:
-                    tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save)
+                    if batch_predict_model_type == ModelType.TENSORRT:
+                        tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save, batch_predict_model_type, params)
                     for train_update_model_queue in train_update_model_queue_list:
-                        train_update_model_queue.put(tmp_checkpoint_path)
+                        if batch_predict_model_type == ModelType.PYTORCH:
+                            train_update_model_queue.put(train_model_state_dict)
+                        elif batch_predict_model_type == ModelType.TENSORRT:
+                            train_update_model_queue.put(tmp_checkpoint_path)
                     if receive_and_check_ack_from_queue(workflow_status, train_update_model_ack_queue, len(train_update_model_queue_list)):
                         logging.info(f"Model state updating workflow finished at training step {step_num}.")
             finally:
@@ -221,9 +226,15 @@ if __name__ == '__main__':
         elif workflow_status == WorkflowStatus.REGISTERING_EVAL_MODEL:
             # 负责新模型推理的batch predict进程注册新模型
             for new_model_update_state_queue in new_model_update_state_queue_list:
-                new_model_update_state_queue.put(new_model_trt_filename)
+                if batch_predict_model_type == ModelType.PYTORCH:
+                    new_model_update_state_queue.put(new_model_state_dict)
+                elif batch_predict_model_type == ModelType.TENSORRT:
+                    new_model_update_state_queue.put(new_model_trt_filename)
             for best_model_update_state_queue in best_model_update_state_queue_list:
-                best_model_update_state_queue.put(best_model_trt_filename)
+                if batch_predict_model_type == ModelType.PYTORCH:
+                    best_model_update_state_queue.put(best_model_state_dict)
+                elif batch_predict_model_type == ModelType.TENSORRT:
+                    best_model_update_state_queue.put(best_model_trt_filename)
             if not receive_and_check_all_ack(workflow_status, workflow_ack_queue_list):
                 exit(-1)
 
@@ -276,13 +287,16 @@ if __name__ == '__main__':
             # batch predict切换模型，继续开始train任务
             if is_update_old_model:
                 # 在此处切换新旧模型pointer
-                best_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path, model_for_save)
+                best_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path, model_for_save, batch_predict_model_type, params)
                 best_model_state_dict = new_model_state_dict
 
             # 永远使用最新模型训练
             # todo: 考虑什么情况下需要使用旧checkpoint训练
             for update_state_queue in update_model_param_queue_list:
-                update_state_queue.put(new_model_trt_filename)
+                if batch_predict_model_type == ModelType.PYTORCH:
+                    update_state_queue.put(new_model_state_dict)
+                elif batch_predict_model_type == ModelType.TENSORRT:
+                    update_state_queue.put(new_model_trt_filename)
             if not receive_and_check_all_ack(workflow_status, workflow_ack_queue_list):
                 exit(-1)
 
