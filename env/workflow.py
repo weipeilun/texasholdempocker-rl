@@ -167,19 +167,17 @@ def simulate_processes(in_queue, out_queue, simulation_recurrent_param_dict, pid
                 current_card = deck[deck_idx]
                 if current_card not in exist_card_set:
                     all_cards_not_exist_list.append(current_card)
-            all_cards_not_exist_array = np.array(all_cards_not_exist_list)
             # 可随机生成的无序组合数大于本回合应生成的牌局数才有意义
-            num_cards_not_exist_combination = cal_unordered_combination(len(all_cards_not_exist_array),
-                                                                        current_round_gen_num)
+            num_cards_not_exist_combination = cal_unordered_combination(len(all_cards_not_exist_list), current_round_gen_num)
             if num_cards_not_exist_combination >= num_random_generates:
                 for _ in range(num_random_generates):
                     generated_cards = exist_card_list.copy()
-                    cards_choice = random.sample(all_cards_not_exist_array, current_round_gen_num)
+                    cards_choice = random.sample(all_cards_not_exist_list, current_round_gen_num)
                     generated_cards.extend(cards_choice)
                     game_result_sum += cal_game_result(generated_cards)
                     num_generated += 1
             else:
-                raise ValueError(f'Card combination generator error: can not generate {num_random_generates} cards randomly if card choice is {len(all_cards_not_exist_array)}')
+                raise ValueError(f'Card combination generator error: can not generate {num_random_generates} cards randomly if card choice is {len(all_cards_not_exist_list)}')
 
         return game_result_sum, num_generated
     
