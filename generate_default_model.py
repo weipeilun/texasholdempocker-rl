@@ -39,7 +39,7 @@ if __name__ == '__main__':
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
     trt_runtime = trt.Runtime(TRT_LOGGER)
 
-    trt_model_engine = build_engine(onnx_checkpoint)
+    trt_model_engine = build_engine(onnx_checkpoint, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
     with open(f"{model_name}.trt", "wb") as f:
         f.write(trt_model_engine)
 

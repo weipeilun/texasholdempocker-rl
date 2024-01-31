@@ -17,7 +17,7 @@ def load_engine(trt_file):
         return trt.Runtime(TRT_LOGGER).deserialize_cuda_engine(f.read())
 
 
-def build_engine(model_file):
+def build_engine(model_file, batch_size_min, batch_size_opt, batch_size_max, feature_size_list):
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(EXPLICIT_BATCH)
     config = builder.create_builder_config()
@@ -35,7 +35,7 @@ def build_engine(model_file):
         logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
     # builder.max_batch_size = 8
     profile = builder.create_optimization_profile()
-    profile.set_shape("input", (1, 28), (4, 28), (8, 28))
+    profile.set_shape("input", (batch_size_min, *feature_size_list), (batch_size_opt, *feature_size_list), (batch_size_max, *feature_size_list))
     config.add_optimization_profile(profile)
     return builder.build_serialized_network(network, config)
 
