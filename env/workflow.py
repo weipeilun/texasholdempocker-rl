@@ -259,7 +259,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
         context.set_optimization_profile_async(0, stream)
         if batch_info_dict is None or tensorrt_min_infer_batch_size is None:
             # 这个参数的意思是：WAIT_FINISH状态下，数据持续流入没有中断时的最小预测batch_size
-            tensorrt_min_infer_batch_size = 4
+            tensorrt_min_infer_batch_size = 16
             batch_info_dict = dict()
             for batch_size in batch_size_list:
                 input_shape = (batch_size, *feature_size_list)
