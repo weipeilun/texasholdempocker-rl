@@ -1,6 +1,4 @@
-import logging
 import time
-
 import traceback
 from cuda import cudart
 from threading import Thread
@@ -176,7 +174,7 @@ def simulate_processes(in_queue, out_queue, simulation_recurrent_param_dict, pid
             if num_cards_not_exist_combination >= num_random_generates:
                 for _ in range(num_random_generates):
                     generated_cards = exist_card_list.copy()
-                    cards_choice = np.random.choice(all_cards_not_exist_array, current_round_gen_num)
+                    cards_choice = random.sample(all_cards_not_exist_array, current_round_gen_num)
                     generated_cards.extend(cards_choice)
                     game_result_sum += cal_game_result(generated_cards)
                     num_generated += 1

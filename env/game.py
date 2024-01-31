@@ -1,7 +1,6 @@
 import logging
 import copy
-import sys
-
+import random
 import numpy as np
 from .cards import *
 from .agents import DummyAgent
@@ -133,7 +132,7 @@ class GameEnv(object):
                 all_unknown_cards.append(card)
 
         num_new_cards = 5 + new_env.num_players * 2 - len(all_known_cards_set)
-        new_random_cards = list(np.random.choice(all_unknown_cards, num_new_cards))
+        new_random_cards = random.sample(all_unknown_cards, num_new_cards)
         if new_env.current_round < 1:
             new_flop_cards = list()
             for _ in range(3):
@@ -642,7 +641,7 @@ class GameEnv(object):
             return winner_player_name_set
         except Exception as e:
             logging.error(e)
-            logging.info(f'flop_cards: {[str(card) for card in flop_cards]}, turn_cards: {[str(card) for card in turn_cards]}, river_cards: {[str(card) for card in river_cards]}, player_hand_card_dict: {[f"player_name:{[str(card) for card in card_list]}" for player_name, card_list in player_cards_dict.items()]}')
+            logging.info(f'flop_cards: {[str(card) for card in flop_cards]}, turn_cards: {[str(card) for card in turn_cards]}, river_cards: {[str(card) for card in river_cards]}, player_hand_card_dict: {[f"{player_name}:{[str(card) for card in card_list]}" for player_name, card_list in player_cards_dict.items()]}')
             return {}
 
     def share_pot(self, winner_set, historical_pot, player_value_dict, winner_value_dict):
