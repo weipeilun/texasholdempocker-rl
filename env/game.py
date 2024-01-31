@@ -621,24 +621,29 @@ class GameEnv(object):
     # Switch to PokerHandEvaluator(https://github.com/HenryRLee/PokerHandEvaluator/tree/master/python) for better performance.
     @staticmethod
     def get_winner_set_v2(flop_cards, turn_cards, river_cards, player_cards_dict):
-        if len(player_cards_dict) == 1:
-            return {player_name for player_name in player_cards_dict.keys()}
+        try:
+            if len(player_cards_dict) == 1:
+                return {player_name for player_name in player_cards_dict.keys()}
 
-        public_card_list = [card_to_evaluator(card) for card in flop_cards]
-        public_card_list.append(card_to_evaluator(turn_cards[0]))
-        public_card_list.append(card_to_evaluator(river_cards[0]))
+            public_card_list = [card_to_evaluator(card) for card in flop_cards]
+            public_card_list.append(card_to_evaluator(turn_cards[0]))
+            public_card_list.append(card_to_evaluator(river_cards[0]))
 
-        lowest_rank = sys.maxsize
-        winner_player_name_set = set()
-        for player_name, player_hand_cards in player_cards_dict.items():
-            hand_card_list = [card_to_evaluator(card) for card in player_hand_cards]
-            player_rank = evaluate_cards(*public_card_list, *hand_card_list)
-            if player_rank <= lowest_rank:
-                if player_rank < lowest_rank:
-                    lowest_rank = player_rank
-                    winner_player_name_set.clear()
-                winner_player_name_set.add(player_name)
-        return winner_player_name_set
+            lowest_rank = sys.maxsize
+            winner_player_name_set = set()
+            for player_name, player_hand_cards in player_cards_dict.items():
+                hand_card_list = [card_to_evaluator(card) for card in player_hand_cards]
+                player_rank = evaluate_cards(*public_card_list, *hand_card_list)
+                if player_rank <= lowest_rank:
+                    if player_rank < lowest_rank:
+                        lowest_rank = player_rank
+                        winner_player_name_set.clear()
+                    winner_player_name_set.add(player_name)
+            return winner_player_name_set
+        except Exception as e:
+            logging.error(e)
+            logging.info(f'flop_cards: {[str(card) for card in flop_cards]}, turn_cards: {[str(card) for card in turn_cards]}, river_cards: {[str(card) for card in river_cards]}, player_hand_card_dict: {[f"player_name:{[str(card) for card in card_list]}" for player_name, card_list in player_cards_dict.items()]}')
+            return {}
 
     def share_pot(self, winner_set, historical_pot, player_value_dict, winner_value_dict):
         spare_player_value_dict = player_value_dict.copy()
