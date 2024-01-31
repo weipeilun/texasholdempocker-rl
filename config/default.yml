@@ -8,8 +8,8 @@ eval_task_num_games: 1000
 update_model_bb_per_100_thres: 5.
 historical_data_filename: data/history.txt
 predict_batch_size_min: 1
-predict_batch_size_max: 32
-predict_batch_size_list: [1, 2, 4, 8, 16, 32]
+predict_batch_size_max: 16
+predict_batch_size_list: [1, 2, 4, 8, 16]
 predict_feature_size_list: [28, ]
 
 # train process params

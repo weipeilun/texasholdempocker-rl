@@ -443,6 +443,9 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                             batch_list = batch_list[batch_size:].copy()
                             pid_list = pid_list[batch_size:].copy()
                             break
+                        if workflow_status == WorkflowStatus.TRAINING or workflow_status == WorkflowStatus.EVALUATING:
+                            # 训练或评估中，只以最大的batch_size做预测，以提高显卡利用率
+                            break
                 else:
                     time.sleep(0.003)
         except:
