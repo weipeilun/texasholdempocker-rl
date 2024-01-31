@@ -31,8 +31,8 @@ def build_engine(model_file, batch_size_min, batch_size_opt, batch_size_max, fea
         assert parser.parse(model.read())
 
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
-    for input in inputs:
-        logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
+    # for input in inputs:
+    #     logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
     # builder.max_batch_size = 8
     profile = builder.create_optimization_profile()
     profile.set_shape("input", (batch_size_min, *feature_size_list), (batch_size_opt, *feature_size_list), (batch_size_max, *feature_size_list))
