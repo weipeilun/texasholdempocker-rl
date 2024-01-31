@@ -186,15 +186,16 @@ def reset_input_shape(context, input_name: str, input_shape: tuple):
 
 # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
 # If engine uses dynamic shapes, specify a profile to find the maximum input & output size.
-def allocate_buffers(engine: trt.ICudaEngine, profile_idx: Optional[int] = None, idx_in_profile: Optional[int] = None):
+def allocate_buffers(engine: trt.ICudaEngine, context, profile_idx: int, input_name: str, input_shape: tuple):
     inputs = []
     outputs = []
     bindings = []
     tensor_names = [engine.get_tensor_name(i) for i in range(engine.num_io_tensors)]
+    context.set_input_shape(input_name, input_shape)
     for binding in tensor_names:
         # get_tensor_profile_shape returns (min_shape, optimal_shape, max_shape)
         # Pick out the max shape to allocate enough memory for the binding.
-        shape = engine.get_tensor_shape(binding) if profile_idx is None else engine.get_tensor_profile_shape(binding, profile_idx)[-1]
+        shape = engine.get_tensor_shape(binding)
         print(engine.get_tensor_profile_shape(binding, profile_idx))
         shape_valid = np.all([s >= 0 for s in shape])
         if not shape_valid and profile_idx is None:
