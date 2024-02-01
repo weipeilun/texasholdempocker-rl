@@ -395,40 +395,11 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
         try:
             if batch_predict_model_type == ModelType.PYTORCH:
-                # 等待训练流程，更新模型
-                try:
-                    if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
-                        hold_train_step = train_hold_signal_queue.get(block=False)
-                        logging.info(f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
-                        train_hold_signal_ack_queue.put(hold_train_step)
-
-                        while True:
-                            try:
-                                train_model_dict = train_update_model_queue.get(block=True, timeout=0.1)
-                                if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
-                                    model.load_state_dict(train_model_dict)
-                                    logging.info(f'predict_batch_process_{pid} model training updated')
-                                else:
-                                    logging.info(f'predict_batch_process_{pid} model training updated skipped')
-                                train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
-                                break
-                            except Empty:
-                                pass
-                except Empty:
-                    pass
-                # 等待训练流程结束
-
                 data, data_pid = in_queue.get(block=True, timeout=0.01)
                 batch_list.append(data)
                 pid_list.append(data_pid)
 
                 if batch_size == len(batch_list):
-                    predict_and_send(model, batch_list, pid_list, send_in_queue, workflow_status)
-                    batch_list = list()
-                    pid_list = list()
-            elif batch_predict_model_type == ModelType.TENSORRT:
-                # 取空队列，永远按最大batch做预测
-                while True:
                     # 等待训练流程，更新模型
                     try:
                         if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
@@ -438,10 +409,10 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
                             while True:
                                 try:
-                                    train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
-                                    if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
-                                        engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
-                                        logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
+                                    train_model_dict = train_update_model_queue.get(block=True, timeout=0.1)
+                                    if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
+                                        model.load_state_dict(train_model_dict)
+                                        logging.info(f'predict_batch_process_{pid} model training updated')
                                     else:
                                         logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                     train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
@@ -452,6 +423,12 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                         pass
                     # 等待训练流程结束
 
+                    predict_and_send(model, batch_list, pid_list, send_in_queue, workflow_status)
+                    batch_list = list()
+                    pid_list = list()
+            elif batch_predict_model_type == ModelType.TENSORRT:
+                # 取空队列，永远按最大batch做预测
+                while True:
                     # 一直取数，不要sleep，以提高显卡利用率
                     data, data_pid = in_queue.get(block=True, timeout=0.001)
                     batch_list.append(data)
@@ -461,6 +438,36 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     if len(batch_list) >= tensorrt_min_infer_batch_size:
                         for batch_size, (input_shape, input_dim, inputs, outputs, bindings) in batch_info_dict.items():
                             if batch_size <= len(batch_list):
+                                # 等待训练流程，更新模型
+                                try:
+                                    if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
+                                        hold_train_step = train_hold_signal_queue.get(block=False)
+                                        logging.info(
+                                            f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
+                                        train_hold_signal_ack_queue.put(hold_train_step)
+
+                                        while True:
+                                            try:
+                                                train_trt_filename = train_update_model_queue.get(block=True,
+                                                                                                  timeout=0.1)
+                                                if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
+                                                    engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(
+                                                        train_trt_filename, batch_size_list, feature_size_list, stream,
+                                                        batch_info_dict, tensorrt_min_infer_batch_size)
+                                                    logging.info(
+                                                        f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
+                                                else:
+                                                    logging.info(
+                                                        f'predict_batch_process_{pid} model training updated skipped')
+                                                train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                                break
+                                            except Empty:
+                                                pass
+                                except Empty:
+                                    pass
+                                # 等待训练流程结束
+
+                                # predict and send
                                 predict_and_send_trt(batch_list[:batch_size], pid_list[:batch_size], send_in_queue, workflow_status, context, bindings, batch_size, input_shape, input_dim, inputs, outputs, stream)
                                 batch_list = batch_list[batch_size:].copy()
                                 pid_list = pid_list[batch_size:].copy()
@@ -472,6 +479,30 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             if batch_predict_model_type == ModelType.PYTORCH:
                 # 小于一个batch_size也做预测，这样会降低性能。仅在任务即将结束，即可能产生小于一个batch的数据导致死锁时使用
                 if (workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT or workflow_status == WorkflowStatus.EVAL_FINISH_WAIT) and len(batch_list) > 0:
+                    # 等待训练流程，更新模型
+                    try:
+                        if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
+                            hold_train_step = train_hold_signal_queue.get(block=False)
+                            logging.info(
+                                f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
+                            train_hold_signal_ack_queue.put(hold_train_step)
+
+                            while True:
+                                try:
+                                    train_model_dict = train_update_model_queue.get(block=True, timeout=0.1)
+                                    if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
+                                        model.load_state_dict(train_model_dict)
+                                        logging.info(f'predict_batch_process_{pid} model training updated')
+                                    else:
+                                        logging.info(f'predict_batch_process_{pid} model training updated skipped')
+                                    train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                    break
+                                except Empty:
+                                    pass
+                    except Empty:
+                        pass
+                    # 等待训练流程结束
+
                     predict_and_send(model, batch_list, pid_list, send_in_queue, workflow_status)
                     batch_list = list()
                     pid_list = list()
@@ -479,6 +510,35 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 if len(batch_list) > 0:
                     for idx, (batch_size, (input_shape, input_dim, inputs, outputs, bindings)) in enumerate(batch_info_dict.items()):
                         if batch_size <= len(batch_list):
+                            # 等待训练流程，更新模型
+                            try:
+                                if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
+                                    hold_train_step = train_hold_signal_queue.get(block=False)
+                                    logging.info(
+                                        f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
+                                    train_hold_signal_ack_queue.put(hold_train_step)
+
+                                    while True:
+                                        try:
+                                            train_trt_filename = train_update_model_queue.get(block=True,
+                                                                                              timeout=0.1)
+                                            if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
+                                                engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(
+                                                    train_trt_filename, batch_size_list, feature_size_list, stream,
+                                                    batch_info_dict, tensorrt_min_infer_batch_size)
+                                                logging.info(
+                                                    f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
+                                            else:
+                                                logging.info(
+                                                    f'predict_batch_process_{pid} model training updated skipped')
+                                            train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                            break
+                                        except Empty:
+                                            pass
+                            except Empty:
+                                pass
+                            # 等待训练流程结束
+
                             predict_and_send_trt(batch_list[:batch_size], pid_list[:batch_size], send_in_queue, workflow_status, context, bindings, batch_size, input_shape, input_dim, inputs, outputs, stream)
                             batch_list = batch_list[batch_size:].copy()
                             pid_list = pid_list[batch_size:].copy()
