@@ -673,7 +673,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 continue
 
         observation = env.reset(game_id, seed=seed)
-        # logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
+        logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
 
         game_step_id = 0
         while True:
@@ -682,7 +682,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 break
 
             t0 = time.time()
-            # logging.info(f'train_game_loop_thread {thread_name} game {game_id} start MCTS simulation step {game_step_id}')
+            logging.info(f'train_game_loop_thread {thread_name} game {game_id} start MCTS simulation step {game_step_id}')
             mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, small_blind=small_blind, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, model_Q_epsilon=mcts_model_Q_epsilon, choice_method=mcts_choice_method, log_to_file=mcts_log_to_file, pid=pid, thread_name=thread_name)
             action_probs, action_Qs = mcts.simulate(observation=observation, env=env)
             # 用于接收中断信号
@@ -692,7 +692,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
             action, action_mask_idx = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.PROBABILITY)
             t1 = time.time()
-            # logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %d), cost:%.2fs, ' % (action[1], t1 - t0))
+            logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %d), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, _, terminated, info = env.step(action)
             game_train_data_queue.put((game_id, ([observation, action_probs, action_Qs, action_mask_idx], info)))
@@ -701,7 +701,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
                 observation = observation_
             else:
                 game_finished_signal_queue.put(game_id)
-                # logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
+                logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
                 break
             game_step_id += 1
     env.close()
