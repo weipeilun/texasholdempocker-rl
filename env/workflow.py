@@ -1,3 +1,4 @@
+import logging
 import time
 import traceback
 from cuda import cudart
@@ -244,7 +245,7 @@ def receive_game_result_thread(in_queue, env_info_dict):
 
 
 # batch预测（子进程）
-def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, predict_batch_out_queue_list, pid, log_level):
+def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue,train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level):
     logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
                         datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
@@ -393,20 +394,29 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             pass
 
         try:
-            if train_update_model_queue is not None and train_update_model_ack_queue is not None:
-                msg = train_update_model_queue.get(block=False)
-                if batch_predict_model_type == ModelType.PYTORCH:
-                    train_model_dict = msg
-                    if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
-                        model.load_state_dict(train_model_dict)
-                elif batch_predict_model_type == ModelType.TENSORRT:
-                    train_trt_filename = msg
-                    if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
-                        engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
-                        logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
-                    else:
-                        logging.info(f'predict_batch_process_{pid} model training updated skipped')
-                train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+            if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
+                hold_train_step = train_hold_signal_queue.get(block=False)
+                logging.info(logging.info(f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}'))
+                train_hold_signal_ack_queue.put(hold_train_step)
+
+                while True:
+                    try:
+                        msg = train_update_model_queue.get(block=True, timeout=0.1)
+                        if batch_predict_model_type == ModelType.PYTORCH:
+                            train_model_dict = msg
+                            if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
+                                model.load_state_dict(train_model_dict)
+                        elif batch_predict_model_type == ModelType.TENSORRT:
+                            train_trt_filename = msg
+                            if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
+                                engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
+                                logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
+                            else:
+                                logging.info(f'predict_batch_process_{pid} model training updated skipped')
+                        train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                        break
+                    except Empty:
+                        pass
         except Empty:
             pass
 
@@ -464,7 +474,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
 
 # 模型训练（主进程）
-def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread, train_update_model_signal_queue):
+def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread, train_update_model_signal_queue, num_predict_batch_process, train_hold_signal_queue, train_hold_signal_ack_queue):
     assert train_per_step > 0, 'train_per_step must > 0.'
 
     next_train_step = first_train_data_step
@@ -522,11 +532,25 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             break
 
         if step_counter.get_value() >= next_train_step:
-            action_probs_loss, action_Q_loss, winning_prob_loss = model.learn()
             train_step_num += 1
 
-            if train_step_num % log_step_num == 0:
+            # 训练、同步模型
+            if train_step_num >= next_update_model_step:
+                for _ in range(num_predict_batch_process):
+                    train_hold_signal_queue.put(train_step_num)
+                logging.info(f'Train: train_step {train_step_num}, waiting for predict batch process to finish.')
+                for _ in range(num_predict_batch_process):
+                    train_hold_signal_ack_queue.get(block=True)
+                logging.info(f'Train: train_step {train_step_num}, start to train.')
+
+                action_probs_loss, action_Q_loss, winning_prob_loss = None, None, None
+                for _ in range(update_model_per_train_step):
+                    action_probs_loss, action_Q_loss, winning_prob_loss = model.learn()
                 logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
+
+                new_state_dict = get_state_dict_from_model(model)
+                train_update_model_signal_queue.put((train_step_num, new_state_dict))
+                next_update_model_step += update_model_per_train_step
 
             # 触发eval任务
             if train_step_num >= next_eval_step:
@@ -535,12 +559,6 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
                 eval_model_queue.put((new_state_dict, new_optimizer_state_dict))
                 next_eval_step += eval_model_per_step
                 logging.info(f'Triggered eval task at train step: {train_step_num}, next eval step: {next_eval_step}')
-
-            # 训练中模型同步
-            if train_step_num >= next_update_model_step:
-                new_state_dict = get_state_dict_from_model(model)
-                train_update_model_signal_queue.put((train_step_num, new_state_dict))
-                next_update_model_step += update_model_per_train_step
 
             if is_save_model:
                 if train_step_num % 200 == 0:
