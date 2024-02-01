@@ -354,7 +354,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
         context.set_input_shape("input", input_shape)
         data_np = np.asarray(data_list).reshape(input_dim)
         np.copyto(inputs[0].host, data_np)
-        action_prob_logits, action_Qs, winning_prob = do_inference_v3(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        action_prob_logits, action_Qs, winning_prob = do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
         action_prob_logits = np.copy(action_prob_logits).reshape((batch_size, -1))
         action_Qs = np.copy(action_Qs).reshape((batch_size, -1))
         winning_prob = np.copy(winning_prob)

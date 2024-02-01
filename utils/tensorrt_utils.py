@@ -273,5 +273,5 @@ def do_inference_v2(context, bindings, inputs, outputs, stream):
 # inputs and outputs are expected to be lists of HostDeviceMem objects.
 def do_inference_v3(context, bindings, inputs, outputs, stream):
     def execute_async():
-        context.execute_async_v3(stream.ptr)
+        context.execute_async_v3(stream)
     return _do_inference_base(inputs, outputs, stream, execute_async)
