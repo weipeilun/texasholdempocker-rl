@@ -267,3 +267,11 @@ def do_inference_v2(context, bindings, inputs, outputs, stream):
     def execute_async():
         context.execute_async_v2(bindings=bindings, stream_handle=stream)
     return _do_inference_base(inputs, outputs, stream, execute_async)
+
+
+# This function is generalized for multiple inputs/outputs for full dimension networks.
+# inputs and outputs are expected to be lists of HostDeviceMem objects.
+def do_inference_v3(context, bindings, inputs, outputs, stream):
+    def execute_async():
+        context.execute_async_v3(stream.ptr)
+    return _do_inference_base(inputs, outputs, stream, execute_async)
