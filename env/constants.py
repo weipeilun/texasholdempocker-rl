@@ -82,6 +82,12 @@ class ChoiceMethod(Enum):
     ARGMAX = 'argmax'
     PROBABILITY = 'probability'
 
+
+class TrainHoldStatus(Enum):
+    WAITING_MODEL = 0
+    FINISHED_UPDATING = 1
+
+
 # model action bin dict
 ACTION_BINS_DICT = [
     (PlayerActions.FOLD, (0, 0)),

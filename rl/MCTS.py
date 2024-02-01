@@ -287,7 +287,8 @@ class MCTS:
 
         self.predict_in_queue.put((observation, self.pid))
         begin_time = time.time()
-        next_log_time = begin_time + 1
+        log_interval = 10
+        next_log_time = begin_time + log_interval
         while True:
             if interrupt.interrupt_callback():
                 logging.info(f"MCTS.predict{self.pid} detect interrupt")
@@ -295,7 +296,7 @@ class MCTS:
 
             if time.time() > next_log_time:
                 now = time.time()
-                next_log_time = now + 1
+                next_log_time = now + log_interval
                 logging.warning(f"MCTS.predict{self.pid} waited predict_out_queue for %.2fs" % (now - begin_time))
 
             try:

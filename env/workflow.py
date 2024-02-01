@@ -405,7 +405,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                         if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
                             hold_train_step = train_hold_signal_queue.get(block=False)
                             logging.info(f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
-                            train_hold_signal_ack_queue.put(hold_train_step)
+                            train_hold_signal_ack_queue.put(TrainHoldStatus.WAITING_MODEL)
 
                             while True:
                                 try:
@@ -416,6 +416,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                                     else:
                                         logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                     train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                    train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
                                     break
                                 except Empty:
                                     pass
@@ -442,24 +443,19 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                                 try:
                                     if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
                                         hold_train_step = train_hold_signal_queue.get(block=False)
-                                        logging.info(
-                                            f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
-                                        train_hold_signal_ack_queue.put(hold_train_step)
+                                        logging.info(f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
+                                        train_hold_signal_ack_queue.put(TrainHoldStatus.WAITING_MODEL)
 
                                         while True:
                                             try:
-                                                train_trt_filename = train_update_model_queue.get(block=True,
-                                                                                                  timeout=0.1)
+                                                train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
                                                 if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
-                                                    engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(
-                                                        train_trt_filename, batch_size_list, feature_size_list, stream,
-                                                        batch_info_dict, tensorrt_min_infer_batch_size)
-                                                    logging.info(
-                                                        f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
+                                                    engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
+                                                    logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
                                                 else:
-                                                    logging.info(
-                                                        f'predict_batch_process_{pid} model training updated skipped')
+                                                    logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                                 train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                                train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
                                                 break
                                             except Empty:
                                                 pass
@@ -483,9 +479,8 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     try:
                         if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
                             hold_train_step = train_hold_signal_queue.get(block=False)
-                            logging.info(
-                                f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
-                            train_hold_signal_ack_queue.put(hold_train_step)
+                            logging.info(f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
+                            train_hold_signal_ack_queue.put(TrainHoldStatus.WAITING_MODEL)
 
                             while True:
                                 try:
@@ -496,6 +491,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                                     else:
                                         logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                     train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                    train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
                                     break
                                 except Empty:
                                     pass
@@ -516,22 +512,18 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                                     hold_train_step = train_hold_signal_queue.get(block=False)
                                     logging.info(
                                         f'predict_batch_process_{pid} received hold signal at training step {hold_train_step}')
-                                    train_hold_signal_ack_queue.put(hold_train_step)
+                                    train_hold_signal_ack_queue.put(TrainHoldStatus.WAITING_MODEL)
 
                                     while True:
                                         try:
-                                            train_trt_filename = train_update_model_queue.get(block=True,
-                                                                                              timeout=0.1)
+                                            train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
                                             if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
-                                                engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(
-                                                    train_trt_filename, batch_size_list, feature_size_list, stream,
-                                                    batch_info_dict, tensorrt_min_infer_batch_size)
-                                                logging.info(
-                                                    f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
+                                                engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
+                                                logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
                                             else:
-                                                logging.info(
-                                                    f'predict_batch_process_{pid} model training updated skipped')
+                                                logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                             train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                            train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
                                             break
                                         except Empty:
                                             pass
@@ -619,7 +611,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
                     train_hold_signal_queue.put(train_step_num)
                 logging.info(f'Train: train_step {train_step_num}, waiting for predict batch process to finish.')
                 for _ in train_hold_signal_queue_list:
-                    train_hold_signal_ack_queue.get(block=True)
+                    train_hold_status = train_hold_signal_ack_queue.get(block=True)
+                    assert train_hold_status == TrainHoldStatus.WAITING_MODEL, f'train_hold_status should be {TrainHoldStatus.WAITING_MODEL.name}, but {train_hold_status.name}'
                 logging.info(f'Train: train_step {train_step_num}, start to train.')
 
                 action_probs_loss, action_Q_loss, winning_prob_loss = None, None, None
@@ -630,6 +623,11 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
                 new_state_dict = get_state_dict_from_model(model)
                 train_update_model_signal_queue.put((train_step_num, new_state_dict))
                 next_update_model_step += update_model_per_train_step
+                
+                for _ in train_hold_signal_queue_list:
+                    train_hold_status = train_hold_signal_ack_queue.get(block=True)
+                    assert train_hold_status == TrainHoldStatus.FINISHED_UPDATING, f'train_hold_status should be {TrainHoldStatus.FINISHED_UPDATING.name}, but {train_hold_status.name}'
+                logging.info(f'Train: train_step {train_step_num}, finished training and updating.')
 
             # 触发eval任务
             if train_step_num >= next_eval_step:
@@ -920,7 +918,7 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
 
                 if len(game_train_data_not_finished_list) == 0:
                     finalized_game_id_set.add(finished_game_id)
-                    logging.info('Game %s finished, generated %d data' % (finished_game_id, num_total_games))
+                    # logging.info('Game %s finished, generated %d data' % (finished_game_id, num_total_games))
                 else:
                     game_train_data_list_dict[finished_game_id] = game_train_data_not_finished_list
 
