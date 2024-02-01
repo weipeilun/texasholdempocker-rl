@@ -553,7 +553,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
 
 # 模型训练（主进程）
-def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread, train_update_model_signal_queue, num_predict_batch_process, train_hold_signal_queue, train_hold_signal_ack_queue):
+def training_thread(model, model_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, game_id_signal_queue, num_game_loop_thread, train_update_model_signal_queue, train_hold_signal_queue_list, train_hold_signal_ack_queue):
     assert train_per_step > 0, 'train_per_step must > 0.'
 
     next_train_step = first_train_data_step
@@ -615,10 +615,10 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
             # 训练、同步模型
             if train_step_num >= next_update_model_step:
-                for _ in range(num_predict_batch_process):
+                for train_hold_signal_queue in train_hold_signal_queue_list:
                     train_hold_signal_queue.put(train_step_num)
                 logging.info(f'Train: train_step {train_step_num}, waiting for predict batch process to finish.')
-                for _ in range(num_predict_batch_process):
+                for _ in train_hold_signal_queue_list:
                     train_hold_signal_ack_queue.get(block=True)
                 logging.info(f'Train: train_step {train_step_num}, start to train.')
 

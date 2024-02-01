@@ -125,12 +125,12 @@ if __name__ == '__main__':
     # 训练中更新模型参数
     train_update_model_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
     train_update_model_ack_queue = Manager().Queue()
-    train_hold_signal_queue = Manager().Queue()
+    train_hold_signal_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
     train_hold_signal_ack_queue = Manager().Queue()
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
     batch_predict_model_type = ModelType(params['batch_predict_model_type'])
-    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list)):
-        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue,train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
+    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue, train_hold_signal_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list, train_hold_signal_queue_list)):
+        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     eval_model_per_step = params['eval_model_per_step']
     log_step_num = params['log_step_num']
     historical_data_filename = params['historical_data_filename']
-    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread, train_update_model_signal_queue, num_predict_batch_process, train_hold_signal_queue, train_hold_signal_ack_queue), daemon=True).start()
+    Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread, train_update_model_signal_queue, train_hold_signal_queue_list, train_hold_signal_ack_queue), daemon=True).start()
 
     # to monitor performance
     Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue,), daemon=True).start()
