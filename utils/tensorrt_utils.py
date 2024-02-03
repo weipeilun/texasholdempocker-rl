@@ -18,26 +18,36 @@ def load_engine(trt_file):
 
 
 def build_engine(model_file, batch_size_min, batch_size_opt, batch_size_max, feature_size_list):
+    logging.info(f'start build engine for {model_file}')
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(EXPLICIT_BATCH)
+    logging.info(f'build_engine finished create_network for {model_file}')
     config = builder.create_builder_config()
+    logging.info(f'build_engine finished create_builder_config for {model_file}')
     # config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 24)
     config.max_workspace_size = GiB(8)
     # if builder.platform_has_fast_fp16:
     #     config.set_flag(trt.BuilderFlag.FP16)
     parser = trt.OnnxParser(network, TRT_LOGGER)
+    logging.info(f'build_engine finished create OnnxParser for {model_file}')
 
     with open(model_file, 'rb') as model:
         assert parser.parse(model.read())
+    logging.info(f'build_engine finished parse onnx file {model_file} for {model_file}')
 
-    inputs = [network.get_input(i) for i in range(network.num_inputs)]
+    # inputs = [network.get_input(i) for i in range(network.num_inputs)]
     # for input in inputs:
     #     logging.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
     # builder.max_batch_size = 8
     profile = builder.create_optimization_profile()
+    logging.info(f'build_engine finished create_optimization_profile for {model_file}')
     profile.set_shape("input", (batch_size_min, *feature_size_list), (batch_size_opt, *feature_size_list), (batch_size_max, *feature_size_list))
+    logging.info(f'build_engine finished profile.set_shape for {model_file}')
     config.add_optimization_profile(profile)
-    return builder.build_serialized_network(network, config)
+    logging.info(f'build_engine finished add_optimization_profile for {model_file}')
+    result = builder.build_serialized_network(network, config)
+    logging.info(f'build_engine finished build_serialized_network for {model_file}')
+    return result
 
 def check_cuda_err(err):
     if isinstance(err, cuda.CUresult):

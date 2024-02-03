@@ -49,6 +49,7 @@ def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model
         trt_model_engine = build_engine(onnx_path, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
         with open(trt_path, "wb") as f:
             f.write(trt_model_engine)
+        logging.info(f'finished writing TensorRT model file {trt_path}')
 
         logging.info(f'model saved to {path}, {onnx_path}, {trt_path}')
         return trt_path
