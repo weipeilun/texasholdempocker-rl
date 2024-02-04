@@ -39,20 +39,22 @@ def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model
         torch.onnx.export(model, torch.zeros((params['predict_batch_size_max'], *params['predict_feature_size_list']), dtype=torch.int32).to(model.device), tmp_onnx_path, opset_version=14, input_names=input_names, dynamic_axes=dynamic_axes)
 
         onnx_path = path.replace('.pth', '.onnx')
+        trt_read_path = tmp_onnx_path
         try:
             onnx_checkpoint = onnx.load(tmp_onnx_path)
             model_simple, is_simplify_success = onnxsim.simplify(onnx_checkpoint)
             assert is_simplify_success, ValueError(f'is_simplify_success={is_simplify_success}')
             onnx.save(model_simple, onnx_path)
-            os.remove(tmp_onnx_path)
+            trt_read_path = onnx_path
         except Exception as e:
             logging.warning(f'onnxsim failed, {e}')
 
         trt_path = path.replace('.pth', '.trt')
-        trt_model_engine = build_engine(onnx_path, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
+        trt_model_engine = build_engine(trt_read_path, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
         with open(trt_path, "wb") as f:
             f.write(trt_model_engine)
         logging.info(f'finished writing TensorRT model file {trt_path}')
+        os.remove(tmp_onnx_path)
 
         logging.info(f'model saved to {path}, {onnx_path}, {trt_path}')
         return trt_path

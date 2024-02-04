@@ -1,3 +1,5 @@
+import logging
+
 from pypokerengine.players import BasePokerPlayer
 from env.pypokerengine_env import PyPokerEngineEnv
 from tools.param_parser import *
@@ -34,7 +36,9 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
             self.model.load_state_dict(model_param, strict=False)
             if 'optimizer' in checkpoint:
                 self.model.optimizer.load_state_dict(checkpoint['optimizer'])
-        logging.info(f'model loaded from {model_path}')
+            logging.info(f'model loaded from {model_path}')
+        else:
+            logging.warning(f'model not found at {model_path}')
 
         self.n_actions = self.params['num_bins']
         self.num_output_class = self.params['model_param_dict']['num_output_class']
