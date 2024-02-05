@@ -60,14 +60,14 @@ class EnvEmbedding(nn.Module):
                           (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),     # action_value_to_assets_cutter_list
                           (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),     # action_value_to_assets_cutter_list
 
-                          # 行为后
-                          (num_action_feature_bins, len(CUTTER_DEFAULT_LIST) + 1),  # after_action_player_history_bet_to_pots_cutter
-                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
-                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
-                          (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
-                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
-                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
-                          (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
+                          # # 行为后
+                          # (num_action_feature_bins, len(CUTTER_DEFAULT_LIST) + 1),  # after_action_player_history_bet_to_pots_cutter
+                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
+                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
+                          # (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
+                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
+                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
+                          # (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
 
                           (MAX_PLAYER_NUMBER - 1, len(PlayerStatus)),
                           (MAX_PLAYER_NUMBER - 1, num_bins),

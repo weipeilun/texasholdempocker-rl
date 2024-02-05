@@ -70,18 +70,18 @@ class Env:
             CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
         ]
 
-        # 行为后
-        self.after_action_player_history_bet_to_pots_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST), include_invalid_bin=True)
-        self.after_action_player_history_bet_to_assets_cutter_list = [
-            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
-            CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
-            CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
-        ]
-        self.after_action_pot_to_assets_cutter_list = [
-            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
-            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
-            CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
-        ]
+        # # 行为后
+        # self.after_action_player_history_bet_to_pots_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST), include_invalid_bin=True)
+        # self.after_action_player_history_bet_to_assets_cutter_list = [
+        #     CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
+        #     CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
+        #     CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
+        # ]
+        # self.after_action_pot_to_assets_cutter_list = [
+        #     CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
+        #     CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
+        #     CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
+        # ]
 
         # 玩家间特征
         self.player_value_left_to_init_value_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST))
@@ -525,14 +525,14 @@ class Env:
             for action_value_to_asset in action_value_to_assets:
                 acting_player_status.append(action_value_to_assets_cutter.cut(*action_value_to_asset))
 
-        # 行为后
-        acting_player_status.extend(self.after_action_player_history_bet_to_pots_cutter.cut(*after_action_player_history_bet_to_pot) for after_action_player_history_bet_to_pot in after_action_player_history_bet_to_pots)
-        for after_action_player_history_bet_to_assets_cutter, after_action_player_history_bet_to_assets in zip(self.after_action_player_history_bet_to_assets_cutter_list, after_action_player_history_bet_to_assets_list):
-            for after_action_player_history_bet_to_asset in after_action_player_history_bet_to_assets:
-                acting_player_status.append(after_action_player_history_bet_to_assets_cutter.cut(*after_action_player_history_bet_to_asset))
-        for after_action_pot_to_assets_cutter, after_action_pot_to_assets in zip(self.after_action_pot_to_assets_cutter_list, after_action_pot_to_assets_list):
-            for after_action_pot_to_asset in after_action_pot_to_assets:
-                acting_player_status.append(after_action_pot_to_assets_cutter.cut(*after_action_pot_to_asset))
+        # # 行为后
+        # acting_player_status.extend(self.after_action_player_history_bet_to_pots_cutter.cut(*after_action_player_history_bet_to_pot) for after_action_player_history_bet_to_pot in after_action_player_history_bet_to_pots)
+        # for after_action_player_history_bet_to_assets_cutter, after_action_player_history_bet_to_assets in zip(self.after_action_player_history_bet_to_assets_cutter_list, after_action_player_history_bet_to_assets_list):
+        #     for after_action_player_history_bet_to_asset in after_action_player_history_bet_to_assets:
+        #         acting_player_status.append(after_action_player_history_bet_to_assets_cutter.cut(*after_action_player_history_bet_to_asset))
+        # for after_action_pot_to_assets_cutter, after_action_pot_to_assets in zip(self.after_action_pot_to_assets_cutter_list, after_action_pot_to_assets_list):
+        #     for after_action_pot_to_asset in after_action_pot_to_assets:
+        #         acting_player_status.append(after_action_pot_to_assets_cutter.cut(*after_action_pot_to_asset))
 
         for current_player_name, player_init_value in infoset.player_value_init_dict.items():
             if current_player_name != infoset.player_name:

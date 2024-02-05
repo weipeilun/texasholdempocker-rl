@@ -2,15 +2,15 @@
 num_predict_batch_process: 2
 num_gen_winning_prob_cal_data_processes: 8
 predict_batch_size: 8
-game_loop_thread_multiple: 12
-num_train_eval_process: 8
+game_loop_thread_multiple: 6
+num_train_eval_process: 6
 eval_task_num_games: 1000
 update_model_bb_per_100_thres: 5.
 historical_data_filename: data/history.txt
 predict_batch_size_min: 1
 predict_batch_size_max: 32
 predict_batch_size_list: [1, 2, 4, 8, 16, 32]
-predict_feature_size_list: [139, ]
+predict_feature_size_list: [69, ]
 
 # train process params
 first_train_data_step: 500
@@ -59,7 +59,7 @@ model_param_dict:
     step_size_down: 2500
     l2_weight: 0.0
     num_bins: 10
-    num_acting_player_fields: 120
+    num_acting_player_fields: 50
     save_train_data: True
     # 要保证用相对较新的数据学习，以确保模型在未在旧数据过拟合前朝向新数据收敛。
     transition_buffer_len: 800
