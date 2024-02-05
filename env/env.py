@@ -4,7 +4,7 @@ import numpy as np
 from tools.biner import *
 from .cards import *
 from .game import GameEnv, deck
-from utils.workflow_utils import map_action_bin_to_actual_action_and_value
+from utils.workflow_utils import map_action_bin_to_actual_action_and_value_v2
 
 class Env:
     """
@@ -45,25 +45,48 @@ class Env:
         self.reward_cal_task_set = set()
 
         # 初始化连续特征的分桶器
-        bin_cutter_interval = 1 / num_bins
-        self.player_init_value_to_pool_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
-        self.player_value_left_to_pool_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
-        self.player_value_left_to_player_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
+        self.player_init_value_to_game_init_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST) * MAX_PLAYER_NUMBER)
+        self.player_value_left_to_game_init_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST) * MAX_PLAYER_NUMBER)
+        self.player_value_left_to_player_init_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST))
 
-        self.call_delta_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
-        # 以下，因为call_delta_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
-        self.call_delta_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
-        self.call_delta_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        # 行为前
+        self.player_history_bet_to_pot_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST))
+        self.player_history_bet_to_assets_cutter_list = [
+            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER),
+            CutByThreshold(np.array(CUTTER_BINS_LIST)),
+            CutByThreshold(np.array(CUTTER_SELF_BINS_LIST)),
+        ]
+        self.pot_to_assets_cutter_list = [
+            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER),
+            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER),
+            CutByThreshold(np.array(CUTTER_SELF_BINS_LIST)),
+        ]
 
-        self.raise_delta_min_value_to_game_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval) * MAX_PLAYER_NUMBER)
-        # 以下，因为raise_delta_min_value可能大于分母，而超过分母的值都意味着player要allin，风险极大，则着重刻画小于1和大于1的部分
-        self.raise_delta_min_value_to_player_init_value_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
-        self.raise_delta_min_value_to_player_value_left_cutter = CutByThreshold(np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval)
+        # 行为本身
+        self.action_value_to_pot_cutter = CutByThreshold(np.array(CUTTER_SELF_DEFAULT_LIST), include_invalid_bin=True)
+        self.action_value_to_assets_cutter_list = [
+            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
+            CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
+            CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
+        ]
+
+        # 行为后
+        self.after_action_player_history_bet_to_pots_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST), include_invalid_bin=True)
+        self.after_action_player_history_bet_to_assets_cutter_list = [
+            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
+            CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
+            CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
+        ]
+        self.after_action_pot_to_assets_cutter_list = [
+            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
+            CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
+            CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
+        ]
 
         # 玩家间特征
-        self.player_value_left_to_init_value_cutter = CutByThreshold(np.arange(bin_cutter_interval, 1, bin_cutter_interval))
+        self.player_value_left_to_init_value_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST))
         # 以下，其他玩家财力大于当前玩家越多，当前玩家下大价值风险越大，则要对小于1和大于1的部分都有细分刻画，且包含一个远大于的部分
-        self.player_init_value_to_acting_player_init_value_cutter = CutByThreshold((np.arange(0, 1, bin_cutter_interval) + bin_cutter_interval) * MAX_PLAYER_NUMBER)
+        self.player_init_value_to_acting_player_init_value_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST + [1.]) * MAX_PLAYER_NUMBER)
 
         self.game_id = None
 
@@ -383,6 +406,9 @@ class Env:
     def get_valid_action_info(self):
         return self._env.get_valid_action_info()
 
+    def get_valid_action_info_v2(self):
+        return self._env.get_valid_action_info_v2()
+
     def get_obs(self, infoset):
         """
         This function obtains observations with imperfect information
@@ -436,70 +462,92 @@ class Env:
         all_player_current_status_list = [None] * (infoset.num_players - 1)
 
         game_init_value = infoset.game_init_value
-        # 当前玩家本轮call最小下注价值
-        acting_player_call_delta_min_value = infoset.call_delta_min_value
-        # 当前玩家本轮raise最小下注价值
-        acting_player_raise_delta_min_value = infoset.raise_delta_min_value
+        # 当前游戏整体下注价值
+        pot_value = infoset.pot_value
+        # 当前玩家本轮所有bin的行为价值（预估）
+        bin_bet_value_list = infoset.bin_bet_value_list
+        num_bins = len(bin_bet_value_list)
 
         acting_player_init_value = infoset.player_value_init_dict[infoset.player_name]
-        acting_player_value_left = infoset.player_status_value_left_dict[infoset.player_name][1]
+        _, acting_player_left_value, acting_player_history_bet_value = infoset.player_status_value_left_bet_dict[infoset.player_name]
 
+        # 资产包括：game_init_value（游戏绝对价值），acting_player_init_value（玩家绝对），acting_player_left_value（玩家相对）
+        all_asset_value_list = [game_init_value, acting_player_init_value, acting_player_left_value]
+        # 行为后总下注（预估）
+        after_action_history_bet_value_list = [acting_player_history_bet_value + bet_value for bet_value in bin_bet_value_list]
+        # 行为后池价值（预估）
+        after_action_pot_value_list = [pot_value + bet_value for bet_value in bin_bet_value_list]
+        # 行为后资产（预估）
+        after_action_asset_value_list = [[game_init_value] * num_bins, [acting_player_init_value] * num_bins, [acting_player_left_value - bet_value for bet_value in bin_bet_value_list]]
+
+        # 特征值开始
         # 提示局势整体的激进/保守偏好
-        player_init_value_to_pool = acting_player_init_value / game_init_value
+        player_init_to_game_init = (acting_player_init_value, game_init_value)
         # 提示当前行为的绝对参照性的激进/保守偏好
-        player_value_left_to_pool = acting_player_value_left / game_init_value
+        player_left_to_game_init = (acting_player_left_value, game_init_value)
         # 提示当前行为的局势相对性的激进/保守偏好
-        player_value_left_to_player = acting_player_value_left / acting_player_init_value
-        # 提示当前最小跟注行为的绝对参照风险
-        call_delta_min_value_to_game_init_value = acting_player_call_delta_min_value / game_init_value
-        # 提示当前最小跟注行为的相对局势风险
-        call_delta_min_value_to_player_init_value = acting_player_call_delta_min_value / acting_player_init_value
-        # 提示当前最小跟注行为对玩家离场的风险
-        call_delta_min_value_to_player_value_left = acting_player_call_delta_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
-        # 提示当前最小加注行为的绝对参照风险
-        raise_delta_min_value_to_game_init_value = acting_player_raise_delta_min_value / game_init_value
-        # 提示当前最小加注行为的相对局势风险
-        raise_delta_min_value_to_player_init_value = acting_player_raise_delta_min_value / acting_player_init_value
-        # 提示当前最小加注行为对玩家离场的风险
-        raise_delta_min_value_to_player_value_left = acting_player_raise_delta_min_value / acting_player_value_left if acting_player_value_left > 0 else MAX_PLAYER_NUMBER
+        player_left_to_player_init = (acting_player_left_value, acting_player_init_value)
+
+        # 行为前下注-行为前池
+        player_history_bet_to_pot = (acting_player_history_bet_value, pot_value)
+        # 行为前下注-行为前资产
+        player_history_bet_to_assets = [(acting_player_history_bet_value, asset_value) for asset_value in all_asset_value_list]
+        # 行为前池-行为前资产
+        pot_to_assets = [(pot_value, asset_value) for asset_value in all_asset_value_list]
+
+        # 行为-行为前池
+        action_value_to_pots = [(action_value, pot_value, action_value) for action_value in bin_bet_value_list]
+        # 行为-行为前资产
+        action_value_to_assets_list = [[(action_value, asset, action_value) for action_value in bin_bet_value_list] for asset in all_asset_value_list]
+
+        # 行为后下注-行为后池
+        after_action_player_history_bet_to_pots = [(after_action_history_bet_value, after_action_pot_value, action_value) for after_action_history_bet_value, after_action_pot_value, action_value in zip(after_action_history_bet_value_list, after_action_pot_value_list, bin_bet_value_list)]
+        # 行为后下注-行为后资产
+        after_action_player_history_bet_to_assets_list = [[(after_action_history_bet_value, after_action_asset_value, action_value) for after_action_history_bet_value, after_action_asset_value, action_value in zip(after_action_history_bet_value_list, after_action_asset_values, bin_bet_value_list)] for after_action_asset_values in after_action_asset_value_list]
+        # 行为后池-行为后资产
+        after_action_pot_to_assets_list = [[(after_action_pot_value, after_action_asset_value, action_value) for after_action_pot_value, after_action_asset_value, action_value in zip(after_action_pot_value_list, after_action_asset_values, bin_bet_value_list)] for after_action_asset_values in after_action_asset_value_list]
+        # 特征值结束
 
         # 分桶
-        player_init_value_to_pool_bin = self.player_init_value_to_pool_cutter.cut(player_init_value_to_pool)
-        player_value_left_to_pool_bin = self.player_value_left_to_pool_cutter.cut(player_value_left_to_pool)
-        player_value_left_to_player_bin = self.player_value_left_to_player_cutter.cut(player_value_left_to_player)
-        call_delta_min_value_to_game_init_value_bin = self.call_delta_min_value_to_game_init_value_cutter.cut(call_delta_min_value_to_game_init_value)
-        call_delta_min_value_to_player_init_value_bin = self.call_delta_min_value_to_player_init_value_cutter.cut(call_delta_min_value_to_player_init_value)
-        call_delta_min_value_to_player_value_left_bin = self.call_delta_min_value_to_player_value_left_cutter.cut(call_delta_min_value_to_player_value_left)
-        raise_delta_min_value_to_game_init_value_bin = self.raise_delta_min_value_to_game_init_value_cutter.cut(raise_delta_min_value_to_game_init_value)
-        raise_delta_min_value_to_player_init_value_bin = self.raise_delta_min_value_to_player_init_value_cutter.cut(raise_delta_min_value_to_player_init_value)
-        raise_delta_min_value_to_player_value_left_bin = self.raise_delta_min_value_to_player_value_left_cutter.cut(raise_delta_min_value_to_player_value_left)
+        acting_player_status = list()
+        acting_player_status.append(self.player_init_value_to_game_init_cutter.cut(*player_init_to_game_init))
+        acting_player_status.append(self.player_value_left_to_game_init_cutter.cut(*player_left_to_game_init))
+        acting_player_status.append(self.player_value_left_to_player_init_cutter.cut(*player_left_to_player_init))
 
-        acting_player_status = (
-            player_init_value_to_pool_bin,
-            player_value_left_to_pool_bin,
-            player_value_left_to_player_bin,
-            call_delta_min_value_to_game_init_value_bin,
-            call_delta_min_value_to_player_init_value_bin,
-            call_delta_min_value_to_player_value_left_bin,
-            raise_delta_min_value_to_game_init_value_bin,
-            raise_delta_min_value_to_player_init_value_bin,
-            raise_delta_min_value_to_player_value_left_bin
-        )
+        # 行为前
+        acting_player_status.append(self.player_history_bet_to_pot_cutter.cut(*player_history_bet_to_pot))
+        acting_player_status.extend(player_history_bet_to_assets_cutter.cut(*player_history_bet_to_asset) for player_history_bet_to_assets_cutter, player_history_bet_to_asset in zip(self.player_history_bet_to_assets_cutter_list, player_history_bet_to_assets))
+        acting_player_status.extend(pot_to_assets_cutter.cut(*pot_to_asset) for pot_to_assets_cutter, pot_to_asset in zip(self.pot_to_assets_cutter_list, pot_to_assets))
+
+        # 行为本身
+        acting_player_status.extend(self.action_value_to_pot_cutter.cut(*action_value_to_pot) for action_value_to_pot in action_value_to_pots)
+        for action_value_to_assets_cutter, action_value_to_assets in zip(self.action_value_to_assets_cutter_list, action_value_to_assets_list):
+            for action_value_to_asset in action_value_to_assets:
+                acting_player_status.append(action_value_to_assets_cutter.cut(*action_value_to_asset))
+
+        # 行为后
+        acting_player_status.extend(self.after_action_player_history_bet_to_pots_cutter.cut(*after_action_player_history_bet_to_pot) for after_action_player_history_bet_to_pot in after_action_player_history_bet_to_pots)
+        for after_action_player_history_bet_to_assets_cutter, after_action_player_history_bet_to_assets in zip(self.after_action_player_history_bet_to_assets_cutter_list, after_action_player_history_bet_to_assets_list):
+            for after_action_player_history_bet_to_asset in after_action_player_history_bet_to_assets:
+                acting_player_status.append(after_action_player_history_bet_to_assets_cutter.cut(*after_action_player_history_bet_to_asset))
+        for after_action_pot_to_assets_cutter, after_action_pot_to_assets in zip(self.after_action_pot_to_assets_cutter_list, after_action_pot_to_assets_list):
+            for after_action_pot_to_asset in after_action_pot_to_assets:
+                acting_player_status.append(after_action_pot_to_assets_cutter.cut(*after_action_pot_to_asset))
 
         for current_player_name, player_init_value in infoset.player_value_init_dict.items():
             if current_player_name != infoset.player_name:
-                player_status, player_value_left = infoset.player_status_value_left_dict[current_player_name]
+                player_status, player_left_value, player_bet_value = infoset.player_status_value_left_bet_dict[current_player_name]
                 # 对于当前玩家的相对位置
                 # todo：此处相对位置和绝对位置都有物理意义，要怎么刻画没想好
                 relative_player_position = get_relative_player_position(current_player_name, infoset.button_player_name, infoset.num_players) - 1
 
                 # 提示玩家下注比例
-                player_value_left_to_init_value = player_value_left / player_init_value
+                player_value_left_to_init_value = (player_left_value, player_init_value)
                 # 提示玩家实力对比
-                player_init_value_to_acting_player_init_value = player_init_value / acting_player_init_value
+                player_init_value_to_acting_player_init_value = (player_init_value, acting_player_init_value)
 
-                player_value_left_to_init_value_bin = self.player_value_left_to_init_value_cutter.cut(player_value_left_to_init_value)
-                player_init_value_to_acting_player_init_value_bin = self.player_init_value_to_acting_player_init_value_cutter.cut(player_init_value_to_acting_player_init_value)
+                player_value_left_to_init_value_bin = self.player_value_left_to_init_value_cutter.cut(*player_value_left_to_init_value)
+                player_init_value_to_acting_player_init_value_bin = self.player_init_value_to_acting_player_init_value_cutter.cut(*player_init_value_to_acting_player_init_value)
 
                 all_player_current_status_list[relative_player_position] = (player_status.value,
                                                                             player_value_left_to_init_value_bin,
@@ -527,7 +575,7 @@ class RandomEnv(Env):
         self.target_round_step_stop_probs = [0.2, 0.25, 0.333, 0.5]
 
     def __generate_random_step(self, action_probs, force_check=False):
-        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = self.get_valid_action_info()
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise = self.get_valid_action_info_v2()
         if force_check and not action_mask_list[1]:
             return PlayerActions.CHECK_CALL, self._env.current_round_min_value
         else:
@@ -544,7 +592,7 @@ class RandomEnv(Env):
             for i, prob in enumerate(valid_action_probs):
                 cumulative_prob += prob
                 if random_num <= cumulative_prob:
-                    return map_action_bin_to_actual_action_and_value(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind)
+                    return map_action_bin_to_actual_action_and_value_v2(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind)
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def take_step_to_round(self, max_round):

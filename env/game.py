@@ -350,20 +350,21 @@ class GameEnv(object):
 
         acting_player_info_sets.current_round = self.current_round
 
-        acting_player_info_sets.call_delta_min_value = self.current_round_min_value - self.current_round_value_dict[self.acting_player_name]
-
-        acting_player_info_sets.raise_delta_min_value = self.current_round_min_value + self.current_round_raise_min_value - self.current_round_value_dict[self.acting_player_name]
-
         acting_player_info_sets.all_round_player_action_value_dict = deepcopy(self.all_round_player_action_value_dict)
 
         current_status_value_left_dict = dict()
         for player_name, player in self.players.items():
-            current_status_value_left_dict[player_name] = (player.status, player.value_left)
-        acting_player_info_sets.player_status_value_left_dict = current_status_value_left_dict
+            current_status_value_left_dict[player_name] = (player.status, player.value_left, player.value_bet)
+        acting_player_info_sets.player_status_value_left_bet_dict = current_status_value_left_dict
 
         acting_player_info_sets.num_players = self.num_players
 
         acting_player_info_sets.button_player_name = self.button_player_name
+
+        acting_player_info_sets.pot_value = self.pot_value
+
+        # 每一个桶（下一步行为）的bet value，范围取中值
+        acting_player_info_sets.bin_bet_value_list = self.get_bin_value_list_v2()
 
         return acting_player_info_sets
 
@@ -433,7 +434,7 @@ class GameEnv(object):
         self.current_round_action_dict[self.acting_player_name] = action[0]
         self.current_round_value_dict[self.acting_player_name] = action[1]
 
-        # 用于计算reward
+        # 用于特征拼接
         self.pot_value += action[2]
 
         # 用于infoset记录游戏进程
@@ -952,6 +953,63 @@ class GameEnv(object):
                 action_value_or_ranges_list.append((PlayerActions.FOLD, 0))
         return action_mask_list, action_value_or_ranges_list, acting_player_agent.value_left, current_round_acting_player_historical_value
 
+    def get_valid_action_info_v2(self):
+        action_mask_list = []
+        action_value_or_ranges_list = []
+        acting_player_agent = self.players[self.acting_player_name]
+        current_round_acting_player_historical_value = self.current_round_value_dict[self.acting_player_name]
+        delta_value_to_call = self.current_round_min_value - current_round_acting_player_historical_value
+        delta_min_value_to_raise = self.current_round_min_value + self.current_round_raise_min_value - current_round_acting_player_historical_value
+        is_raise_range_valid = delta_min_value_to_raise < acting_player_agent.value_left
+        for player_action, (range_start, range_end) in ACTION_BINS_DICT:
+            if player_action == PlayerActions.RAISE:
+                if range_start == 1.:
+                    action_mask_list.append(False)
+                    if acting_player_agent.value_left <= delta_value_to_call:
+                        action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, acting_player_agent.value_left + current_round_acting_player_historical_value))
+                    else:
+                        action_value_or_ranges_list.append((PlayerActions.RAISE, acting_player_agent.value_left + current_round_acting_player_historical_value))
+                elif is_raise_range_valid:
+                    action_mask_list.append(False)
+                    action_value_or_ranges_list.append((PlayerActions.RAISE, (range_start, range_end)))
+                else:
+                    action_mask_list.append(True)
+                    action_value_or_ranges_list.append(None)
+            elif player_action == PlayerActions.CHECK_CALL:
+                if delta_value_to_call < acting_player_agent.value_left:
+                    action_mask_list.append(False)
+                    action_value_or_ranges_list.append((PlayerActions.CHECK_CALL, self.current_round_min_value))
+                else:
+                    action_mask_list.append(True)
+                    action_value_or_ranges_list.append(None)
+            else:
+                action_mask_list.append(False)
+                action_value_or_ranges_list.append((PlayerActions.FOLD, 0))
+        return action_mask_list, action_value_or_ranges_list, acting_player_agent.value_left, current_round_acting_player_historical_value, delta_min_value_to_raise
+
+    def get_bin_value_list_v2(self):
+        bin_bet_value_list = list()
+        acting_player_value_left = self.players[self.acting_player_name].value_left
+        call_delta_min_value = self.current_round_min_value - self.current_round_value_dict[self.acting_player_name]
+        raise_delta_min_value = self.current_round_min_value + self.current_round_raise_min_value - self.current_round_value_dict[self.acting_player_name]
+        is_call_valid = call_delta_min_value > 0
+        is_raise_valid = raise_delta_min_value > 0
+        raise_delta_range_max_value = acting_player_value_left - raise_delta_min_value
+        # fold和allin不计算分桶特征，因为都包含在了其他特征内
+        for player_action, (range_start, range_end) in ACTION_BINS_DICT:
+            if player_action == PlayerActions.CHECK_CALL:
+                if is_call_valid:
+                    bin_bet_value_list.append(call_delta_min_value)
+                else:
+                    bin_bet_value_list.append(-1)
+            elif player_action == PlayerActions.RAISE:
+                if range_start < 1.:
+                    if is_raise_valid:
+                        bin_bet_value_list.append(GET_VALID_BET_VALUE(raise_delta_range_max_value * (range_end + range_start) / 2, self.small_blind) + raise_delta_min_value)
+                    else:
+                        bin_bet_value_list.append(-1)
+        return bin_bet_value_list
+
 class InfoSet(object):
     """
     The game state is described as infoset, which
@@ -978,15 +1036,15 @@ class InfoSet(object):
         self.river_cards = None
         # Current round
         self.current_round = None
-        # Current round call min value
-        self.call_delta_min_value = None
-        # Current round raise min value
-        self.raise_delta_min_value = None
         # All moves of all players in historical rounds. It is a dict with str-->(int, int)
         self.all_round_player_action_value_dict = None
         # Current status of all players. A dict
-        self.player_status_value_left_dict = None
+        self.player_status_value_left_bet_dict = None
         # Number of players. A str
         self.num_players = None
         # The button player name. A str
         self.button_player_name = None
+        # The total pot value. A float
+        self.pot_value = None
+        # All bins (Call, Bets) bet value. A list
+        self.bin_bet_value_list = None

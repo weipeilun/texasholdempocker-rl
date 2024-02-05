@@ -1,6 +1,6 @@
 import logging
 from queue import Empty
-from env.constants import GET_PLAYER_NAME
+from env.constants import *
 from tools import interrupt
 import torch
 import random
@@ -128,6 +128,34 @@ def map_action_bin_to_actual_action_and_value(action_bin, action_value_or_ranges
         return action, action_value
     else:
         raise ValueError(f'Error action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
+
+
+# 左右互搏的玩家区分
+# 如果修改玩家数量要修改这块
+def map_action_bin_to_actual_action_and_value_v2(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, small_blind):
+    assert action_value_or_ranges_list[action_bin] is not None, ValueError(f'None action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
+    action, action_value_or_range = action_value_or_ranges_list[action_bin]
+    if isinstance(action_value_or_range, int):
+        return action, action_value_or_range
+    elif isinstance(action_value_or_range, tuple):
+        # 重要：把随机切分的下注比例映射到small_blind的整数倍，int型
+        range_start, range_end = action_value_or_range
+        choice_proportion = range_start + (range_end - range_start) * random.random()
+        delta_value_choice = (acting_player_value_left - delta_min_value_to_raise) * choice_proportion
+        delta_action_value = GET_VALID_BET_VALUE(delta_value_choice, small_blind)
+        action_value = delta_min_value_to_raise + delta_action_value + current_round_acting_player_historical_value
+        return action, action_value
+    else:
+        raise ValueError(f'Error action_bin choice:{action_bin}, while action_value_or_ranges_list={action_value_or_ranges_list}')
+
+
+def get_num_feature_bins_v2():
+    num_bin = 0
+    for player_action, (range_start, range_end) in ACTION_BINS_DICT:
+        if player_action == PlayerActions.CHECK_CALL or (player_action == PlayerActions.RAISE and range_start < 1.):
+            num_bin += 1
+    return num_bin
+
 
 def log_inference(observation_list, action_probs_list, action_Qs_list, winning_prob_list, model, num_data_print_per_inference):
     with torch.no_grad():

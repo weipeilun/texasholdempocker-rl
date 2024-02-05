@@ -7,6 +7,7 @@ import math
 import torch
 from torch import nn
 from env.constants import *
+from utils.workflow_utils import *
 
 
 class EnvEmbedding(nn.Module):
@@ -34,19 +35,40 @@ class EnvEmbedding(nn.Module):
         # player status
         # bins of acting player status
         # bins of other player status
+        # len(bins) + 1 means an extra bin for `empty`
+        num_action_feature_bins = get_num_feature_bins_v2()
         field_dim_list = [(1, 4),
                           (1, MAX_PLAYER_NUMBER + 1),
                           (7, len(CardFigure) + 1),
                           (7, len(CardDecor) + 1),
-                          (1, num_bins),
-                          (1, num_bins),
-                          (1, num_bins),
-                          (1, num_bins),
-                          (1, num_bins + 1),
-                          (1, num_bins + 1),
-                          (1, num_bins),
-                          (1, num_bins + 1),
-                          (1, num_bins + 1),
+                          (1, len(CUTTER_DEFAULT_LIST)),
+                          (1, len(CUTTER_DEFAULT_LIST)),
+                          (1, len(CUTTER_DEFAULT_LIST)),
+
+                          # 行为前
+                          (1, len(CUTTER_DEFAULT_LIST)),    # player_history_bet_to_pot_cutter
+                          (1, len(CUTTER_BINS_LIST)),   # player_history_bet_to_assets_cutter_list
+                          (1, len(CUTTER_BINS_LIST)),   # player_history_bet_to_assets_cutter_list
+                          (1, len(CUTTER_SELF_BINS_LIST)),  # player_history_bet_to_assets_cutter_list
+                          (1, len(CUTTER_BINS_LIST)),   # pot_to_assets_cutter_list
+                          (1, len(CUTTER_BINS_LIST)),   # pot_to_assets_cutter_list
+                          (1, len(CUTTER_SELF_BINS_LIST)),  # pot_to_assets_cutter_list
+
+                          # 行为本身
+                          (num_action_feature_bins, len(CUTTER_SELF_DEFAULT_LIST) + 1),     # action_value_to_pot_cutter
+                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),     # action_value_to_assets_cutter_list
+                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),     # action_value_to_assets_cutter_list
+                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),     # action_value_to_assets_cutter_list
+
+                          # 行为后
+                          (num_action_feature_bins, len(CUTTER_DEFAULT_LIST) + 1),  # after_action_player_history_bet_to_pots_cutter
+                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
+                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
+                          (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
+                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
+                          (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
+                          (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
+
                           (MAX_PLAYER_NUMBER - 1, len(PlayerStatus)),
                           (MAX_PLAYER_NUMBER - 1, num_bins),
                           (MAX_PLAYER_NUMBER - 1, num_bins + 1),

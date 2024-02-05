@@ -1,4 +1,5 @@
 from enum import Enum
+import numpy as np
 
 MAX_PLAYER_NUMBER = 2
 
@@ -104,6 +105,10 @@ ACTION_BINS_DICT = [
     (PlayerActions.RAISE, (1., 1.)),
 ]
 
+CUTTER_BINS_LIST = [actin_bin[1][0] for actin_bin in ACTION_BINS_DICT][3: -1]
+CUTTER_SELF_BINS_LIST = CUTTER_BINS_LIST + [1.] + [1 / i for i in CUTTER_BINS_LIST[::-1]]
+CUTTER_DEFAULT_LIST = np.arange(0.1, 1, 0.1).tolist()
+CUTTER_SELF_DEFAULT_LIST = CUTTER_DEFAULT_LIST + [1.] + [1 / i for i in CUTTER_DEFAULT_LIST[::-1]]
 
 NUM_CARDS = len(CardFigure) * len(CardDecor)
 
@@ -120,3 +125,5 @@ CARDS_RIVER = 'cards_river'
 KEY_ACTED_PLAYER_NAME = 'acted_player_name'
 KEY_ROUND_NUM = 'round_num'
 STEP_ID_FINISHED = -1
+
+GET_VALID_BET_VALUE = lambda value, small_blind: round(value / small_blind) * small_blind

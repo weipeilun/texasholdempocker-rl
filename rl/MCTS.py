@@ -7,7 +7,7 @@ from env.constants import *
 from utils.math_utils import *
 from tools import interrupt
 from queue import Empty
-from utils.workflow_utils import map_action_bin_to_actual_action_and_value
+from utils.workflow_utils import map_action_bin_to_actual_action_and_value_v2
 
 
 class MCTS:
@@ -153,7 +153,7 @@ class MCTS:
         return action_probs
 
     def get_action(self, action_probs, env, choice_method):
-        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = env.get_valid_action_info()
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise = env.get_valid_action_info_v2()
         # 目前get_action都是跟在simulate之后的，认为此处的归一化是多余步骤，但为get_action方法独立的正确性仍然保留归一化
         valid_action_probs = np.copy(action_probs)
         valid_action_probs[action_mask_list] = 0
@@ -161,7 +161,7 @@ class MCTS:
         action_mask_int_list = [int(not mask) for mask in action_mask_list]
 
         choice_idx = choose_idx_by_array(valid_action_probs, choice_method)
-        return map_action_bin_to_actual_action_and_value(choice_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind), action_mask_int_list
+        return map_action_bin_to_actual_action_and_value_v2(choice_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind), action_mask_int_list
 
     def get_player_action_reward(self, reward, acting_player_name):
         # 注意此处要取到的值是：对于玩家的相对价值得失
@@ -170,7 +170,7 @@ class MCTS:
         return reward_value
 
     def _choose_action(self, p_array, env, num_simulation=None, do_log=False):
-        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value = env.get_valid_action_info()
+        action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise = env.get_valid_action_info_v2()
         num_valid_actions = len(action_mask_list) - sum(action_mask_list)
         if num_simulation is not None and num_simulation < (self.init_root_n_simulation * num_valid_actions):
             # init root node
@@ -241,7 +241,7 @@ class MCTS:
                     self.file_writer_final_status.write(','.join('%.3f' % i for i in valid_R_array) + '\n')
                     self.file_writer_final_status.write(','.join('%d' % i for i in self.children_n_array) + '\n\n')
 
-        action, action_value = map_action_bin_to_actual_action_and_value(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, self.small_blind)
+        action, action_value = map_action_bin_to_actual_action_and_value_v2(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind)
         return action_bin, (action, action_value)
 
     def expand(self, observation, env):
