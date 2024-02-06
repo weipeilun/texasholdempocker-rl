@@ -193,6 +193,7 @@ if __name__ == '__main__':
                 new_model_state_dict, new_optimizer_state_dict = eval_model_queue.get(block=False)
                 eval_task_id += 1
 
+                logging.info(f"Main thread start to switched workflow to {workflow_status.name}")
                 workflow_status = switch_workflow_default(WorkflowStatus.TRAIN_FINISH_WAIT, workflow_queue_list, workflow_ack_queue_list)
                 logging.info(f"Main thread switched workflow to {workflow_status.name}")
 
