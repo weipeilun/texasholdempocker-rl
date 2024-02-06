@@ -63,7 +63,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
                                 choice_method=self.mcts_choice_method,
                                 log_to_file=self.mcts_log_to_file,
                                 pid=self.player_id)
-        action_probs, action_Qs = mcts.simulate(observation=self.observation, env=self.env)
+        action_probs = mcts.simulate(observation=self.observation, env=self.env)
         action, action_mask_idx = mcts.get_action(action_probs, env=self.env, choice_method=ChoiceMethod.ARGMAX)
 
         observation, _, terminated, _ = self.env.step(action)

@@ -1,6 +1,4 @@
 import signal
-import time
-
 from env.workflow import *
 from tools.param_parser import *
 from tools.data_loader import *
@@ -37,11 +35,11 @@ def train_process(params, n_loop, log_level):
     batch_size = params['model_param_dict']['batch_size']
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
-    for observation_list, action_probs_list, action_Qs_list, action_mask_list, winning_prob_list in train_batch_gen:
+    for observation_list, action_probs_list, action_mask_list, reward_value_list, winning_prob_list in train_batch_gen:
         # logging.info(f'get data for train_step {train_step_num}')
 
         try:
-            action_probs_loss, action_Q_loss, winning_prob_loss = model.learn(observation_list, action_probs_list, action_Qs_list, action_mask_list, winning_prob_list)
+            action_probs_loss, reward_value_loss, winning_prob_loss = model.learn(observation_list, action_probs_list, action_mask_list, reward_value_list, winning_prob_list)
         except ValueError as e:
             logging.error(f'ValueError in model.learn: {e}')
             signal.alarm(0)
@@ -55,7 +53,7 @@ def train_process(params, n_loop, log_level):
             trans_l3 = model.model.transform_encoder.layers._modules['3'].linear1.weight[0].cpu().detach().numpy()[:6]
             action_prob = model.model.action_prob_dense.weight[0].cpu().detach().numpy()[:6]
             logging.info(f'embedding:{embedding}, trans_l0={trans_l0}, trans_l3={trans_l3}, action_prob={action_prob}')
-            logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
+            logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, reward_value_loss={reward_value_loss}, winning_prob_loss={winning_prob_loss}')
 
         if train_step_num >= num_train_steps:
             break

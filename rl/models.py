@@ -452,7 +452,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         # 预测action的概率分布
         self.action_prob_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=True)
         # 预测action的Q值分布
-        self.action_Q_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=True)
+        self.reward_value_dense = nn.Linear(self.actual_embedding_dim, 1, bias=True)
         # 预测'客观胜率'
         self.winning_prob_dense = nn.Linear(self.actual_embedding_dim, 1, bias=True)
 
@@ -468,8 +468,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
         action_prob_logits = self.action_prob_dense(x[:, 0, :])
         # action_prob = self.action_logits_softmax(action_prob_logits)
 
-        action_Q_logits = self.action_Q_dense(x[:, 1, :])
+        reward_value_logits = self.reward_value_dense(x[:, 1, :]).squeeze(1)
 
         winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
         winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
-        return action_prob_logits, action_Q_logits, winning_prob
+        return action_prob_logits, reward_value_logits, winning_prob

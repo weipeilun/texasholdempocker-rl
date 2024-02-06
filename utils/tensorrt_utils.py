@@ -1,15 +1,18 @@
-import tensorrt as trt
 import argparse
 import os
 import ctypes
 import logging
 import numpy as np
 from typing import Optional, List
-from cuda import cuda, cudart
 
+try:
+    from cuda import cuda, cudart
+    import tensorrt as trt
 
-TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-EXPLICIT_BATCH = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+    EXPLICIT_BATCH = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+except:
+    pass
 
 
 def load_engine(trt_file):
@@ -196,7 +199,7 @@ def reset_input_shape(context, input_name: str, input_shape: tuple):
 
 # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
 # If engine uses dynamic shapes, specify a profile to find the maximum input & output size.
-def allocate_buffers(engine: trt.ICudaEngine, context, profile_idx: int, input_name: str, input_shape: tuple):
+def allocate_buffers(engine, context, profile_idx: int, input_name: str, input_shape: tuple):
     inputs = []
     outputs = []
     bindings = []
@@ -230,7 +233,7 @@ def allocate_buffers(engine: trt.ICudaEngine, context, profile_idx: int, input_n
 
 
 # Frees the resources allocated in allocate_buffers
-def free_buffers(inputs: List[HostDeviceMem], outputs: List[HostDeviceMem], stream: cudart.cudaStream_t):
+def free_buffers(inputs, outputs, stream):
     for mem in inputs + outputs:
         mem.free()
     cuda_call(cudart.cudaStreamDestroy(stream))

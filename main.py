@@ -296,6 +296,7 @@ if __name__ == '__main__':
 
             # 永远使用最佳模型训练，依据AlphaGO Zero论文，Method章Self-play节：
             # The best current player αθ∗, as selected by the evaluator, is used to generate data.
+            # todo: Also consider the 'league training' method introduced in <Grandmaster level in StarCraft II using multi-agent reinforcement learning>, since the algrithm may chase cycles (A defeats B, and B defeats C, but A loses to C) in poker games.
             for update_state_queue in update_model_param_queue_list:
                 if batch_predict_model_type == ModelType.PYTORCH:
                     update_state_queue.put(best_model_state_dict)

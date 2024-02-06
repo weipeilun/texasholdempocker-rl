@@ -52,7 +52,7 @@ class MCTS:
         assert self.init_root_n_simulation >= 1, ValueError(f'init_root_n_simulation must be greater or equal than 1 to init root')
 
         self.default_action_probs = np.ones(self.n_actions, dtype=np.float32) / self.n_actions
-        self.default_action_Qs = np.zeros(self.n_actions, dtype=np.float32)
+        self.default_estimate_reward_value = np.zeros(1, dtype=np.float32)
         self.default_winning_prob = np.zeros(1, dtype=np.float32)
 
         self.children_w_array = None
@@ -96,7 +96,7 @@ class MCTS:
             self.file_writer_choice = open(f"log/choice.csv", "w", encoding='UTF-8')
 
         acting_player_name = env.acting_player_name
-        action_prob, action_Qs, _ = self.predict(observation)
+        action_prob, estimate_reward_value, _ = self.predict(observation)
         if self.is_root and self.apply_dirichlet_noice:
             dirichlet_noise = np.random.dirichlet(action_prob)
             action_prob = (1 - self.dirichlet_noice_epsilon) * action_prob + self.dirichlet_noice_epsilon * dirichlet_noise
@@ -121,7 +121,8 @@ class MCTS:
                 reward_dict = self.children[action_bin].expand(observation_, new_env)
             player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
-            self.children_w_array[action_bin] += self.model_Q_epsilon * action_Qs[action_bin] + (1 - self.model_Q_epsilon) * player_action_reward
+            # according to AlphaGo (<Mastering_the_game_of_Go_with_deep_neural_networks_and_tree_search>), passage '4 Searching with Policy and Value Networks': V(sL) = (1 −λ)vθ(sL) + λzL
+            self.children_w_array[action_bin] += self.model_Q_epsilon * estimate_reward_value + (1 - self.model_Q_epsilon) * player_action_reward
             self.children_n_array[action_bin] += 1
             self.children_q_array[action_bin] = self.children_w_array[action_bin] / self.children_n_array[action_bin]
 
@@ -138,7 +139,7 @@ class MCTS:
             self.file_writer_r.close()
             self.file_writer_n_term.close()
             self.file_writer_choice.close()
-        return self._cal_action_probs(self.tau), self.children_q_array
+        return self._cal_action_probs(self.tau)
 
     # πa ∝ pow(N(s, a), 1 / τ)
     def _cal_action_probs(self, tau):
@@ -252,7 +253,7 @@ class MCTS:
             self.children_q_array = np.zeros(self.n_actions)
 
         acting_player_name = env.acting_player_name
-        action_prob, action_Qs, _ = self.predict(observation)
+        action_prob, estimate_reward_value, _ = self.predict(observation)
         action_bin, action = self._choose_action(action_prob, env)
 
         observation_, reward_dict, terminated, info = env.step(action)
@@ -262,7 +263,7 @@ class MCTS:
             reward_dict = self.children[action_bin].expand(observation_, env)
         player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
-        self.children_w_array[action_bin] += self.model_Q_epsilon * action_Qs[action_bin] + (1 - self.model_Q_epsilon) * player_action_reward
+        self.children_w_array[action_bin] += self.model_Q_epsilon * estimate_reward_value + (1 - self.model_Q_epsilon) * player_action_reward
         self.children_n_array[action_bin] += 1
         self.children_q_array[action_bin] = self.children_w_array[action_bin] / self.children_n_array[action_bin]
 
@@ -271,7 +272,7 @@ class MCTS:
     def predict(self, observation):
         # 仅支持多线程下的批量预测
         action_prob = self.default_action_probs
-        action_Qs = self.default_action_Qs
+        estimate_reward_value = self.default_estimate_reward_value
         winning_prob = self.default_winning_prob
         # 这个锁用于控制workflow的状态切换
         if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
@@ -300,11 +301,11 @@ class MCTS:
                 logging.warning(f"MCTS.predict{self.pid} waited predict_out_queue for %.2fs" % (now - begin_time))
 
             try:
-                action_prob, action_Qs, winning_prob = self.predict_out_queue.get(block=True, timeout=0.01)
+                action_prob, estimate_reward_value, winning_prob = self.predict_out_queue.get(block=True, timeout=0.01)
                 break
             except Empty:
                 continue
-        return action_prob, action_Qs, winning_prob
+        return action_prob, estimate_reward_value, winning_prob
 
 
 class SingleThreadMCTS(MCTS):
@@ -366,9 +367,9 @@ class SingleThreadMCTS(MCTS):
         with torch.no_grad():
             observation_array = np.array([observation])
             observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.model.device, requires_grad=False)
-            action_probs_logits_tensor, action_Q_tensor, winning_prob_tensor = self.model(observation_tensor)
+            action_probs_logits_tensor, estimate_reward_value_tensor, winning_prob_tensor = self.model(observation_tensor)
             action_probs_tensor = torch.softmax(action_probs_logits_tensor, dim=1)
             action_prob = action_probs_tensor.cpu().numpy()[0]
-            action_Qs = action_Q_tensor.cpu().numpy()[0]
+            estimate_reward_value = estimate_reward_value_tensor.cpu().numpy()[0]
             winning_prob = winning_prob_tensor.cpu().numpy()[0]
-        return action_prob, action_Qs, winning_prob
+        return action_prob, estimate_reward_value, winning_prob

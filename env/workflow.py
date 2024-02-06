@@ -1,7 +1,6 @@
 import logging
 import time
 import traceback
-from cuda import cudart
 from threading import Thread
 from env.env import *
 from tools.data_loader import *
@@ -14,6 +13,11 @@ from utils.tensorrt_utils import *
 from utils.math_utils import *
 import onnxsim
 import onnx
+
+try:
+    from cuda import cudart
+except:
+    pass
 
 
 def save_model(model, path):
@@ -298,13 +302,13 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 break
 
             try:
-                action_probs_list, action_Q_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                action_probs_list, reward_value_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
-                for action_probs, action_Q, winning_prob, send_pid in zip(action_probs_list, action_Q_list, winning_prob_list, send_pid_list):
+                for action_probs, reward_value, winning_prob, send_pid in zip(action_probs_list, reward_value_list, winning_prob_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
                     elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, action_Q, winning_prob)))
+                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
                     else:
                         raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
 
@@ -349,24 +353,24 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
         with torch.no_grad():
             observation_array = np.array(predict_send_batch_list)
             observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=model.device, requires_grad=False)
-            action_probs_logits_tensor, action_Q_tensor, winning_prob_tensor = predict_send_model(observation_tensor)
+            action_probs_logits_tensor, reward_value_tensor, winning_prob_tensor = predict_send_model(observation_tensor)
             action_probs_tensor = torch.softmax(action_probs_logits_tensor, dim=1)
             action_probs_list = action_probs_tensor.cpu().numpy()
-            action_Q_list = action_Q_tensor.cpu().numpy()
+            reward_value_list = reward_value_tensor.cpu().numpy()
             winning_prob_list = winning_prob_tensor.cpu().numpy()
 
-        predict_send_send_in_queue.put((action_probs_list, action_Q_list, winning_prob_list, predict_send_pid_list, predict_send_workflow_status))
+        predict_send_send_in_queue.put((action_probs_list, reward_value_list, winning_prob_list, predict_send_pid_list, predict_send_workflow_status))
 
     def predict_and_send_trt(data_list, data_pid_list, predict_send_send_in_queue, predict_send_workflow_status, context, bindings, batch_size, input_shape, input_dim, inputs, outputs, stream):
         context.set_input_shape("input", input_shape)
         data_np = np.asarray(data_list).reshape(input_dim)
         np.copyto(inputs[0].host, data_np)
-        action_prob_logits, action_Qs, winning_prob = do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        action_prob_logits, reward_value, winning_prob = do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
         action_prob_logits = np.copy(action_prob_logits).reshape((batch_size, -1))
-        action_Qs = np.copy(action_Qs).reshape((batch_size, -1))
+        reward_value = np.copy(reward_value)
         winning_prob = np.copy(winning_prob)
         action_probs = softmax_np(action_prob_logits)
-        predict_send_send_in_queue.put((action_probs, action_Qs, winning_prob, data_pid_list, predict_send_workflow_status))
+        predict_send_send_in_queue.put((action_probs, reward_value, winning_prob, data_pid_list, predict_send_workflow_status))
 
     batch_list = list()
     pid_list = list()
@@ -580,16 +584,16 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
         logging.info(f'Found historical train data from {historical_data_filename}. Train with this first.')
         # load data and train
         data_generator = train_data_generator(historical_data_filename)
-        for observation_list, action_probs_list, action_Qs_list, action_masks_list, winning_prob_list in data_generator:
-            model.store_transition(observation_list, action_probs_list, action_Qs_list, action_masks_list, winning_prob_list, save_train_data=False)
+        for observation_list, action_probs_list, action_masks_list, reward_value_list, winning_prob_list in data_generator:
+            model.store_transition(observation_list, action_probs_list, action_masks_list, reward_value_list, winning_prob_list, save_train_data=False)
             step_counter.increment()
 
             if step_counter.get_value() >= next_train_step:
-                action_probs_loss, action_Q_loss, winning_prob_loss = model.learn()
+                action_probs_loss, reward_value_loss, winning_prob_loss = model.learn()
                 train_step_num += 1
 
                 if train_step_num % log_step_num == 0:
-                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
+                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, reward_value_loss={reward_value_loss}, winning_prob_loss={winning_prob_loss}')
 
                 # 避免训练数据过多重复
                 next_train_step += train_per_step
@@ -639,10 +643,10 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
                     assert train_hold_status == TrainHoldStatus.WAITING_MODEL, f'train_hold_status should be {TrainHoldStatus.WAITING_MODEL.name}, but {train_hold_status.name}'
                 logging.info(f'Train: train_step {train_step_num}, start to train.')
 
-                action_probs_loss, action_Q_loss, winning_prob_loss = None, None, None
+                action_probs_loss, reward_value_loss, winning_prob_loss = None, None, None
                 for _ in range(update_model_per_train_step):
-                    action_probs_loss, action_Q_loss, winning_prob_loss = model.learn()
-                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, action_Q_loss={action_Q_loss}, winning_prob_loss={winning_prob_loss}')
+                    action_probs_loss, reward_value_loss, winning_prob_loss = model.learn()
+                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, reward_value_loss={reward_value_loss}, winning_prob_loss={winning_prob_loss}')
 
                 new_state_dict = get_state_dict_from_model(model)
                 train_update_model_signal_queue.put((train_step_num, new_state_dict))
@@ -709,7 +713,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} start MCTS simulation step {game_step_id}')
             mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, apply_dirichlet_noice=True, workflow_lock=workflow_lock, workflow_signal_queue=workflow_signal_queue, workflow_ack_signal_queue=workflow_ack_signal_queue, small_blind=small_blind, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=mcts_tau, dirichlet_noice_epsilon=mcts_dirichlet_noice_epsilon, model_Q_epsilon=mcts_model_Q_epsilon, choice_method=mcts_choice_method, log_to_file=mcts_log_to_file, pid=pid, thread_name=thread_name)
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS inited step {game_step_id}')
-            action_probs, action_Qs = mcts.simulate(observation=observation, env=env)
+            action_probs = mcts.simulate(observation=observation, env=env)
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS simulated step {game_step_id}')
             # 用于接收中断信号
             if action_probs is None:
@@ -721,13 +725,13 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
             t1 = time.time()
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %d), cost:%.2fs, ' % (action[1], t1 - t0))
 
-            observation_, _, terminated, info = env.step(action)
-            game_train_data_queue.put((game_id, ([observation, action_probs, action_Qs, action_mask_idx], info)))
+            observation_, reward, terminated, info = env.step(action)
+            game_train_data_queue.put((game_id, ([observation, action_probs, action_mask_idx], info)))
 
             if not terminated:
                 observation = observation_
             else:
-                game_finished_signal_queue.put(game_id)
+                game_finished_signal_queue.put((game_id, reward))
                 logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
                 break
             game_step_id += 1
@@ -778,7 +782,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
                 t0 = time.time()
                 # 在eval时不使用dirichlet_noice以增加随机性，设置tau为0即在play步骤中丢弃随机性使用argmax
                 mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, small_blind=small_blind, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, model_Q_epsilon=mcts_model_Q_epsilon, choice_method=mcts_choice_method, log_to_file=False, pid=pid, thread_name=thread_name)
-                action_probs, _ = mcts.simulate(observation=observation, env=env)
+                action_probs = mcts.simulate(observation=observation, env=env)
                 # 用于接收中断信号
                 if action_probs is None:
                     logging.info(f"eval_game_loop_thread {thread_name} detect interrupt")
@@ -899,8 +903,8 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
                     logging.info("train_gather_result_thread detect interrupt")
                     break
 
-                signal_finished_game_id = game_finished_signal_queue.get(block=False)
-                signal_finished_game_id_list.append(signal_finished_game_id)
+                signal_finished_game_id, signal_finished_reward_dict = game_finished_signal_queue.get(block=False)
+                signal_finished_game_id_list.append((signal_finished_game_id, signal_finished_reward_dict))
             except Empty:
                 break
 
@@ -921,11 +925,11 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
                 break
 
         # 此处会有多进程下的数据幻觉问题，会导致取数异常。把从game_finished_signal_queue取数放到前边
-        for signal_finished_game_id in signal_finished_game_id_list:
-            finished_game_id_dict[signal_finished_game_id] = len(game_train_data_list_dict[signal_finished_game_id])
+        for signal_finished_game_id, signal_finished_reward_dict in signal_finished_game_id_list:
+            finished_game_id_dict[signal_finished_game_id] = (len(game_train_data_list_dict[signal_finished_game_id]), signal_finished_reward_dict)
 
         finalized_game_id_set = set()
-        for finished_game_id, num_total_games in finished_game_id_dict.items():
+        for finished_game_id, (num_total_games, finished_reward_dict) in finished_game_id_dict.items():
             if finished_game_id in game_train_data_list_dict and finished_game_id in env_info_dict:
                 game_train_data_list = game_train_data_list_dict[finished_game_id]
                 game_info_dict = env_info_dict[finished_game_id]
@@ -937,8 +941,10 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
                     round_num = step_info[KEY_ROUND_NUM]
                     player_name = step_info[KEY_ACTED_PLAYER_NAME]
                     if player_name in game_info_dict and round_num in game_info_dict[player_name]:
+                        # reward_dict = env._get_final_reward()
+                        reward_value = finished_reward_dict[player_name][1]
                         winning_prob = game_info_dict[player_name][round_num]
-                        model.store_transition(*train_data_list, winning_prob)
+                        model.store_transition(*train_data_list, reward_value, winning_prob)
                         step_counter.increment()
                     else:
                         game_train_data_not_finished_list.append(game_train_data)
