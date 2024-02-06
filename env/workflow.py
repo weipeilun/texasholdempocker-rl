@@ -379,11 +379,13 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     free_buffers(inputs, outputs, stream)
             break
 
+        # 切换进程状态
         try:
             workflow_status = workflow_queue.get(block=False)
             workflow_ack_queue.put(workflow_status)
         except Empty:
             pass
+        # 切换进程状态结束
 
         try:
             msg = update_model_param_queue.get(block=False)
@@ -406,6 +408,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 pid_list.append(data_pid)
 
                 if batch_size == len(batch_list):
+                    # 切换进程状态
+                    try:
+                        workflow_status = workflow_queue.get(block=False)
+                        workflow_ack_queue.put(workflow_status)
+                    except Empty:
+                        pass
+                    # 切换进程状态结束
+
                     # 等待训练流程，更新模型
                     try:
                         if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
@@ -445,6 +455,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     if len(batch_list) >= tensorrt_min_infer_batch_size:
                         for batch_size, (input_shape, input_dim, inputs, outputs, bindings) in batch_info_dict.items():
                             if batch_size <= len(batch_list):
+                                # 切换进程状态
+                                try:
+                                    workflow_status = workflow_queue.get(block=False)
+                                    workflow_ack_queue.put(workflow_status)
+                                except Empty:
+                                    pass
+                                # 切换进程状态结束
+
                                 # 等待训练流程，更新模型
                                 try:
                                     if train_update_model_queue is not None and train_update_model_ack_queue is not None and train_hold_signal_queue is not None and train_hold_signal_ack_queue is not None:
