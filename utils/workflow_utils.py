@@ -1,4 +1,5 @@
 import logging
+import threading
 from queue import Empty
 from env.constants import *
 from tools import interrupt
@@ -35,6 +36,15 @@ def get_best_new_queues_for_eval(queue_list):
     return queue_list[: num_in_queue_group], queue_list[num_in_queue_group:]
 
 
+def send_signal_thread(signal_queue, signal, qid):
+    try:
+        logging.info(f"Send signal {signal} to queue {qid}.")
+        signal_queue.put(signal, block=False)
+    except Exception as e:
+        logging.error(f"Failed to send signal {signal} to queue {qid}.")
+        raise e
+
+
 def receive_and_check_all_ack(target_ack_status, workflow_ack_queue_list):
     for idx, workflow_ack_queue in enumerate(workflow_ack_queue_list):
         while True:
@@ -56,10 +66,12 @@ def receive_and_check_all_ack(target_ack_status, workflow_ack_queue_list):
 
 
 def switch_workflow_default(target_workflow_status, workflow_queue_list, workflow_ack_queue_list):
-    for workflow_queue in workflow_queue_list:
-        workflow_queue.put(target_workflow_status)
+    logging.info(f"Start to switch to workflow status {target_workflow_status.name}")
+    for qid, workflow_queue in enumerate(workflow_queue_list):
+        threading.Thread(target=send_signal_thread, args=(workflow_queue, target_workflow_status, qid), daemon=True).start()
     if not receive_and_check_all_ack(target_workflow_status, workflow_ack_queue_list):
         exit(-1)
+    logging.info(f"Finished to switch to workflow status {target_workflow_status.name}")
     return target_workflow_status
 
 
@@ -86,12 +98,14 @@ def receive_and_check_ack_from_queue(target_workflow_status, workflow_ack_queue,
 
 
 def switch_workflow_for_predict_process_default(target_workflow_status, workflow_queue_list, workflow_ack_queue, tid_train_eval_pid_dict):
+    logging.info(f"Start to switch to workflow status {target_workflow_status.name}")
     num_data_send = len(tid_train_eval_pid_dict)
-    for tid, pid in tid_train_eval_pid_dict.items():
-        workflow_queue_list[pid].put((tid, target_workflow_status))
+    for qid, (tid, pid) in enumerate(tid_train_eval_pid_dict.items()):
+        threading.Thread(target=send_signal_thread, args=(workflow_queue_list[pid], (tid, target_workflow_status), qid), daemon=True).start()
 
     if not receive_and_check_ack_from_queue(target_workflow_status, workflow_ack_queue, num_data_send):
         exit(-1)
+    logging.info(f"Finished to switch to workflow status {target_workflow_status.name}")
     return target_workflow_status
 
 
