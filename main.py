@@ -294,13 +294,13 @@ if __name__ == '__main__':
                 best_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path, model_for_save, batch_predict_model_type, params)
                 best_model_state_dict = new_model_state_dict
 
-            # 永远使用最新模型训练
-            # todo: 考虑什么情况下需要使用旧checkpoint训练
+            # 永远使用最佳模型训练，依据AlphaGO Zero论文，Method章Self-play节：
+            # The best current player αθ∗, as selected by the evaluator, is used to generate data.
             for update_state_queue in update_model_param_queue_list:
                 if batch_predict_model_type == ModelType.PYTORCH:
-                    update_state_queue.put(new_model_state_dict)
+                    update_state_queue.put(best_model_state_dict)
                 elif batch_predict_model_type == ModelType.TENSORRT:
-                    update_state_queue.put(new_model_trt_filename)
+                    update_state_queue.put(best_model_trt_filename)
             if not receive_and_check_all_ack(workflow_status, workflow_ack_queue_list):
                 exit(-1)
 
