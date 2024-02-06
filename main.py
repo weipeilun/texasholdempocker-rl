@@ -12,6 +12,8 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
+    logging.info(f"main process pid {os.getpid()} started")
+
     args, params = parse_params()
 
     torch.multiprocessing.set_start_method('spawn')
