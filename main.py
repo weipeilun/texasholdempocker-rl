@@ -213,9 +213,9 @@ if __name__ == '__main__':
                         tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save, batch_predict_model_type, params)
                     for train_update_model_queue in train_update_model_queue_list:
                         if batch_predict_model_type == ModelType.PYTORCH:
-                            train_update_model_queue.put(train_model_state_dict)
+                            train_update_model_queue.put((step_num, train_model_state_dict))
                         elif batch_predict_model_type == ModelType.TENSORRT:
-                            train_update_model_queue.put(tmp_checkpoint_path)
+                            train_update_model_queue.put((step_num, tmp_checkpoint_path))
                     if receive_and_check_ack_from_queue(workflow_status, train_update_model_ack_queue, len(train_update_model_queue_list)):
                         logging.info(f"Model state updating workflow finished at training step {step_num}.")
             finally:

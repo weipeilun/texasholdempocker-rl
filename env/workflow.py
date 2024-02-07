@@ -36,29 +36,28 @@ def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model
     torch.save(models_dict, path)
 
     if batch_predict_model_type == ModelType.TENSORRT:
-        tmp_onnx_path = path.replace('.pth', '.onnx_tmp')
+        onnx_path = path.replace('.pth', '.onnx')
         model.load_state_dict(model_state_dict, strict=False)
         input_names = ['input']
         dynamic_axes = {'input': {0: 'batch_size'}}
-        torch.onnx.export(model, torch.zeros((params['predict_batch_size_max'], *params['predict_feature_size_list']), dtype=torch.int32).to(model.device), tmp_onnx_path, opset_version=14, input_names=input_names, dynamic_axes=dynamic_axes)
+        torch.onnx.export(model, torch.zeros((params['predict_batch_size_max'], *params['predict_feature_size_list']), dtype=torch.int32).to(model.device), onnx_path, opset_version=14, input_names=input_names, dynamic_axes=dynamic_axes)
 
-        onnx_path = path.replace('.pth', '.onnx')
-        trt_read_path = tmp_onnx_path
-        try:
-            onnx_checkpoint = onnx.load(tmp_onnx_path)
-            model_simple, is_simplify_success = onnxsim.simplify(onnx_checkpoint)
-            assert is_simplify_success, ValueError(f'is_simplify_success={is_simplify_success}')
-            onnx.save(model_simple, onnx_path)
-            trt_read_path = onnx_path
-        except Exception as e:
-            logging.warning(f'onnxsim failed, {e}')
+        # onnxsim.simplify在未知原因的特定情况下会不抛异常导致进程直接崩溃：Process finished with exit code 139 (interrupted by signal 11: SIGSEGV)。干掉这个步骤
+        # trt_read_path = tmp_onnx_path
+        # try:
+        #     onnx_checkpoint = onnx.load(tmp_onnx_path)
+        #     model_simple, is_simplify_success = onnxsim.simplify(onnx_checkpoint)
+        #     assert is_simplify_success, ValueError(f'is_simplify_success={is_simplify_success}')
+        #     onnx.save(model_simple, onnx_path)
+        #     trt_read_path = onnx_path
+        # except Exception as e:
+        #     logging.warning(f'onnxsim failed, {e}')
 
         trt_path = path.replace('.pth', '.trt')
-        trt_model_engine = build_engine(trt_read_path, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
+        trt_model_engine = build_engine(onnx_path, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
         with open(trt_path, "wb") as f:
             f.write(trt_model_engine)
         logging.info(f'finished writing TensorRT model file {trt_path}')
-        os.remove(tmp_onnx_path)
 
         logging.info(f'model saved to {path}, {onnx_path}, {trt_path}')
         return trt_path
@@ -429,14 +428,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
                             while True:
                                 try:
-                                    train_model_dict = train_update_model_queue.get(block=True, timeout=0.1)
+                                    step_num, train_model_dict = train_update_model_queue.get(block=True, timeout=0.1)
                                     if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
                                         model.load_state_dict(train_model_dict)
                                         logging.info(f'predict_batch_process_{pid} model training updated')
                                     else:
                                         logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                     train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
-                                    train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
+                                    train_hold_signal_ack_queue.put((TrainHoldStatus.FINISHED_UPDATING, step_num))
                                     break
                                 except Empty:
                                     pass
@@ -476,14 +475,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
                                         while True:
                                             try:
-                                                train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
+                                                step_num, train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
                                                 if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
                                                     engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
                                                     logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
                                                 else:
                                                     logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                                 train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
-                                                train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
+                                                train_hold_signal_ack_queue.put((TrainHoldStatus.FINISHED_UPDATING, step_num))
                                                 break
                                             except Empty:
                                                 pass
@@ -512,14 +511,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
                             while True:
                                 try:
-                                    train_model_dict = train_update_model_queue.get(block=True, timeout=0.1)
+                                    step_num, train_model_dict = train_update_model_queue.get(block=True, timeout=0.1)
                                     if train_model_dict is not None and workflow_status == WorkflowStatus.TRAINING:
                                         model.load_state_dict(train_model_dict)
                                         logging.info(f'predict_batch_process_{pid} model training updated')
                                     else:
                                         logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                     train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
-                                    train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
+                                    train_hold_signal_ack_queue.put((TrainHoldStatus.FINISHED_UPDATING, step_num))
                                     break
                                 except Empty:
                                     pass
@@ -544,14 +543,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
                                     while True:
                                         try:
-                                            train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
+                                            step_num, train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
                                             if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
                                                 engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
                                                 logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
                                             else:
                                                 logging.info(f'predict_batch_process_{pid} model training updated skipped')
                                             train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
-                                            train_hold_signal_ack_queue.put(TrainHoldStatus.FINISHED_UPDATING)
+                                            train_hold_signal_ack_queue.put((TrainHoldStatus.FINISHED_UPDATING, step_num))
                                             break
                                         except Empty:
                                             pass
@@ -653,8 +652,8 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
                 next_update_model_step += update_model_per_train_step
                 
                 for _ in train_hold_signal_queue_list:
-                    train_hold_status = train_hold_signal_ack_queue.get(block=True)
-                    assert train_hold_status == TrainHoldStatus.FINISHED_UPDATING, f'train_hold_status should be {TrainHoldStatus.FINISHED_UPDATING.name}, but {train_hold_status.name}'
+                    train_hold_status, train_hold_step_num = train_hold_signal_ack_queue.get(block=True)
+                    assert train_hold_status == TrainHoldStatus.FINISHED_UPDATING and train_hold_step_num == train_step_num, f'Train hold status check failed: train_hold_status={train_hold_status.name}, train_hold_step_num={train_hold_step_num}, train_step_num={train_step_num}'
                 logging.info(f'Train: train_step {train_step_num}, finished training and updating.')
 
             # 触发eval任务
