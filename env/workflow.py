@@ -478,11 +478,13 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                                                 step_num, train_trt_filename = train_update_model_queue.get(block=True, timeout=0.1)
                                                 if train_trt_filename is not None and workflow_status == WorkflowStatus.TRAINING:
                                                     engine, context, batch_info_dict, tensorrt_min_infer_batch_size = init_tensorrt_instances(train_trt_filename, batch_size_list, feature_size_list, stream, batch_info_dict, tensorrt_min_infer_batch_size)
-                                                    logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename}')
+                                                    logging.info(f'predict_batch_process_{pid} model training updated: {train_trt_filename} at step {step_num}')
                                                 else:
-                                                    logging.info(f'predict_batch_process_{pid} model training updated skipped')
+                                                    logging.info(f'predict_batch_process_{pid} model training updated skipped at step {step_num}')
                                                 train_update_model_ack_queue.put(WorkflowStatus.TRAINING)
+                                                logging.info(f'predict_batch_process_{pid} sent ack to train_update_model_ack_queue at step {step_num}')
                                                 train_hold_signal_ack_queue.put((TrainHoldStatus.FINISHED_UPDATING, step_num))
+                                                logging.info(f'predict_batch_process_{pid} sent ack to train_hold_signal_ack_queue at step {step_num}')
                                                 break
                                             except Empty:
                                                 pass
