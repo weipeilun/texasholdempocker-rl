@@ -732,8 +732,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
             if not terminated:
                 observation = observation_
             else:
-                game_finished_signal_queue.put((game_id, reward))
-                logging.info(f'All steps simulated for game {game_id}, train_game_loop_thread id:{thread_name}')
+                game_finished_signal_queue.put((game_id, reward, env.num_reward_tasks, thread_name))
                 break
             game_step_id += 1
     env.close()
@@ -897,15 +896,15 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
             logging.info("train_gather_result_thread detect interrupt")
             break
 
-        signal_finished_game_id_list = list()
+        game_finished_signal_list = list()
         while True:
             try:
                 if interrupt.interrupt_callback():
                     logging.info("train_gather_result_thread detect interrupt")
                     break
 
-                signal_finished_game_id, signal_finished_reward_dict = game_finished_signal_queue.get(block=False)
-                signal_finished_game_id_list.append((signal_finished_game_id, signal_finished_reward_dict))
+                game_finished_signal_info = game_finished_signal_queue.get(block=False)
+                game_finished_signal_list.append(game_finished_signal_info)
             except Empty:
                 break
 
@@ -926,11 +925,12 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
                 break
 
         # 此处会有多进程下的数据幻觉问题，会导致取数异常。把从game_finished_signal_queue取数放到前边
-        for signal_finished_game_id, signal_finished_reward_dict in signal_finished_game_id_list:
-            finished_game_id_dict[signal_finished_game_id] = (len(game_train_data_list_dict[signal_finished_game_id]), signal_finished_reward_dict)
+        for signal_finished_game_id, signal_finished_reward_dict, num_reward_tasks, thread_name in game_finished_signal_list:
+            if signal_finished_game_id in game_train_data_list_dict and len(game_train_data_list_dict[signal_finished_game_id]) == num_reward_tasks:
+                finished_game_id_dict[signal_finished_game_id] = (num_reward_tasks, thread_name, signal_finished_reward_dict)
 
         finalized_game_id_set = set()
-        for finished_game_id, (num_total_games, finished_reward_dict) in finished_game_id_dict.items():
+        for finished_game_id, (num_reward_tasks, thread_name, finished_reward_dict) in finished_game_id_dict.items():
             if finished_game_id in game_train_data_list_dict and finished_game_id in env_info_dict:
                 game_train_data_list = game_train_data_list_dict[finished_game_id]
                 game_info_dict = env_info_dict[finished_game_id]
@@ -952,7 +952,7 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
 
                 if len(game_train_data_not_finished_list) == 0:
                     finalized_game_id_set.add(finished_game_id)
-                    # logging.info('Game %s finished, generated %d data' % (finished_game_id, num_total_games))
+                    logging.info(f'Game {finished_game_id} finished by train_game_loop_thread {thread_name}, generated {num_reward_tasks} data.')
                 else:
                     game_train_data_list_dict[finished_game_id] = game_train_data_not_finished_list
 
