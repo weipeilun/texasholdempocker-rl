@@ -132,7 +132,6 @@ class Env:
             self._gen_cal_reward_task(acted_player_name, acted_round_num, player_hand_card, game_infoset)
 
             self.reward_cal_task_set.add(task_key)
-            self.num_reward_tasks += 1
         if self.game_over:
             if self.settle_automatically:
                 done = True
@@ -239,6 +238,7 @@ class Env:
 
         # self.generate_reward_cal_task_recurrent(self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card)
         self.winning_probability_generating_task_queue.put((self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card))
+        self.num_reward_tasks += 1
 
     # 注意这个方法暂只支持生成两个player的对局，因为所算的“客观胜率”就是指两个player的对局
     def generate_reward_cal_task_recurrent(self, game_id, player_name, current_round,
