@@ -89,7 +89,6 @@ class Env:
         self.player_init_value_to_acting_player_init_value_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST + [1.]) * MAX_PLAYER_NUMBER)
 
         self.game_id = None
-        self.num_reward_tasks = 0
 
     def reset(self, game_id, seed=None, cards_dict=None):
         """
@@ -99,7 +98,6 @@ class Env:
         """
         logging.debug(f'env reset')
         self.game_id = game_id
-        self.num_reward_tasks = 0
 
         # reset environment
         self._env.reset(seed=seed, cards_dict=cards_dict)
@@ -238,7 +236,6 @@ class Env:
 
         # self.generate_reward_cal_task_recurrent(self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card)
         self.winning_probability_generating_task_queue.put((self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card))
-        self.num_reward_tasks += 1
 
     # 注意这个方法暂只支持生成两个player的对局，因为所算的“客观胜率”就是指两个player的对局
     def generate_reward_cal_task_recurrent(self, game_id, player_name, current_round,
