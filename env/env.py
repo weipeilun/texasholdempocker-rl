@@ -130,7 +130,6 @@ class Env:
             self._gen_cal_reward_task(acted_player_name, acted_round_num, player_hand_card, game_infoset)
 
             self.reward_cal_task_set.add(task_key)
-
         if self.game_over:
             if self.settle_automatically:
                 done = True

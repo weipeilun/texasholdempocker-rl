@@ -124,6 +124,7 @@ CARDS_RIVER = 'cards_river'
 
 KEY_ACTED_PLAYER_NAME = 'acted_player_name'
 KEY_ROUND_NUM = 'round_num'
+KEY_NUM_REWARD_TASK = 'num_reward_task'
 STEP_ID_FINISHED = -1
 
 GET_VALID_BET_VALUE = lambda value, small_blind: round(value / small_blind) * small_blind
