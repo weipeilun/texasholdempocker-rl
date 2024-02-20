@@ -87,7 +87,8 @@ if __name__ == '__main__':
     logging.info(f'Finished init {num_train_eval_process} eval_workflow_signal_queue_list.')
     # in_queue, train_tid_pid_map, eval_tid_pid_map
     predict_feature_size_list = params['predict_feature_size_list']
-    predict_batch_in_queue_info_list = [(One2OneQueue(predict_feature_size_list, np.dtype('int32')), dict(), dict()) for _ in range(num_predict_batch_process)]
+    predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
+    # predict_batch_in_queue_info_list = [(One2OneQueue(predict_feature_size_list, np.dtype('int32')), dict(), dict()) for _ in range(num_predict_batch_process)]
     logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
     # data_out_queue
     predict_batch_out_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
