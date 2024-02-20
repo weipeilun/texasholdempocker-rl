@@ -1,7 +1,7 @@
 import logging
-
 from env.workflow import *
 from tools.param_parser import *
+from tools.high_performance_queue import One2OneQueue
 from tools import counter
 from queue import Queue
 from torch.multiprocessing import Manager, Process, Condition, Queue as MPQueue
@@ -86,7 +86,8 @@ if __name__ == '__main__':
     eval_workflow_ack_signal_queue = MPQueue()
     logging.info(f'Finished init {num_train_eval_process} eval_workflow_signal_queue_list.')
     # in_queue, train_tid_pid_map, eval_tid_pid_map
-    predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
+    predict_feature_size_list = params['predict_feature_size_list']
+    predict_batch_in_queue_info_list = [(One2OneQueue(predict_feature_size_list, np.dtype('int32')), dict(), dict()) for _ in range(num_predict_batch_process)]
     logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
     # data_out_queue
     predict_batch_out_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]

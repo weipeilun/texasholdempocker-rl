@@ -28,8 +28,8 @@ big_blind: 50
 # 1. 看N，每个类最重要保证一定的统计意义
 # 2. 看R，每个类最终要拉到很接近的数值上
 # 3. 看Q，每个类最终要符合环境的物理意义
-num_mcts_simulation_per_step: 1600
-mcts_c_puct: 0.5
+num_mcts_simulation_per_step: 800
+mcts_c_puct: 0.3
 mcts_tau: 1
 mcts_dirichlet_noice_epsilon: 0.1  # 增加随机性，避免模型过于依赖历史数据。注意避免过大noise导致数据过脏，训练难以收敛
 mcts_model_Q_epsilon: 0.2  # 当模型更有效后，适当调大这个值

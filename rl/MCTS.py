@@ -286,7 +286,7 @@ class MCTS:
             except Empty:
                 pass
 
-        self.predict_in_queue.put((observation, self.pid))
+        self.predict_in_queue.put((self.pid, observation))
         begin_time = time.time()
         log_interval = 10
         next_log_time = begin_time + log_interval
