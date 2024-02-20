@@ -1,4 +1,4 @@
-from multiprocessing import shared_memory, Manager, Queue
+from multiprocessing import shared_memory, Manager
 from abc import abstractmethod
 import numpy as np
 import math
@@ -260,3 +260,103 @@ class One2ManyQueue(AbstractQueue):
     def unlink(self):
         for shm in self.shm_list:
             shm.unlink()
+
+
+class Many2OneQueue(AbstractQueue):
+
+    class One2OneQueue(One2OneQueue):
+
+        def __init__(self, element_shape, element_dtype, queue_idx, shm=None, trigger_queue=None, signal_queue=None, signal_to_send=None, max_queue_size=100, ignore_array=False):
+            super().__init__(element_shape=element_shape,
+                             element_dtype=element_dtype,
+                             shm=shm,
+                             trigger_queue=trigger_queue,
+                             signal_queue=signal_queue,
+                             signal_to_send=signal_to_send,
+                             max_queue_size=max_queue_size,
+                             ignore_array=ignore_array,
+                             )
+
+            self.queue_idx = queue_idx
+
+        def put(self, data, block=True):
+            if self.ignore_array:
+                super().put((self.queue_idx, data))
+            else:
+                assert isinstance(data, (list, tuple)) and len(data) == 2, 'Data should contain and only contain trigger and array'
+                assert isinstance(data[1], np.ndarray) or (isinstance(data[1], (list, tuple)) and len(data[1]) == len(self.shm_np) and all([isinstance(item, np.ndarray) for item in data[1]])), 'Only ndarray data is supported.'
+                trigger, arrs = data
+                super().put(((self.queue_idx, trigger), arrs))
+
+    def __init__(self, element_shape, element_dtype, n_producers, max_queue_size=100, signal_to_send=None, verbose=0):
+        assert isinstance(element_shape, (tuple, list)), 'element_shape must be a list or tuple'
+
+        if not isinstance(element_shape[0], (tuple, list)):
+            element_shape = [element_shape]
+        if not isinstance(element_dtype, (tuple, list)):
+            element_dtype = [element_dtype]
+        assert len(element_shape) == len(element_dtype), 'Length of element_shape must equals to length of element_dtype'
+
+        for e_shape, e_dtype in zip(element_shape, element_dtype):
+            assert isinstance(e_shape, (tuple, list)), 'element_shape must be a list or tuple'
+            assert np.issubdtype(e_dtype, np.generic), 'element_dtype must be a numpy dtype'
+        assert isinstance(n_producers, int), 'n_consumers must be a int'
+
+        self.n_producers = n_producers
+        self.signal_to_send = signal_to_send
+        self.verbose = verbose
+
+        self.signal_queue_list = [Manager().Queue(maxsize=max_queue_size) for _ in range(self.n_producers)]
+        self.trigger_queue = Manager().Queue(maxsize=max_queue_size)
+
+        self.shms_list = list()
+        self.shms_np_list = list()
+        for idx in range(self.n_producers):
+            shms = []
+            for e_shape, e_dtype in zip(element_shape, element_dtype):
+                element_size = math.prod(e_shape) * e_dtype.itemsize
+                shms.append(shared_memory.SharedMemory(create=True, size=element_size))
+
+            shm_np = []
+            for e_shape, e_dtype, shm in zip(element_shape, element_dtype, shms):
+                shm_np.append(np.ndarray(shape=e_shape, dtype=e_dtype, buffer=shm.buf))
+
+            self.shms_list.append(shms)
+            self.shms_np_list.append(shm_np)
+
+        self.producer_list = [self.One2OneQueue(element_shape=element_shape, element_dtype=element_dtype, queue_idx=idx, shm=shms, trigger_queue=self.trigger_queue, signal_queue=signal_queue, signal_to_send=idx, max_queue_size=max_queue_size) for idx, (signal_queue, shms) in enumerate(zip(self.signal_queue_list, self.shms_list))]
+
+        for idx, signal_queue in enumerate(self.signal_queue_list):
+            signal_queue.put(idx)
+
+    def put(self, data, broadcast_to=None, block=True):
+        raise NotImplementedError('Many2OneQueue.producer_list.put() should be called instead of Many2OneQueue.put()')
+
+    def get(self, block=True, timeout=None):
+        input_idx, trigger = self.trigger_queue.get(block=block, timeout=timeout)
+
+        shms_np = self.shms_np_list[input_idx]
+
+        if len(shms_np) == 1:
+            datas = np.copy(shms_np[0])
+        else:
+            datas = []
+            for shm_np in shms_np:
+                datas.append(np.copy(shm_np))
+
+        self.signal_queue_list[input_idx].put(self.signal_to_send)
+
+        return trigger, datas
+
+    def qsize(self):
+        raise NotImplementedError('One2ManyQueue.consumer_list.qsize() should be called instead of One2ManyQueue.qsize()')
+
+    def close(self):
+        for shms in self.shms_list:
+            for shm in shms:
+                shm.close()
+
+    def unlink(self):
+        for shms in self.shms_list:
+            for shm in shms:
+                shm.unlink()
