@@ -38,6 +38,7 @@ if __name__ == '__main__':
 
     # 用户所有连续特征分桶embedding
     num_bins = params['num_bins']
+    model_param_dict = params['model_param_dict']
     model_last_checkpoint_path = params['model_last_checkpoint_path']
     model_init_checkpoint_path = params['model_init_checkpoint_path']
 
@@ -92,6 +93,8 @@ if __name__ == '__main__':
         predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
     elif batch_predict_model_type == ModelType.TENSORRT:
         predict_batch_in_queue_info_list = [(One2OneQueue(predict_feature_size_list, np.int32(), max_queue_size=num_train_eval_thread), dict(), dict()) for _ in range(num_predict_batch_process)]
+    else:
+        raise ValueError(f'batch_predict_model_type should be in (PyTorch, TensorRT), but {batch_predict_model_type}')
     logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
     # data_out_queue
     predict_batch_out_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
@@ -119,9 +122,9 @@ if __name__ == '__main__':
             predict_batch_out_queue_info = predict_batch_out_info_list[train_eval_process_pid]
             predict_batch_out_queue_info[thread_id] = len(predict_batch_out_queue_info)
 
-            train_thread_param = (train_game_id_signal_queue, model.num_output_class, game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, predict_batch_in_queue_info[0], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
+            train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, predict_batch_in_queue_info[0], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
 
-            eval_thread_param = (eval_game_id_signal_queue, model.num_output_class, eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, predict_batch_in_best_queue_info[0], predict_batch_in_new_queue_info[0], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
+            eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, predict_batch_in_best_queue_info[0], predict_batch_in_new_queue_info[0], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
 
             train_eval_thread_param_list.append((train_thread_param, eval_thread_param))
 
@@ -142,7 +145,6 @@ if __name__ == '__main__':
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
-    model_param_dict = params['model_param_dict']
     model = AlphaGoZero(**model_param_dict)
     load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list, batch_predict_model_type)
 
