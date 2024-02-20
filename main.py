@@ -92,7 +92,7 @@ if __name__ == '__main__':
     if batch_predict_model_type == ModelType.PYTORCH:
         predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
     elif batch_predict_model_type == ModelType.TENSORRT:
-        predict_batch_in_queue_info_list = [(Many2OneQueue(predict_feature_size_list, np.int32(), n_producers=num_train_eval_thread, max_queue_size=num_train_eval_thread), dict(), dict()) for _ in range(num_predict_batch_process)]
+        predict_batch_in_queue_info_list = [(Many2OneQueue(predict_feature_size_list, np.int32(), n_producers_over_process=num_train_eval_process, n_producers_in_process=num_game_loop_thread_per_process, max_queue_size=num_train_eval_thread), dict(), dict()) for _ in range(num_predict_batch_process)]
     else:
         raise ValueError(f'batch_predict_model_type should be in (PyTorch, TensorRT), but {batch_predict_model_type}')
     logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')

@@ -2,8 +2,10 @@ from multiprocessing import shared_memory, Manager
 from abc import abstractmethod
 import numpy as np
 import math
-from queue import Empty
-
+import logging
+from threading import Thread
+from queue import Empty, Queue
+from tools import interrupt
 
 # high performance process-secure queue for arrays using shared_memory
 class AbstractQueue(object):
@@ -264,31 +266,62 @@ class One2ManyQueue(AbstractQueue):
 
 class Many2OneQueue(AbstractQueue):
 
-    class One2OneQueue(One2OneQueue):
+    class One2OneQueueOverProcess:
+        class One2OneQueue(One2OneQueue):
 
-        def __init__(self, element_shape, element_dtype, queue_idx, shm=None, trigger_queue=None, signal_queue=None, signal_to_send=None, max_queue_size=100, ignore_array=False):
-            super().__init__(element_shape=element_shape,
-                             element_dtype=element_dtype,
-                             shm=shm,
-                             trigger_queue=trigger_queue,
-                             signal_queue=signal_queue,
-                             signal_to_send=signal_to_send,
-                             max_queue_size=max_queue_size,
-                             ignore_array=ignore_array,
-                             )
+            def __init__(self, element_shape, element_dtype, queue_idx_over_process, queue_idx_in_process, shm=None, trigger_queue=None, signal_queue=None, signal_to_send=None, max_queue_size=100, ignore_array=False):
+                super().__init__(element_shape=element_shape,
+                                 element_dtype=element_dtype,
+                                 shm=shm,
+                                 trigger_queue=trigger_queue,
+                                 signal_queue=signal_queue,
+                                 signal_to_send=signal_to_send,
+                                 max_queue_size=max_queue_size,
+                                 ignore_array=ignore_array,
+                                 )
 
-            self.queue_idx = queue_idx
+                self.queue_idx_over_process = queue_idx_over_process
+                self.queue_idx_in_process = queue_idx_in_process
 
-        def put(self, data, block=True):
-            if self.ignore_array:
-                super().put((self.queue_idx, data))
-            else:
-                assert isinstance(data, (list, tuple)) and len(data) == 2, 'Data should contain and only contain trigger and array'
-                assert isinstance(data[1], np.ndarray) or (isinstance(data[1], (list, tuple)) and len(data[1]) == len(self.shm_np) and all([isinstance(item, np.ndarray) for item in data[1]])), 'Only ndarray data is supported.'
-                trigger, arrs = data
-                super().put(((self.queue_idx, trigger), arrs))
+            def put(self, data, block=True):
+                if self.ignore_array:
+                    super().put((self.queue_idx_over_process, self.queue_idx_in_process, data))
+                else:
+                    assert isinstance(data, (list, tuple)) and len(data) == 2, 'Data should contain and only contain trigger and array'
+                    assert isinstance(data[1], np.ndarray) or (isinstance(data[1], (list, tuple)) and len(data[1]) == len(self.shm_np) and all([isinstance(item, np.ndarray) for item in data[1]])), 'Only ndarray data is supported.'
+                    trigger, arrs = data
+                    super().put(((self.queue_idx_over_process, self.queue_idx_in_process, trigger), arrs))
 
-    def __init__(self, element_shape, element_dtype, n_producers, max_queue_size=100, signal_to_send=None, verbose=0):
+        def __init__(self, element_shape, element_dtype, queue_idx_over_process, n_producers_in_process, shms, trigger_queue, signal_queue_over_process, max_queue_size=100, ignore_array=False):
+
+            self.queue_idx_over_process = queue_idx_over_process
+            self.n_producers_in_process = n_producers_in_process
+            self.signal_queue_over_process = signal_queue_over_process
+
+            self.signal_queue_in_process_list = [Queue() for _ in range(n_producers_in_process)]
+
+            self.producer_list = [self.One2OneQueue(element_shape=element_shape, element_dtype=element_dtype, queue_idx_over_process=queue_idx_over_process, queue_idx_in_process=idx, shm=shm, trigger_queue=trigger_queue, signal_queue=signal_queue_in_process, signal_to_send=queue_idx_over_process * n_producers_in_process + idx, max_queue_size=max_queue_size, ignore_array=ignore_array) for idx, (signal_queue_in_process, shm) in enumerate(zip(self.signal_queue_in_process_list, shms))]
+
+            self.data_map_dict = {producer.signal_to_send: idx for idx, producer in enumerate(self.producer_list)}
+
+            Thread(target=self.map_data_thread, daemon=True).start()
+
+            for idx, signal_queue_in_process in enumerate(self.signal_queue_in_process_list):
+                signal_queue_in_process.put(idx)
+
+        def map_data_thread(self):
+            while True:
+                if interrupt.interrupt_callback():
+                    logging.info(f"Many2OneQueue_{self.queue_idx_over_process}.map_data_thread detect interrupt")
+                    break
+
+                try:
+                    data_tid, data = self.signal_queue_over_process.get(block=True, timeout=0.001)
+                    self.producer_list[self.data_map_dict[data_tid]].put(data)
+                except Empty:
+                    pass
+
+    def __init__(self, element_shape, element_dtype, n_producers_over_process, n_producers_in_process, max_queue_size=100, verbose=0):
         assert isinstance(element_shape, (tuple, list)), 'element_shape must be a list or tuple'
 
         if not isinstance(element_shape[0], (tuple, list)):
@@ -300,42 +333,44 @@ class Many2OneQueue(AbstractQueue):
         for e_shape, e_dtype in zip(element_shape, element_dtype):
             assert isinstance(e_shape, (tuple, list)), 'element_shape must be a list or tuple'
             assert np.issubdtype(e_dtype, np.generic), 'element_dtype must be a numpy dtype'
-        assert isinstance(n_producers, int), 'n_consumers must be a int'
+        assert isinstance(n_producers_over_process, int), 'n_consumers must be a int'
 
-        self.n_producers = n_producers
-        self.signal_to_send = signal_to_send
+        self.n_producers_over_process = n_producers_over_process
+        self.n_producers_in_process = n_producers_in_process
         self.verbose = verbose
 
-        self.signal_queue_list = [Manager().Queue(maxsize=max_queue_size) for _ in range(self.n_producers)]
-        self.trigger_queue = Manager().Queue(maxsize=max_queue_size)
+        self.signal_queue_list = [Manager().Queue(maxsize=n_producers_in_process) for _ in range(self.n_producers_over_process)]
+        self.trigger_queue = Manager().Queue(maxsize=n_producers_in_process)
 
         self.shms_list = list()
         self.shms_np_list = list()
-        for idx in range(self.n_producers):
-            shms = []
-            for e_shape, e_dtype in zip(element_shape, element_dtype):
-                element_size = math.prod(e_shape) * e_dtype.itemsize
-                shms.append(shared_memory.SharedMemory(create=True, size=element_size))
+        for _ in range(self.n_producers_over_process):
+            shms = list()
+            shms_np = list()
+            for _ in range(self.n_producers_in_process):
+                shared_memory_list = []
+                shm_np_list = []
+                for e_shape, e_dtype in zip(element_shape, element_dtype):
+                    element_size = math.prod(e_shape) * e_dtype.itemsize
+                    shm = shared_memory.SharedMemory(create=True, size=element_size)
+                    shared_memory_list.append(shm)
+                    shm_np_list.append(np.ndarray(shape=e_shape, dtype=e_dtype, buffer=shm.buf))
 
-            shm_np = []
-            for e_shape, e_dtype, shm in zip(element_shape, element_dtype, shms):
-                shm_np.append(np.ndarray(shape=e_shape, dtype=e_dtype, buffer=shm.buf))
+                shms.append(shared_memory_list)
+                shms_np.append(shm_np_list)
 
             self.shms_list.append(shms)
-            self.shms_np_list.append(shm_np)
+            self.shms_np_list.append(shms_np)
 
-        self.producer_list = [self.One2OneQueue(element_shape=element_shape, element_dtype=element_dtype, queue_idx=idx, shm=shms, trigger_queue=self.trigger_queue, signal_queue=signal_queue, signal_to_send=idx, max_queue_size=max_queue_size) for idx, (signal_queue, shms) in enumerate(zip(self.signal_queue_list, self.shms_list))]
-
-        for idx, signal_queue in enumerate(self.signal_queue_list):
-            signal_queue.put(idx)
+        self.producer_list = [self.One2OneQueueOverProcess(element_shape=element_shape, element_dtype=element_dtype, queue_idx_over_process=idx, n_producers_in_process=self.n_producers_in_process, shms=shms, trigger_queue=self.trigger_queue, signal_queue_over_process=signal_queue_over_process, max_queue_size=max_queue_size) for idx, (signal_queue_over_process, shms) in enumerate(zip(self.signal_queue_list, self.shms_list))]
 
     def put(self, data, broadcast_to=None, block=True):
         raise NotImplementedError('Many2OneQueue.producer_list.put() should be called instead of Many2OneQueue.put()')
 
     def get(self, block=True, timeout=None):
-        input_idx, trigger = self.trigger_queue.get(block=block, timeout=timeout)
+        over_process_idx, in_process_idx, trigger = self.trigger_queue.get(block=block, timeout=timeout)
 
-        shms_np = self.shms_np_list[input_idx]
+        shms_np = self.shms_np_list[over_process_idx][in_process_idx]
 
         if len(shms_np) == 1:
             datas = np.copy(shms_np[0])
@@ -344,7 +379,7 @@ class Many2OneQueue(AbstractQueue):
             for shm_np in shms_np:
                 datas.append(np.copy(shm_np))
 
-        self.signal_queue_list[input_idx].put(self.signal_to_send)
+        self.signal_queue_list[over_process_idx].put(in_process_idx)
 
         return trigger, datas
 

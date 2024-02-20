@@ -11,8 +11,6 @@ from utils.torch_utils import *
 from utils.workflow_utils import *
 from utils.tensorrt_utils import *
 from utils.math_utils import *
-import onnxsim
-import onnx
 
 try:
     from cuda import cudart
