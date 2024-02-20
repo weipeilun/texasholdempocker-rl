@@ -20,7 +20,7 @@ if __name__ == '__main__':
 
     batch_predict_model_type = ModelType(params['batch_predict_model_type'])
     assert batch_predict_model_type in ('PyTorch', 'TensorRT'), ValueError(f'batch_predict_model_type should be in (PyTorch, TensorRT), but {batch_predict_model_type}')
-    if batch_predict_model_type == 'PyTorch':
+    if batch_predict_model_type == ModelType.PYTORCH:
         torch.multiprocessing.set_start_method('spawn')
 
     num_predict_batch_process = params['num_predict_batch_process']
@@ -89,9 +89,9 @@ if __name__ == '__main__':
     # in_queue, train_tid_pid_map, eval_tid_pid_map
     predict_feature_size_list = params['predict_feature_size_list']
     # spawn进程模式下不支持SharedMemory内存共享，会导致对拷失败
-    if batch_predict_model_type == 'PyTorch':
+    if batch_predict_model_type == ModelType.PYTORCH:
         predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
-    elif batch_predict_model_type == 'TensorRT':
+    elif batch_predict_model_type == ModelType.TENSORRT:
         predict_batch_in_queue_info_list = [(One2OneQueue(predict_feature_size_list, np.int32(), max_queue_size=num_train_eval_thread), dict(), dict()) for _ in range(num_predict_batch_process)]
     logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
     # data_out_queue
