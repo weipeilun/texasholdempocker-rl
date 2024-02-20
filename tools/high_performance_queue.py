@@ -169,8 +169,8 @@ class One2ManyQueue(AbstractQueue):
         self.previous_broadcast_to = None
 
         max_queue_size = max(n_consumers, max_queue_size)
-        self.signal_queue = Queue(maxsize=max_queue_size)
-        self.trigger_queue_list = [Queue(maxsize=max_queue_size) for _ in range(self.n_consumers)]
+        self.signal_queue = Manager().Queue(maxsize=max_queue_size)
+        self.trigger_queue_list = [Manager().Queue(maxsize=max_queue_size) for _ in range(self.n_consumers)]
 
         element_size = math.prod(element_shape) * element_dtype.itemsize
         if self.broadcast:

@@ -18,7 +18,10 @@ if __name__ == '__main__':
 
     args, params = parse_params()
 
-    torch.multiprocessing.set_start_method('spawn')
+    batch_predict_model_type = ModelType(params['batch_predict_model_type'])
+    assert batch_predict_model_type in ('PyTorch', 'TensorRT'), ValueError(f'batch_predict_model_type should be in (PyTorch, TensorRT), but {batch_predict_model_type}')
+    if batch_predict_model_type == 'PyTorch':
+        torch.multiprocessing.set_start_method('spawn')
 
     num_predict_batch_process = params['num_predict_batch_process']
     assert num_predict_batch_process % 2 == 0, 'num_predict_batch_process must be even'
@@ -36,10 +39,8 @@ if __name__ == '__main__':
 
     # 用户所有连续特征分桶embedding
     num_bins = params['num_bins']
-    model_param_dict = params['model_param_dict']
     model_last_checkpoint_path = params['model_last_checkpoint_path']
     model_init_checkpoint_path = params['model_init_checkpoint_path']
-    model = AlphaGoZero(**model_param_dict)
 
     # init generate winning probability calculating data processes
     num_gen_winning_prob_cal_data_processes = params['num_gen_winning_prob_cal_data_processes']
@@ -87,8 +88,11 @@ if __name__ == '__main__':
     logging.info(f'Finished init {num_train_eval_process} eval_workflow_signal_queue_list.')
     # in_queue, train_tid_pid_map, eval_tid_pid_map
     predict_feature_size_list = params['predict_feature_size_list']
-    # predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
-    predict_batch_in_queue_info_list = [(One2OneQueue(predict_feature_size_list, np.int32()), dict(), dict()) for _ in range(num_predict_batch_process)]
+    # spawn进程模式下不支持SharedMemory内存共享，会导致对拷失败
+    if batch_predict_model_type == 'PyTorch':
+        predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
+    elif batch_predict_model_type == 'TensorRT':
+        predict_batch_in_queue_info_list = [(One2OneQueue(predict_feature_size_list, np.int32(), max_queue_size=num_train_eval_thread), dict(), dict()) for _ in range(num_predict_batch_process)]
     logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
     # data_out_queue
     predict_batch_out_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
@@ -134,12 +138,13 @@ if __name__ == '__main__':
     train_hold_signal_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
     train_hold_signal_ack_queue = MPQueue()
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
-    batch_predict_model_type = ModelType(params['batch_predict_model_type'])
     for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue, train_hold_signal_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list, train_hold_signal_queue_list)):
         Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
+    model_param_dict = params['model_param_dict']
+    model = AlphaGoZero(**model_param_dict)
     load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list, batch_predict_model_type)
 
     # control game simulation thread, to prevent excess task produced by producer
