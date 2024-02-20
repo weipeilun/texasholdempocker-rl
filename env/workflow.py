@@ -451,7 +451,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 while True:
                     # 一直取数，不要sleep，以提高显卡利用率
                     data_pid, data = in_queue.get(block=True, timeout=0.001)
-                    print(f'data_pid={data_pid}, data={data}')
+                    logging.info(f'data_pid={data_pid}, data={data}')
                     batch_list.append(data)
                     pid_list.append(data_pid)
                     # 达到min_infer_batch_size，做预测
