@@ -287,7 +287,7 @@ class MCTS:
                 pass
 
         print(f'observation={observation}')
-        self.predict_in_queue.put((self.pid, np.asarray(observation)))
+        self.predict_in_queue.put((self.pid, np.asarray(observation, dtype=np.int32)))
         begin_time = time.time()
         log_interval = 10
         next_log_time = begin_time + log_interval
