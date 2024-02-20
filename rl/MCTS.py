@@ -286,6 +286,7 @@ class MCTS:
             except Empty:
                 pass
 
+        logging.info(f'observation={observation}')
         self.predict_in_queue.put((self.pid, np.asarray(observation, dtype=np.int32)))
         begin_time = time.time()
         log_interval = 10
