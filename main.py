@@ -19,7 +19,6 @@ if __name__ == '__main__':
     args, params = parse_params()
 
     batch_predict_model_type = ModelType(params['batch_predict_model_type'])
-    assert batch_predict_model_type in ('PyTorch', 'TensorRT'), ValueError(f'batch_predict_model_type should be in (PyTorch, TensorRT), but {batch_predict_model_type}')
     if batch_predict_model_type == ModelType.PYTORCH:
         torch.multiprocessing.set_start_method('spawn')
 
