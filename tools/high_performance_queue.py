@@ -20,6 +20,10 @@ class AbstractQueue(object):
         pass
 
     @abstractmethod
+    def qsize(self):
+        pass
+
+    @abstractmethod
     def close(self):
         pass
 
@@ -137,6 +141,9 @@ class One2OneQueue(AbstractQueue):
 
             return trigger, datas
 
+    def qsize(self):
+        return int(not self.trigger_queue.empty())
+
     def close(self):
         if not self.ignore_array:
             for shm in self.shm:
@@ -239,6 +246,9 @@ class One2ManyQueue(AbstractQueue):
 
     def get(self, block=True, timeout=None):
         raise NotImplementedError('One2ManyQueue.consumer_list.get() should be called instead of One2ManyQueue.get()')
+
+    def qsize(self):
+        raise NotImplementedError('One2ManyQueue.consumer_list.qsize() should be called instead of One2ManyQueue.qsize()')
 
     def close(self):
         for shm in self.shm_list:
