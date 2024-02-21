@@ -277,7 +277,8 @@ class MCTS:
         # 这个锁用于控制workflow的状态切换
         if self.workflow_lock is not None and self.workflow_signal_queue is not None and self.workflow_ack_signal_queue is not None:
             try:
-                workflow_status = self.workflow_signal_queue.get(block=False)
+                pid, workflow_status = self.workflow_signal_queue.get(block=False)
+                assert pid == self.pid, ValueError(f'train_eval_process.map_data_thread data mapping error: self.pid={self.pid} but pid recieved={pid}')
                 logging.info(f"MCTS.predict{self.pid} received workflow_status: {workflow_status.name}")
                 self.workflow_ack_signal_queue.put(workflow_status)
 
@@ -302,7 +303,8 @@ class MCTS:
                 logging.warning(f"MCTS.predict{self.pid} waited predict_out_queue for %.2fs" % (now - begin_time))
 
             try:
-                action_prob, estimate_reward_value, winning_prob = self.predict_out_queue.get(block=True, timeout=0.01)
+                pid, (action_prob, estimate_reward_value, winning_prob) = self.predict_out_queue.get(block=True, timeout=0.01)
+                assert pid == self.pid, ValueError(f'train_eval_process.map_data_thread data mapping error: self.pid={self.pid} but pid recieved={pid}')
                 logging.info(f'action_prob={action_prob}, estimate_reward_value={estimate_reward_value}, winning_prob={winning_prob}')
                 break
             except Empty:

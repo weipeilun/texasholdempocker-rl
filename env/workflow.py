@@ -758,7 +758,8 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
                 # 一次eval任务结束需要重置env，否则导致players的初始资金在评估任务中不一致
                 try:
-                    workflow_status = eval_workflow_signal_queue.get(block=False)
+                    received_pid, workflow_status = eval_workflow_signal_queue.get(block=False)
+                    assert pid == received_pid, ValueError(f'train_eval_process.map_data_thread data mapping error: self.pid={pid} but pid received={received_pid}')
                     env = Env(None, num_bins, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
 
                     eval_workflow_ack_signal_queue.put(workflow_status)
@@ -848,7 +849,7 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
 
             try:
                 data_tid, data = data_queue.get(block=True, timeout=timeout)
-                data_map_dict[tid_process_tid_map[data_tid]].put(data)
+                data_map_dict[tid_process_tid_map[data_tid]].put((data_tid, data))
             except Empty:
                 pass
 
