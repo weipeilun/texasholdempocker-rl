@@ -307,7 +307,7 @@ class MCTS:
             try:
                 pid, (estimate_reward_value, winning_prob), action_prob = self.predict_out_queue.get(block=True, timeout=0.01)
                 assert pid == self.pid, ValueError(f'train_eval_process.map_data_thread data mapping error: self.pid={self.pid} but pid recieved={pid}')
-                logging.info(f'pid={pid}, action_prob={action_prob}, estimate_reward_value={estimate_reward_value}, winning_prob={winning_prob}')
+                # logging.info(f'pid={pid}, action_prob={action_prob}, estimate_reward_value={estimate_reward_value}, winning_prob={winning_prob}')
                 break
             except Empty:
                 continue
