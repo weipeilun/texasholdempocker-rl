@@ -303,6 +303,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
                 for action_probs, reward_value, winning_prob, send_pid in zip(action_probs_list, reward_value_list, winning_prob_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
+                        print(f'send_out_queue_map_dict_train={send_out_queue_map_dict_train}')
                         send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
                     elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
                         send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
