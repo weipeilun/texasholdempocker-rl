@@ -63,6 +63,7 @@ if __name__ == '__main__':
     num_train_eval_process = params['num_train_eval_process']
     num_train_eval_thread = num_game_loop_thread * num_predict_batch_process
     assert num_train_eval_thread % num_train_eval_process == 0, 'num_game_loop_thread must be multiple of num_train_eval_process'
+    assert num_train_eval_process % num_predict_batch_process == 0, 'num_train_eval_process must be multiple of num_predict_batch_process'
     num_game_loop_thread_per_process = num_train_eval_thread // num_train_eval_process
     # game params
     num_mcts_simulation_per_step = params['num_mcts_simulation_per_step']
@@ -89,12 +90,10 @@ if __name__ == '__main__':
     # in_queue, train_tid_pid_map, eval_tid_pid_map
     predict_feature_size_list = params['predict_feature_size_list']
     # spawn进程模式下不支持SharedMemory内存共享，会导致对拷失败
-    if batch_predict_model_type == ModelType.PYTORCH:
-        predict_batch_in_queue_info_list = [(Manager().Queue(), dict(), dict()) for _ in range(num_predict_batch_process)]
-    elif batch_predict_model_type == ModelType.TENSORRT:
+    if batch_predict_model_type == ModelType.TENSORRT:
         predict_batch_in_queue_info_list = [(Many2OneQueue(predict_feature_size_list, np.int32(), n_producers_over_process=num_train_eval_process, n_producers_in_process=num_game_loop_thread_per_process, max_queue_size=num_train_eval_thread), dict(), dict()) for _ in range(num_predict_batch_process)]
     else:
-        raise ValueError(f'batch_predict_model_type should be in (PyTorch, TensorRT), but {batch_predict_model_type}')
+        raise ValueError(f'Only support TensorRT for Queue mode, but get {batch_predict_model_type}')
     logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
     # data_out_queue
     predict_batch_out_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
@@ -122,16 +121,25 @@ if __name__ == '__main__':
             predict_batch_out_queue_info = predict_batch_out_info_list[train_eval_process_pid]
             predict_batch_out_queue_info[thread_id] = len(predict_batch_out_queue_info)
 
-            train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, predict_batch_in_queue_info[0].producer_list[thread_id], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
+            # train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, predict_batch_in_queue_info[0].producer_list[thread_id], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
 
-            eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, predict_batch_in_best_queue_info[0].producer_list[thread_id], predict_batch_in_new_queue_info[0].producer_list[thread_id], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
+            # eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, predict_batch_in_best_queue_info[0].producer_list[thread_id], predict_batch_in_new_queue_info[0].producer_list[thread_id], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
+
+            train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
+
+            eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
 
             train_eval_thread_param_list.append((train_thread_param, eval_thread_param))
 
     is_init_train_thread = True
     is_init_eval_thread = True
     for pid, (data_out_queue, tid_process_tid_map, workflow_game_loop_signal_queue, eval_workflow_signal_queue) in enumerate(zip(predict_batch_out_queue_list, predict_batch_out_info_list, workflow_game_loop_signal_queue_list, eval_workflow_signal_queue_list)):
-        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, data_out_queue, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level), daemon=True).start()
+        data_in_queue_idx = get_train_info_for_process(pid, predict_batch_in_queue_info_list)
+        data_in_best_queue_idx, data_in_new_queue_idx = get_eval_info_for_process(pid, predict_batch_in_queue_info_list)
+
+        data_in_queue_list = [predict_batch_in_queue_info[0].producer_list for predict_batch_in_queue_info in predict_batch_in_queue_info_list]
+
+        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, data_in_queue_list, data_in_queue_idx, data_in_best_queue_idx, data_in_new_queue_idx, data_out_queue, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level), daemon=True).start()
     logging.info('All train_eval_process inited.')
 
     # 训练中更新模型参数
@@ -140,8 +148,8 @@ if __name__ == '__main__':
     train_hold_signal_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
     train_hold_signal_ack_queue = MPQueue()
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
-    for pid, (workflow_queue, workflow_ack_queue, update_model_param_queue, (model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), train_update_model_queue, train_hold_signal_queue) in enumerate(zip(workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, predict_batch_in_queue_info_list, train_update_model_queue_list, train_hold_signal_queue_list)):
-        Process(target=predict_batch_process, args=(model_predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
+    for pid, ((predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), workflow_queue, workflow_ack_queue, update_model_param_queue, train_update_model_queue, train_hold_signal_queue) in enumerate(zip(predict_batch_in_queue_info_list, workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, train_update_model_queue_list, train_hold_signal_queue_list)):
+        Process(target=predict_batch_process, args=(predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process

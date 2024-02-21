@@ -5,7 +5,6 @@ import math
 import logging
 from threading import Thread
 from queue import Empty, Queue
-from tools import interrupt
 
 # high performance process-secure queue for arrays using shared_memory
 class AbstractQueue(object):
@@ -285,15 +284,14 @@ class Many2OneQueue(AbstractQueue):
 
             def put(self, data, block=True):
                 if self.ignore_array:
-                    super().put((self.queue_idx_over_process, self.queue_idx_in_process, data))
+                    super().put((self.queue_idx_over_process, self.queue_idx_in_process, self.signal_to_send, data))
                 else:
                     assert isinstance(data, (list, tuple)) and len(data) == 2, 'Data should contain and only contain trigger and array'
                     assert isinstance(data[1], np.ndarray) or (isinstance(data[1], (list, tuple)) and len(data[1]) == len(self.shm_np) and all([isinstance(item, np.ndarray) for item in data[1]])), 'Only ndarray data is supported.'
                     trigger, arrs = data
-                    super().put(((self.queue_idx_over_process, self.queue_idx_in_process, trigger), arrs))
+                    super().put(((self.queue_idx_over_process, self.queue_idx_in_process, self.signal_to_send, trigger), arrs))
 
         def __init__(self, element_shape, element_dtype, queue_idx_over_process, n_producers_in_process, shms, trigger_queue, signal_queue_over_process, max_queue_size=100, ignore_array=False):
-
             self.queue_idx_over_process = queue_idx_over_process
             self.n_producers_in_process = n_producers_in_process
             self.signal_queue_over_process = signal_queue_over_process
@@ -302,22 +300,23 @@ class Many2OneQueue(AbstractQueue):
 
             self.producer_list = [self.One2OneQueue(element_shape=element_shape, element_dtype=element_dtype, queue_idx_over_process=queue_idx_over_process, queue_idx_in_process=idx, shm=shm, trigger_queue=trigger_queue, signal_queue=signal_queue_in_process, signal_to_send=queue_idx_over_process * n_producers_in_process + idx, max_queue_size=max_queue_size, ignore_array=ignore_array) for idx, (signal_queue_in_process, shm) in enumerate(zip(self.signal_queue_in_process_list, shms))]
 
-            self.data_map_dict = {producer.signal_to_send: idx for idx, producer in enumerate(self.producer_list)}
+            self.thread_started = False
 
-            Thread(target=self.map_data_thread, daemon=True).start()
+            for idx, producer in enumerate(self.producer_list):
+                producer.signal_queue.put(producer.signal_to_send)
 
-            for idx, signal_queue_in_process in enumerate(self.signal_queue_in_process_list):
-                signal_queue_in_process.put(idx)
+        def start_map_data_thread(self):
+            if not self.thread_started:
+                Thread(target=self.map_data_thread, daemon=True).start()
+                self.thread_started = True
 
         def map_data_thread(self):
             while True:
-                if interrupt.interrupt_callback():
-                    logging.info(f"Many2OneQueue_{self.queue_idx_over_process}.map_data_thread detect interrupt")
-                    break
-
                 try:
-                    data_tid, data = self.signal_queue_over_process.get(block=True, timeout=0.001)
-                    self.producer_list[self.data_map_dict[data_tid]].put(data)
+                    in_process_tid, tid = self.signal_queue_over_process.get(block=True, timeout=0.001)
+                    in_process_producer = self.producer_list[in_process_tid]
+                    assert in_process_producer.signal_to_send == tid, ValueError(f'in_process_producer.signal_to_send={in_process_producer.signal_to_send} but tid={tid}')
+                    self.producer_list[in_process_tid].put(tid)
                 except Empty:
                     pass
 
@@ -339,8 +338,8 @@ class Many2OneQueue(AbstractQueue):
         self.n_producers_in_process = n_producers_in_process
         self.verbose = verbose
 
-        self.signal_queue_list = [Manager().Queue(maxsize=n_producers_in_process) for _ in range(self.n_producers_over_process)]
-        self.trigger_queue = Manager().Queue(maxsize=n_producers_in_process)
+        self.signal_queue_list = [Manager().Queue(maxsize=n_producers_over_process * n_producers_in_process) for _ in range(self.n_producers_over_process)]
+        self.trigger_queue = Manager().Queue(maxsize=n_producers_over_process * n_producers_in_process)
 
         self.shms_list = list()
         self.shms_np_list = list()
@@ -368,7 +367,7 @@ class Many2OneQueue(AbstractQueue):
         raise NotImplementedError('Many2OneQueue.producer_list.put() should be called instead of Many2OneQueue.put()')
 
     def get(self, block=True, timeout=None):
-        over_process_idx, in_process_idx, trigger = self.trigger_queue.get(block=block, timeout=timeout)
+        over_process_idx, in_process_idx, signal_to_send, trigger = self.trigger_queue.get(block=block, timeout=timeout)
 
         shms_np = self.shms_np_list[over_process_idx][in_process_idx]
 
@@ -379,7 +378,7 @@ class Many2OneQueue(AbstractQueue):
             for shm_np in shms_np:
                 datas.append(np.copy(shm_np))
 
-        self.signal_queue_list[over_process_idx].put(in_process_idx)
+        self.signal_queue_list[over_process_idx].put((in_process_idx, signal_to_send))
 
         return trigger, datas
 

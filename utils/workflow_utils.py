@@ -14,11 +14,24 @@ def get_train_info(thread_id, queue_info_list):
     return queue_info_list[in_queue_idx]
 
 
+def get_train_info_for_process(process_id, queue_info_list):
+    num_in_queue = len(queue_info_list)
+    in_queue_idx = process_id % num_in_queue
+    return in_queue_idx
+
+
 def get_eval_info(thread_id, queue_info_list):
     num_in_queue = len(queue_info_list)
     num_in_queue_group = num_in_queue // 2
     in_queue_group_idx = thread_id % num_in_queue_group
     return queue_info_list[in_queue_group_idx], queue_info_list[in_queue_group_idx + num_in_queue_group]
+
+
+def get_eval_info_for_process(process_id, queue_info_list):
+    num_in_queue = len(queue_info_list)
+    num_in_queue_group = num_in_queue // 2
+    in_queue_group_idx = process_id % num_in_queue_group
+    return in_queue_group_idx, in_queue_group_idx + num_in_queue_group
 
 
 def map_batch_predict_process_to_out_queue(thread_id, process_out_queue, process_out_queue_list, queue_map_dict_to_add, queue_map_dict_existed):
