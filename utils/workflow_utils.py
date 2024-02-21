@@ -8,9 +8,9 @@ import random
 import numpy as np
 
 
-def get_train_info(thread_id, num_train_eval_process, queue_info_list):
+def get_train_info(train_eval_process_pid, queue_info_list):
     num_in_queue = len(queue_info_list)
-    in_queue_idx = (thread_id // num_train_eval_process) % num_in_queue
+    in_queue_idx = train_eval_process_pid % num_in_queue
     return queue_info_list[in_queue_idx]
 
 
