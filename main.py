@@ -95,7 +95,7 @@ if __name__ == '__main__':
         logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
 
         # data_out_queue
-        predict_batch_out_queue_list = [One2ManyQueue(predict_feature_size_list, np.int32(), n_consumers_over_process=num_train_eval_process, n_consumers_in_process=num_game_loop_thread_per_process, max_queue_size=num_train_eval_thread) for _ in range(num_predict_batch_process)]
+        predict_batch_out_queue_list = [One2ManyQueue(([model_param_dict['num_output_class'], ], [1, ], [1, ]), [np.float32(), np.float32(), np.float32()], n_consumers_over_process=num_train_eval_process, n_consumers_in_process=num_game_loop_thread_per_process, max_queue_size=num_train_eval_thread) for _ in range(num_predict_batch_process)]
         logging.info(f'Finished init {num_train_eval_process} predict_batch_out_queues_list.')
     else:
         raise ValueError(f'Only support TensorRT for Queue mode, but get {batch_predict_model_type}')
