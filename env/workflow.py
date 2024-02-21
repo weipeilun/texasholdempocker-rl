@@ -348,6 +348,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
     logging_queue = Queue()
     Thread(target=send_thread, args=(send_in_queue, predict_batch_out_queue, out_queue_map_dict_train, out_queue_map_dict_eval, logging_queue, pid), daemon=True).start()
     Thread(target=queue_monitor_thread, args=(in_queue, send_in_queue, predict_batch_out_queue, logging_queue, pid), daemon=True).start()
+    predict_batch_out_queue.start_receive_signal_thread()
 
     def predict_and_send(predict_send_model, predict_send_batch_list, predict_send_pid_list, predict_send_send_in_queue, predict_send_workflow_status):
         with torch.no_grad():
