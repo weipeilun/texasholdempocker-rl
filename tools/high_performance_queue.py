@@ -316,7 +316,7 @@ class Many2OneQueue(AbstractQueue):
                     in_process_tid, tid = self.signal_queue_over_process.get(block=True, timeout=0.001)
                     in_process_producer = self.producer_list[in_process_tid]
                     assert in_process_producer.signal_to_send == tid, ValueError(f'in_process_producer.signal_to_send={in_process_producer.signal_to_send} but tid={tid}')
-                    self.producer_list[in_process_tid].put(tid)
+                    self.producer_list[in_process_tid].signal_queue.put(tid)
                 except Empty:
                     pass
 
