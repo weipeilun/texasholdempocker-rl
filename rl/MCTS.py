@@ -303,6 +303,7 @@ class MCTS:
 
             try:
                 action_prob, estimate_reward_value, winning_prob = self.predict_out_queue.get(block=True, timeout=0.01)
+                logging.info(f'action_prob={action_prob}, estimate_reward_value={estimate_reward_value}, winning_prob={winning_prob}')
                 break
             except Empty:
                 continue
