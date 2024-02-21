@@ -324,7 +324,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 break
 
             out_queue_data_num_list = [0] * out_queue.n_consumers_over_process
-            for idx, (over_process_idx, _) in enumerate(out_queue.signal_slots.items()):
+            for idx, (over_process_idx, _) in enumerate(out_queue.thread_id_map.items()):
                 out_queue_data_num_list[over_process_idx] += out_queue.signal_slots[idx]
             out_queue_str_list = [f'out_queue{idx} qsize:{out_queue_data_num}' for idx, out_queue_data_num in enumerate(out_queue_data_num_list)]
 
