@@ -310,7 +310,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     # else:
                     #     raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
                     send_out_queue.put((send_pid, (reward_value, winning_prob), action_probs))
-                    logging.info(f'send_pid={send_pid}, action_prob={action_probs}, estimate_reward_value={reward_value}, winning_prob={winning_prob}, {action_probs.dtype}, {reward_value.dtype}, {winning_prob.dtype}')
+                    logging.info(f'send_pid={send_pid}, action_prob={action_probs}, estimate_reward_value={reward_value}, winning_prob={winning_prob}, {action_probs.dtype}, {type(reward_value)}, {type(winning_prob)}')
 
                 logging_queue.put(len(action_probs_list))
             except Empty:
