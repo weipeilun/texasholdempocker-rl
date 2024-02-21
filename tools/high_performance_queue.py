@@ -364,7 +364,7 @@ class Many2OneQueue(AbstractQueue):
         self.producer_list = [self.One2OneQueueOverProcess(element_shape=element_shape, element_dtype=element_dtype, queue_idx_over_process=idx, n_producers_in_process=self.n_producers_in_process, shms=shms, trigger_queue=self.trigger_queue, signal_queue_over_process=signal_queue_over_process, max_queue_size=max_queue_size) for idx, (signal_queue_over_process, shms) in enumerate(zip(self.signal_queue_list, self.shms_list))]
 
     def put(self, data, broadcast_to=None, block=True):
-        raise NotImplementedError('Many2OneQueue.producer_list.put() should be called instead of Many2OneQueue.put()')
+        return self.trigger_queue.qsize()
 
     def get(self, block=True, timeout=None):
         over_process_idx, in_process_idx, signal_to_send, trigger = self.trigger_queue.get(block=block, timeout=timeout)
