@@ -149,6 +149,9 @@ if __name__ == '__main__':
     train_hold_signal_ack_queue = MPQueue()
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
     for pid, ((predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), workflow_queue, workflow_ack_queue, update_model_param_queue, train_update_model_queue, train_hold_signal_queue) in enumerate(zip(predict_batch_in_queue_info_list, workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, train_update_model_queue_list, train_hold_signal_queue_list)):
+        print(f'predict_batch_in_queue={predict_batch_in_queue}')
+        print(f'model_predict_batch_out_map_dict_train={model_predict_batch_out_map_dict_train}')
+        print(f'model_predict_batch_out_map_dict_eval={model_predict_batch_out_map_dict_eval}')
         Process(target=predict_batch_process, args=(predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
