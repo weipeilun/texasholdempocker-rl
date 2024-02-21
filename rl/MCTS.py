@@ -305,7 +305,7 @@ class MCTS:
                 logging.warning(f"MCTS.predict{self.pid} waited predict_out_queue for %.2fs" % (now - begin_time))
 
             try:
-                pid, (action_prob, estimate_reward_value, winning_prob) = self.predict_out_queue.get(block=True, timeout=0.01)
+                pid, _, (action_prob, estimate_reward_value, winning_prob) = self.predict_out_queue.get(block=True, timeout=0.01)
                 assert pid == self.pid, ValueError(f'train_eval_process.map_data_thread data mapping error: self.pid={self.pid} but pid recieved={pid}')
                 break
             except Empty:

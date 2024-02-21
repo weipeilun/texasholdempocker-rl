@@ -252,7 +252,7 @@ def receive_game_result_thread(in_queue, env_info_dict):
 
 
 # batch预测（子进程）
-def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue,train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level):
+def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue,train_hold_signal_ack_queue, predict_batch_out_queue, pid, log_level):
     logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
                         datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
@@ -292,7 +292,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
     else:
         raise ValueError(f'Invalid batch_predict_model_type: {batch_predict_model_type.name}')
 
-    def send_thread(send_in_queue, send_out_queue_list, send_out_queue_map_dict_train, send_out_queue_map_dict_eval, logging_queue, pid):
+    def send_thread(send_in_queue, send_out_queue, send_out_queue_map_dict_train, send_out_queue_map_dict_eval, logging_queue, pid):
         while True:
             if interrupt.interrupt_callback():
                 logging.info(f"predict_batch_thread_{pid}.send_thread detect interrupt")
@@ -302,13 +302,14 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 action_probs_list, reward_value_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
                 for action_probs, reward_value, winning_prob, send_pid in zip(action_probs_list, reward_value_list, winning_prob_list, send_pid_list):
-                    if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
-                        # logging.info(f'send_out_queue_map_dict_train={send_out_queue_map_dict_train}')
-                        send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
-                    elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
-                        send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
-                    else:
-                        raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
+                    # if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
+                    #     # logging.info(f'send_out_queue_map_dict_train={send_out_queue_map_dict_train}')
+                    #     send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
+                    # elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
+                    #     send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
+                    # else:
+                    #     raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
+                    send_out_queue.put((send_pid, None, (action_probs, reward_value, winning_prob)))
 
                 logging_queue.put(len(action_probs_list))
             except Empty:
@@ -344,8 +345,8 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
     send_in_queue = Queue()
     # 用于输出性能指标
     logging_queue = Queue()
-    Thread(target=send_thread, args=(send_in_queue, predict_batch_out_queue_list, out_queue_map_dict_train, out_queue_map_dict_eval, logging_queue, pid), daemon=True).start()
-    Thread(target=queue_monitor_thread, args=(in_queue, send_in_queue, predict_batch_out_queue_list, logging_queue, pid), daemon=True).start()
+    Thread(target=send_thread, args=(send_in_queue, predict_batch_out_queue, out_queue_map_dict_train, out_queue_map_dict_eval, logging_queue, pid), daemon=True).start()
+    Thread(target=queue_monitor_thread, args=(in_queue, send_in_queue, predict_batch_out_queue, logging_queue, pid), daemon=True).start()
 
     def predict_and_send(predict_send_model, predict_send_batch_list, predict_send_pid_list, predict_send_send_in_queue, predict_send_workflow_status):
         with torch.no_grad():
@@ -677,7 +678,7 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
 
 # 游戏对弈（train_eval_process进程）
-def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_ack_signal_queue, mcts_log_to_file, mcts_choice_method, pid, thread_name, model_predict_out_queue, workflow_signal_queue, model_predict_in_queue):
+def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_ack_signal_queue, mcts_log_to_file, mcts_choice_method, pid, thread_name, workflow_signal_queue, model_predict_in_queue, model_predict_out_queue):
     # 训练线程，使用RandomEnv，来生成更离散的数据，避免模型过拟合导致训练数据过于集中
     env = RandomEnv(winning_probability_generating_task_queue, num_bins, num_players=MAX_PLAYER_NUMBER, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue, model_predict_in_queue)
@@ -739,9 +740,10 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
 
 
 # 游戏对弈（train_eval_process进程）
-def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_reward_queue, eval_workflow_ack_signal_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, pid, thread_name, model_predict_out_queue, eval_workflow_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new):
+def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_reward_queue, eval_workflow_ack_signal_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, pid, thread_name, eval_workflow_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new, model_predict_out_queue_best, model_predict_out_queue_new):
     env = Env(None, num_bins, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue_best, model_predict_in_queue_new)
+    player_name_predict_out_queue_dict = get_player_name_model_dict(model_predict_out_queue_best, model_predict_out_queue_new)
 
     game_id = None
     seed = None
@@ -782,7 +784,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
                 t0 = time.time()
                 # 在eval时不使用dirichlet_noice以增加随机性，设置tau为0即在play步骤中丢弃随机性使用argmax
-                mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=model_predict_out_queue, small_blind=small_blind, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, model_Q_epsilon=mcts_model_Q_epsilon, choice_method=mcts_choice_method, log_to_file=False, pid=pid, thread_name=thread_name)
+                mcts = MCTS(n_actions, is_root=True, predict_in_queue=player_name_predict_in_queue_dict[env.acting_player_name], predict_out_queue=player_name_predict_out_queue_dict[env.acting_player_name], small_blind=small_blind, apply_dirichlet_noice=False, workflow_lock=None, workflow_signal_queue=None, workflow_ack_signal_queue=None, n_simulation=num_mcts_simulation_per_step, c_puct=mcts_c_puct, tau=0, model_Q_epsilon=mcts_model_Q_epsilon, choice_method=mcts_choice_method, log_to_file=False, pid=pid, thread_name=thread_name)
                 action_probs = mcts.simulate(observation=observation, env=env)
                 # 用于接收中断信号
                 if action_probs is None:
@@ -808,7 +810,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
 
 
 # train_eval_process进程，用于把cpu敏感任务分发到多个进程，避免单个进程打满
-def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_init_eval_thread, data_in_queue_list, data_in_queue_idx, data_in_best_queue_idx, data_in_new_queue_idx, data_out_queue, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level):
+def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_init_eval_thread, data_in_queue_list, data_out_queue_list, data_queue_idx, data_best_queue_idx, data_new_queue_idx, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level):
     logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
                         datefmt='%Y-%m-%d,%H:%M:%S')
     logger = logging.getLogger()
@@ -819,14 +821,14 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
     assert len(train_eval_thread_param_list) == len(tid_process_tid_map), f'Length of train_eval_thread_param_list:{len(train_eval_thread_param_list)} must equals to length of tid_process_tid_map:{len(tid_process_tid_map)}'
 
     # data_out_queue, workflow_signal_queue, eval_workflow_signal_queue
-    data_map_queue_list = [Queue() for _ in tid_process_tid_map]
     workflow_signal_map_queue_list = [Queue() for _ in tid_process_tid_map]
     eval_workflow_signal_map_queue_list = [Queue() for _ in tid_process_tid_map]
 
-    for tid, (train_eval_thread_param, data_map_queue, workflow_signal_map_queue, eval_workflow_signal_map_queue) in enumerate(zip(train_eval_thread_param_list, data_map_queue_list, workflow_signal_map_queue_list, eval_workflow_signal_map_queue_list)):
-        predict_batch_in_queue = data_in_queue_list[data_in_queue_idx][pid]
-        predict_batch_in_best_queue = data_in_queue_list[data_in_best_queue_idx][pid]
-        predict_batch_in_new_queue = data_in_queue_list[data_in_new_queue_idx][pid]
+    for tid, (train_eval_thread_param, workflow_signal_map_queue, eval_workflow_signal_map_queue) in enumerate(zip(train_eval_thread_param_list, workflow_signal_map_queue_list, eval_workflow_signal_map_queue_list)):
+        # data_in_queue
+        predict_batch_in_queue = data_in_queue_list[data_queue_idx][pid]
+        predict_batch_in_best_queue = data_in_queue_list[data_best_queue_idx][pid]
+        predict_batch_in_new_queue = data_in_queue_list[data_new_queue_idx][pid]
 
         predict_batch_in_queue.start_map_data_thread()
         predict_batch_in_best_queue.start_map_data_thread()
@@ -836,10 +838,23 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
         predict_batch_in_producer_best_queue = predict_batch_in_best_queue.producer_list[tid]
         predict_batch_in_producer_new_queue = predict_batch_in_new_queue.producer_list[tid]
 
+        # data_out_queue
+        predict_batch_out_queue = data_out_queue_list[data_queue_idx][pid]
+        predict_batch_out_best_queue = data_out_queue_list[data_best_queue_idx][pid]
+        predict_batch_out_new_queue = data_out_queue_list[data_new_queue_idx][pid]
+
+        predict_batch_out_queue.start_map_data_thread()
+        predict_batch_out_best_queue.start_map_data_thread()
+        predict_batch_out_new_queue.start_map_data_thread()
+
+        predict_batch_out_producer_queue = predict_batch_out_queue.consumer_list[tid]
+        predict_batch_out_producer_best_queue = predict_batch_out_best_queue.consumer_list[tid]
+        predict_batch_out_producer_new_queue = predict_batch_out_new_queue.consumer_list[tid]
+
         if is_init_train_thread:
-            Thread(target=train_game_loop_thread, args=(*train_eval_thread_param[0], data_map_queue, workflow_signal_map_queue, predict_batch_in_producer_queue), daemon=True).start()
+            Thread(target=train_game_loop_thread, args=(*train_eval_thread_param[0], workflow_signal_map_queue, predict_batch_in_producer_queue, predict_batch_out_producer_queue), daemon=True).start()
         if is_init_eval_thread:
-            Thread(target=eval_game_loop_thread, args=(*train_eval_thread_param[1], data_map_queue, eval_workflow_signal_map_queue, predict_batch_in_producer_best_queue, predict_batch_in_producer_new_queue), daemon=True).start()
+            Thread(target=eval_game_loop_thread, args=(*train_eval_thread_param[1], eval_workflow_signal_map_queue, predict_batch_in_producer_best_queue, predict_batch_in_producer_new_queue, predict_batch_out_producer_best_queue, predict_batch_out_producer_new_queue), daemon=True).start()
 
     def map_data_thread(data_queue, data_map_dict, tid_process_tid_map, timeout):
         while True:
@@ -853,7 +868,6 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
             except Empty:
                 pass
 
-    Thread(target=map_data_thread, args=(data_out_queue, data_map_queue_list, tid_process_tid_map, 0.01), daemon=True).start()
     Thread(target=map_data_thread, args=(workflow_game_loop_signal_queue, workflow_signal_map_queue_list, tid_process_tid_map, 0.1), daemon=True).start()
     Thread(target=map_data_thread, args=(eval_workflow_signal_queue, eval_workflow_signal_map_queue_list, tid_process_tid_map, 0.1), daemon=True).start()
 

@@ -1,7 +1,7 @@
 import logging
 from env.workflow import *
 from tools.param_parser import *
-from tools.high_performance_queue import Many2OneQueue
+from tools.high_performance_queue import Many2OneQueue, One2ManyQueue
 from tools import counter
 from queue import Queue
 from torch.multiprocessing import Manager, Process, Condition, Queue as MPQueue
@@ -92,12 +92,13 @@ if __name__ == '__main__':
     # spawn进程模式下不支持SharedMemory内存共享，会导致对拷失败
     if batch_predict_model_type == ModelType.TENSORRT:
         predict_batch_in_queue_info_list = [(Many2OneQueue(predict_feature_size_list, np.int32(), n_producers_over_process=num_train_eval_process, n_producers_in_process=num_game_loop_thread_per_process, max_queue_size=num_train_eval_thread), dict(), dict()) for _ in range(num_predict_batch_process)]
+        logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
+
+        # data_out_queue
+        predict_batch_out_queue_list = [One2ManyQueue(predict_feature_size_list, np.int32(), n_consumers_over_process=num_train_eval_process, n_consumers_in_process=num_game_loop_thread_per_process, max_queue_size=num_train_eval_thread) for _ in range(num_predict_batch_process)]
+        logging.info(f'Finished init {num_train_eval_process} predict_batch_out_queues_list.')
     else:
         raise ValueError(f'Only support TensorRT for Queue mode, but get {batch_predict_model_type}')
-    logging.info(f'Finished init {num_predict_batch_process} predict_batch_in_queue_info_list.')
-    # data_out_queue
-    predict_batch_out_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
-    logging.info(f'Finished init {num_train_eval_process} predict_batch_out_queues_list.')
     # tid_process_tid_map(tid: in_train_eval_process_tid)
     predict_batch_out_info_list = [dict() for _ in range(num_train_eval_process)]
     # tid_train_eval_pid_map(tid: train_eval_process_id)
@@ -133,13 +134,14 @@ if __name__ == '__main__':
 
     is_init_train_thread = True
     is_init_eval_thread = True
-    for pid, (data_out_queue, tid_process_tid_map, workflow_game_loop_signal_queue, eval_workflow_signal_queue) in enumerate(zip(predict_batch_out_queue_list, predict_batch_out_info_list, workflow_game_loop_signal_queue_list, eval_workflow_signal_queue_list)):
-        data_in_queue_idx = get_train_info_for_process(pid, predict_batch_in_queue_info_list)
-        data_in_best_queue_idx, data_in_new_queue_idx = get_eval_info_for_process(pid, predict_batch_in_queue_info_list)
+    for pid, (tid_process_tid_map, workflow_game_loop_signal_queue, eval_workflow_signal_queue) in enumerate(zip(predict_batch_out_info_list, workflow_game_loop_signal_queue_list, eval_workflow_signal_queue_list)):
+        data_queue_idx = get_train_info_for_process(pid, predict_batch_in_queue_info_list)
+        data_best_queue_idx, data_new_queue_idx = get_eval_info_for_process(pid, predict_batch_in_queue_info_list)
 
         data_in_queue_list = [predict_batch_in_queue_info[0].producer_list for predict_batch_in_queue_info in predict_batch_in_queue_info_list]
+        data_out_queue_list = [predict_batch_out_queue.consumer_list for predict_batch_out_queue in predict_batch_out_queue_list]
 
-        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, data_in_queue_list, data_in_queue_idx, data_in_best_queue_idx, data_in_new_queue_idx, data_out_queue, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level), daemon=True).start()
+        Process(target=train_eval_process, args=(train_eval_thread_param_list[pid * num_game_loop_thread_per_process: (pid + 1) * num_game_loop_thread_per_process], is_init_train_thread, is_init_eval_thread, data_in_queue_list, data_out_queue_list, data_queue_idx, data_best_queue_idx, data_new_queue_idx, workflow_game_loop_signal_queue, eval_workflow_signal_queue, tid_process_tid_map, pid, log_level), daemon=True).start()
     logging.info('All train_eval_process inited.')
 
     # 训练中更新模型参数
@@ -148,8 +150,8 @@ if __name__ == '__main__':
     train_hold_signal_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
     train_hold_signal_ack_queue = MPQueue()
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
-    for pid, ((predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), workflow_queue, workflow_ack_queue, update_model_param_queue, train_update_model_queue, train_hold_signal_queue) in enumerate(zip(predict_batch_in_queue_info_list, workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, train_update_model_queue_list, train_hold_signal_queue_list)):
-        Process(target=predict_batch_process, args=(predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue_list, pid, log_level), daemon=True).start()
+    for pid, ((predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), predict_batch_out_queue, workflow_queue, workflow_ack_queue, update_model_param_queue, train_update_model_queue, train_hold_signal_queue) in enumerate(zip(predict_batch_in_queue_info_list, predict_batch_out_queue_list, workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, train_update_model_queue_list, train_hold_signal_queue_list)):
+        Process(target=predict_batch_process, args=(predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue, pid, log_level), daemon=True).start()
     logging.info('All predict_batch_process inited.')
 
     # load model and synchronize to all predict_batch_process
