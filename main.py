@@ -111,7 +111,7 @@ if __name__ == '__main__':
             train_eval_process_pid = thread_id // num_game_loop_thread_per_process
             tid_train_eval_pid_dict[thread_id] = train_eval_process_pid
 
-            predict_batch_in_queue_info = get_train_info(thread_id, num_predict_batch_process, predict_batch_in_queue_info_list)
+            predict_batch_in_queue_info = get_train_info(thread_id, num_train_eval_process, predict_batch_in_queue_info_list)
             predict_batch_in_queue_info[1][thread_id] = train_eval_process_pid
 
             predict_batch_in_best_queue_info, predict_batch_in_new_queue_info = get_eval_info(thread_id, predict_batch_in_queue_info_list)
