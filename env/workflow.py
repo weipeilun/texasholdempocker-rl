@@ -316,17 +316,17 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             except Empty:
                 continue
 
-    def queue_monitor_thread(in_queue, send_in_queue, out_queue_list, logging_queue, pid):
+    def queue_monitor_thread(in_queue, send_in_queue, out_queue, logging_queue, pid):
         last_log_time = time.time()
         while True:
             if interrupt.interrupt_callback():
                 logging.info("performance_monitor_thread detect interrupt")
                 break
 
-            out_queue_str_list = list()
-            for idx, out_queue in enumerate(out_queue_list):
-                out_queue_str = f'out_queue{idx} qsize:{out_queue.qsize()}'
-                out_queue_str_list.append(out_queue_str)
+            out_queue_data_num_list = [0] * out_queue.n_consumers_over_process
+            for idx, (over_process_idx, _) in enumerate(out_queue.signal_slots.items()):
+                out_queue_data_num_list[over_process_idx] += out_queue.signal_slots[idx]
+            out_queue_str_list = [f'out_queue{idx} qsize:{out_queue_data_num}' for idx, out_queue_data_num in enumerate(out_queue_data_num_list)]
 
             num_data_predicted = 0
             while True:

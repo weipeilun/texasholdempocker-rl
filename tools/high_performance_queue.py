@@ -300,7 +300,7 @@ class One2ManyQueue(AbstractQueue):
 
     def put(self, data):
         assert isinstance(data, (list, tuple)) and len(data) == 3, 'Data should contain and only contain target_queue_idx, trigger and array'
-        assert isinstance(data[2], np.ndarray), 'Only ndarray data is supported.'
+        assert isinstance(data[2], np.ndarray) or (isinstance(data[2], (list, tuple)) and len(data[2]) == len(self.shms_np_list[0]) and all([isinstance(item, np.ndarray) for item in data[2]])), 'Only ndarray data is supported.'
         tid, trigger, arrs = data
 
         if not isinstance(arrs, (list, tuple)):
