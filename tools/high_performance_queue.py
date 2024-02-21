@@ -277,7 +277,7 @@ class One2ManyQueue(AbstractQueue):
         self.consumer_list = [self.One2OneQueueOverProcess(element_shape=element_shape, element_dtype=element_dtype, queue_idx_over_process=idx, n_consumers_in_process=self.n_consumers_in_process, shms=shms, signal_queue=self.signal_queue, tigger_queue_over_process=trigger_queue, max_queue_size=max_queue_size, ignore_array=self.ignore_array) for idx, (trigger_queue, shms) in enumerate(zip(self.trigger_queue_list, self.shms_list))]
 
         self.signal_slots = np.ones([n_consumers_over_process * n_consumers_in_process, ], dtype=np.bool_)
-        self.thread_id_map = {i: (i // n_consumers_in_process, i % n_consumers_in_process)for i in range(n_consumers_over_process * n_consumers_in_process)}
+        self.thread_id_map = {i: (i // n_consumers_in_process, i % n_consumers_in_process) for i in range(n_consumers_over_process * n_consumers_in_process)}
 
         self.thread_started = False
 

@@ -309,7 +309,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     #     send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
                     # else:
                     #     raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
-                    send_out_queue.put((send_pid, None, (action_probs, reward_value, winning_prob)))
+                    send_out_queue.put((send_pid, (reward_value, winning_prob), action_probs))
                     logging.info(f'send_pid={send_pid}, action_prob={action_probs}, estimate_reward_value={reward_value}, winning_prob={winning_prob}, {action_probs.dtype}, {reward_value.dtype}, {winning_prob.dtype}')
 
                 logging_queue.put(len(action_probs_list))
@@ -324,7 +324,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 break
 
             out_queue_data_num_list = [0] * out_queue.n_consumers_over_process
-            for idx, (over_process_idx, _) in enumerate(out_queue.thread_id_map.items()):
+            for idx, (over_process_idx, _) in out_queue.thread_id_map.items():
                 out_queue_data_num_list[over_process_idx] += out_queue.signal_slots[idx]
             out_queue_str_list = [f'out_queue{idx} qsize:{out_queue_data_num}' for idx, out_queue_data_num in enumerate(out_queue_data_num_list)]
 
