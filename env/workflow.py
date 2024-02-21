@@ -822,9 +822,9 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
     eval_workflow_signal_map_queue_list = [Queue() for _ in tid_process_tid_map]
 
     for tid, (train_eval_thread_param, data_map_queue, workflow_signal_map_queue, eval_workflow_signal_map_queue) in enumerate(zip(train_eval_thread_param_list, data_map_queue_list, workflow_signal_map_queue_list, eval_workflow_signal_map_queue_list)):
-        predict_batch_in_queue = data_in_queue_list[data_in_queue_idx]
-        predict_batch_in_best_queue = data_in_queue_list[data_in_best_queue_idx]
-        predict_batch_in_new_queue = data_in_queue_list[data_in_new_queue_idx]
+        predict_batch_in_queue = data_in_queue_list[data_in_queue_idx][pid]
+        predict_batch_in_best_queue = data_in_queue_list[data_in_best_queue_idx][pid]
+        predict_batch_in_new_queue = data_in_queue_list[data_in_new_queue_idx][pid]
 
         predict_batch_in_queue.start_map_data_thread()
         predict_batch_in_best_queue.start_map_data_thread()
