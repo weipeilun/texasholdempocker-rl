@@ -303,7 +303,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
 
                 for action_probs, reward_value, winning_prob, send_pid in zip(action_probs_list, reward_value_list, winning_prob_list, send_pid_list):
                     if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
-                        logging.info(f'send_out_queue_map_dict_train={send_out_queue_map_dict_train}')
+                        # logging.info(f'send_out_queue_map_dict_train={send_out_queue_map_dict_train}')
                         send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
                     elif send_workflow_status == WorkflowStatus.EVALUATING or send_workflow_status == WorkflowStatus.EVAL_FINISH_WAIT:
                         send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
@@ -450,7 +450,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 while True:
                     # 一直取数，不要sleep，以提高显卡利用率
                     data_pid, data = in_queue.get(block=True, timeout=0.001)
-                    logging.info(f'data_pid={data_pid}, data={data}')
+                    # logging.info(f'data_pid={data_pid}, data={data}')
                     batch_list.append(data)
                     pid_list.append(data_pid)
                     # 达到min_infer_batch_size，做预测
