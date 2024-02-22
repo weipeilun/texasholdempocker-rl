@@ -109,6 +109,7 @@ if __name__ == '__main__':
         for tid in range(num_game_loop_thread):
             thread_id = pid * num_game_loop_thread + tid
             thread_name = f'{pid}_{tid}'
+            logging.info(f'thread_id={thread_id}, thread_name={thread_name}')
             train_eval_process_pid = thread_id // num_game_loop_thread_per_process
             tid_train_eval_pid_dict[thread_id] = train_eval_process_pid
 
