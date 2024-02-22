@@ -114,7 +114,7 @@ class EnvEmbedding(nn.Module):
             # self.card_embedding_idx = nn.Parameter(torch.cat([card_embedding_idx_1, card_embedding_idx_2, card_embedding_idx_3], dim=0).unsqueeze(0), requires_grad=False)
 
             self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len, embedding_dim=self.positional_embedding_dim)
-            self.position_embedding_idx = nn.Parameter(torch.arange(num_starters + self.embedding_sequence_len, dtype=torch.int64).unsqueeze(0), requires_grad=False)
+            self.position_embedding_idx = nn.Parameter(torch.arange(num_starters + self.embedding_sequence_len, dtype=torch.int32).unsqueeze(0), requires_grad=False)
 
     def forward(self, x):
         batch_size = x.shape[0]
