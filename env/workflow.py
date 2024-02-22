@@ -1038,4 +1038,10 @@ def performance_monitor_thread(winning_probability_generating_task_queue):
             break
 
         logging.info(f'winning_rate estimation qsize:{winning_probability_generating_task_queue.qsize()}')
+
+        num_objects = objgraph.typestats()
+        num_leaking_objects = objgraph.typestats(objgraph.get_leaking_objects())
+        logging.info(f'main process objects:{num_objects}')
+        logging.info(f'main process leaking objects:{num_leaking_objects}')
+
         time.sleep(120)
