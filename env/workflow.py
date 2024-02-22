@@ -1,4 +1,4 @@
-import logging
+import signal
 import time
 import traceback
 from threading import Thread
@@ -877,7 +877,8 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
         if interrupt.interrupt_callback():
             logging.info(f"train_eval_process_{pid} detect interrupt")
             break
-        time.sleep(1.)
+        signal.pause()
+    logging.info(f"train_eval_process {pid} pid {os.getpid()} exit")
 
 
 # 游戏流程控制（主进程），防止生产者生产过多任务，导致任务队列过长
