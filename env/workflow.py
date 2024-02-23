@@ -681,7 +681,7 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
 
 # 游戏对弈（train_eval_process进程）
-def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data_queue, game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_ack_signal_queue, mcts_log_to_file, mcts_choice_method, pid, thread_name, workflow_signal_queue, model_predict_in_queue, model_predict_out_queue):
+def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_ack_signal_queue, mcts_log_to_file, mcts_choice_method, pid, thread_name, workflow_signal_queue, model_predict_in_queue, model_predict_out_queue):
     # 训练线程，使用RandomEnv，来生成更离散的数据，避免模型过拟合导致训练数据过于集中
     env = RandomEnv(winning_probability_generating_task_queue, num_bins, num_players=MAX_PLAYER_NUMBER, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue, model_predict_in_queue)
@@ -709,6 +709,7 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
         logging.info(f"train_game_loop_thread {thread_name} game {game_id} env reset.")
 
         game_step_id = 0
+        game_action_info_buffer = list()
         while True:
             if interrupt.interrupt_callback():
                 logging.info(f"train_game_loop_thread {thread_name} detect interrupt")
@@ -731,12 +732,12 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_train_data
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %d), cost:%.2fs, ' % (action[1], t1 - t0))
 
             observation_, reward, terminated, info = env.step(action)
-            game_train_data_queue.put((game_id, ([observation, action_probs, action_mask_idx], info)))
+            game_action_info_buffer.append(([observation, action_probs, action_mask_idx], info))
 
             if not terminated:
                 observation = observation_
             else:
-                game_finished_signal_queue.put((game_id, reward, thread_name))
+                game_finished_signal_queue.put((game_id, reward, thread_name, game_action_info_buffer))
                 break
             game_step_id += 1
     env.close()
@@ -932,74 +933,32 @@ def eval_task_begin(seed, game_id_signal_queue, eval_task_num_games=1000):
 
 
 # train流程结尾，模拟数据存入buffer（主进程）
-def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, model, step_counter):
-    finished_game_id_dict = dict()
-    game_train_data_list_dict = dict()
-
+def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, finished_game_info_dict, model, step_counter):
     while True:
         if interrupt.interrupt_callback():
             logging.info("train_gather_result_thread detect interrupt")
             break
 
-        game_finished_signal_list = list()
         while True:
             try:
                 if interrupt.interrupt_callback():
                     logging.info("train_gather_result_thread detect interrupt")
                     break
 
-                game_finished_signal_info = game_finished_signal_queue.get(block=False)
-                game_finished_signal_list.append(game_finished_signal_info)
+                signal_finished_game_id, signal_finished_reward_dict, signal_thread_name, signal_game_action_info_list = game_finished_signal_queue.get(block=False)
+                finished_game_info_dict[signal_finished_game_id] = (signal_finished_reward_dict, signal_thread_name, len(signal_game_action_info_list), signal_game_action_info_list)
             except Empty:
                 break
-
-        while True:
-            try:
-                if interrupt.interrupt_callback():
-                    logging.info("train_gather_result_thread detect interrupt")
-                    break
-
-                game_id, finished_game_info = game_train_data_queue.get(block=False)
-                if game_id in game_train_data_list_dict:
-                    game_train_data_list = game_train_data_list_dict[game_id]
-                else:
-                    game_train_data_list = list()
-                    game_train_data_list_dict[game_id] = game_train_data_list
-                game_train_data_list.append(finished_game_info)
-            except Empty:
-                break
-
-        # 此处会有多进程下的数据幻觉问题，会导致取数异常。把从game_finished_signal_queue取数放到前边
-        for signal_finished_game_id, signal_finished_reward_dict, thread_name in game_finished_signal_list:
-            while signal_finished_game_id not in game_train_data_list_dict:
-                logging.warning(f'signal_finished_game_id {signal_finished_game_id} not in game_train_data_list_dict')
-                time.sleep(1.)
-                while True:
-                    try:
-                        if interrupt.interrupt_callback():
-                            logging.info("train_gather_result_thread detect interrupt")
-                            break
-
-                        game_id, finished_game_info = game_train_data_queue.get(block=False)
-                        if game_id in game_train_data_list_dict:
-                            game_train_data_list = game_train_data_list_dict[game_id]
-                        else:
-                            game_train_data_list = list()
-                            game_train_data_list_dict[game_id] = game_train_data_list
-                        game_train_data_list.append(finished_game_info)
-                    except Empty:
-                        break
-            finished_game_id_dict[signal_finished_game_id] = (len(game_train_data_list_dict[signal_finished_game_id]), thread_name, signal_finished_reward_dict)
 
         finalized_game_id_set = set()
-        for finished_game_id, (num_total_games, thread_name, finished_reward_dict) in finished_game_id_dict.items():
-            if finished_game_id in game_train_data_list_dict and finished_game_id in env_info_dict:
-                game_train_data_list = game_train_data_list_dict[finished_game_id]
+        not_finalized_game_info_dict = dict()
+        for finished_game_id, (finished_reward_dict, thread_name, num_actions, game_action_info_list) in finished_game_info_dict.items():
+            if finished_game_id in env_info_dict:
                 game_info_dict = env_info_dict[finished_game_id]
 
-                game_train_data_not_finished_list = list()
-                for game_train_data in game_train_data_list:
-                    train_data_list, step_info = game_train_data
+                game_action_info_not_finalized_list = list()
+                for game_action_info in game_action_info_list:
+                    train_data_list, step_info = game_action_info
 
                     round_num = step_info[KEY_ROUND_NUM]
                     player_name = step_info[KEY_ACTED_PLAYER_NAME]
@@ -1010,28 +969,29 @@ def train_gather_result_thread(game_train_data_queue, game_finished_signal_queue
                         model.store_transition(*train_data_list, reward_value, winning_prob)
                         step_counter.increment()
                     else:
-                        game_train_data_not_finished_list.append(game_train_data)
+                        game_action_info_not_finalized_list.append(game_action_info)
 
-                if len(game_train_data_not_finished_list) == 0:
+                if len(game_action_info_not_finalized_list) == 0:
                     finalized_game_id_set.add(finished_game_id)
-                    logging.info(f'Game {finished_game_id} finished by train_game_loop_thread {thread_name}, generated {num_total_games} data.')
+                    logging.info(f'Game {finished_game_id} finished by train_game_loop_thread {thread_name}, generated {num_actions} data.')
                 else:
-                    game_train_data_list_dict[finished_game_id] = game_train_data_not_finished_list
+                    not_finalized_game_info_dict[finished_game_id] = (finished_reward_dict, thread_name, num_actions, game_action_info_not_finalized_list)
 
         # 清掉这局的数据cache
         for finalized_game_id in finalized_game_id_set:
             # 清掉这局的数据cache
-            del game_train_data_list_dict[finalized_game_id]
             del env_info_dict[finalized_game_id]
-            del finished_game_id_dict[finalized_game_id]
             game_finalized_signal_queue.put(finalized_game_id)
+
+        finished_game_info_dict.clear()
+        finished_game_info_dict.update(not_finalized_game_info_dict)
 
         time.sleep(1.)
 
 
 # 监控cpu瓶颈队列长度（主进程）
 # 此监控可以用来平衡CPU/GPU使用效率
-def performance_monitor_thread(winning_probability_generating_task_queue):
+def performance_monitor_thread(winning_probability_generating_task_queue, env_info_dict, finished_game_info_dict):
     while True:
         if interrupt.interrupt_callback():
             logging.info("performance_monitor_thread detect interrupt")
@@ -1043,5 +1003,12 @@ def performance_monitor_thread(winning_probability_generating_task_queue):
         num_leaking_objects = objgraph.typestats(objgraph.get_leaking_objects())
         logging.info(f'main process objects:{num_objects}')
         logging.info(f'main process leaking objects:{num_leaking_objects}')
+
+        env_info_dict_tmp = env_info_dict.copy()
+        finished_game_info_dict_tmp = finished_game_info_dict.copy()
+
+        win_rate_calculation_not_finished_list = list(env_info_dict_tmp.keys())
+        game_not_finalized_list = list(finished_game_info_dict_tmp.keys())
+        logging.info(f'not finished games: win_rate calculation:{",".join(win_rate_calculation_not_finished_list)}; game finalization:{",".join(game_not_finalized_list)}')
 
         time.sleep(120)

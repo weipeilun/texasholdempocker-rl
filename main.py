@@ -78,7 +78,6 @@ if __name__ == '__main__':
     workflow_game_loop_ack_signal_queue = MPQueue()
     logging.info(f'Finished init {num_train_eval_process} workflow_game_loop_signal_queue_list.')
     # train thread参数
-    game_train_data_queue = MPQueue()
     train_game_finished_signal_queue = MPQueue()
     train_game_id_signal_queue = MPQueue()
     # eval thread参数
@@ -127,7 +126,7 @@ if __name__ == '__main__':
 
             # eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, predict_batch_in_best_queue_info[0].producer_list[thread_id], predict_batch_in_new_queue_info[0].producer_list[thread_id], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
 
-            train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], game_train_data_queue, train_game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
+            train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], train_game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
 
             eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
 
@@ -167,7 +166,8 @@ if __name__ == '__main__':
 
     # gather train result and save to buffer
     step_counter = counter.Counter()
-    Thread(target=train_gather_result_thread, args=(game_train_data_queue, train_game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, model, step_counter), daemon=True).start()
+    finished_game_info_dict = dict()
+    Thread(target=train_gather_result_thread, args=(train_game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, finished_game_info_dict, model, step_counter), daemon=True).start()
 
     # init training thread to separate cpu/gpu time
     is_save_model = True
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     Thread(target=training_thread, args=(model, model_last_checkpoint_path, step_counter, is_save_model, eval_model_queue, first_train_data_step, train_per_step, update_model_per_train_step, eval_model_per_step, log_step_num, historical_data_filename, game_id_counter, seed_counter, env_info_dict, train_game_id_signal_queue, num_train_eval_thread, train_update_model_signal_queue, train_hold_signal_queue_list, train_hold_signal_ack_queue), daemon=True).start()
 
     # to monitor performance
-    Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue,), daemon=True).start()
+    Thread(target=performance_monitor_thread, args=(winning_probability_generating_task_queue, env_info_dict, finished_game_info_dict), daemon=True).start()
 
     workflow_status = WorkflowStatus.DEFAULT
     best_model_trt_filename = model_init_checkpoint_path.replace('.pth', '.trt')

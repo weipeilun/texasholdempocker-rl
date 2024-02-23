@@ -104,13 +104,15 @@ class GameEnv(object):
         new_env.all_round_player_action_value_dict = copy.deepcopy(self.all_round_player_action_value_dict)
 
         new_env.info_sets = copy.deepcopy(self.info_sets)
-        new_env.game_infoset = copy.deepcopy(self.game_infoset)
+        # new_env在step()前用不上game_infoset，可以置空
+        # new_env.game_infoset = copy.deepcopy(self.game_infoset)
+        new_env.game_infoset = None
 
         new_env.pot_value = self.pot_value
 
         new_env.ignore_all_async_tasks = True
 
-        # 重新随机初始化所有玩家和未知的牌堆
+        # 重新随机初始化未知的牌堆，不要重新初始化玩家手牌
         all_known_cards_set = set()
 
         for player_info_set in new_env.info_sets.values():
