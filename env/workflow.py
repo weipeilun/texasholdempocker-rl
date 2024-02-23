@@ -242,15 +242,16 @@ def receive_game_result_thread(in_queue, env_info_dict, game_finalized_signal_qu
             # GamePlayerResult的取值范围是是[-1, 1]，归一到[0, 1]
             winning_probability = player_result_value * 0.5 + 0.5
 
-            if game_id in env_info_dict and game_id not in finalized_game_id_set:
-                game_info_dict = env_info_dict[game_id]
-                if player_name in game_info_dict:
-                    player_round_info_dict = game_info_dict[player_name]
-                else:
-                    player_round_info_dict = dict()
-                    game_info_dict[player_name] = player_round_info_dict
+            if game_id in env_info_dict:
+                if game_id not in finalized_game_id_set:
+                    game_info_dict = env_info_dict[game_id]
+                    if player_name in game_info_dict:
+                        player_round_info_dict = game_info_dict[player_name]
+                    else:
+                        player_round_info_dict = dict()
+                        game_info_dict[player_name] = player_round_info_dict
 
-                player_round_info_dict[current_round] = winning_probability
+                    player_round_info_dict[current_round] = winning_probability
             else:
                 logging.error(f'game_id {game_id} not found in env_info_dict')
         except Empty:
