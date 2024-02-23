@@ -1007,8 +1007,8 @@ def performance_monitor_thread(winning_probability_generating_task_queue, env_in
         env_info_dict_tmp = env_info_dict.copy()
         finished_game_info_dict_tmp = finished_game_info_dict.copy()
 
-        win_rate_calculation_not_finished_list = list(env_info_dict_tmp.keys())
-        game_not_finalized_list = list(finished_game_info_dict_tmp.keys())
+        win_rate_calculation_not_finished_list = [str(key) for key in env_info_dict_tmp.keys()]
+        game_not_finalized_list = [str(key) for key in finished_game_info_dict_tmp.keys()]
         logging.info(f'not finished games: win_rate calculation:{",".join(win_rate_calculation_not_finished_list)}; game finalization:{",".join(game_not_finalized_list)}')
 
         time.sleep(120)
