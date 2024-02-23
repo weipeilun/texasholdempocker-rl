@@ -53,7 +53,8 @@ if __name__ == '__main__':
     logging.info(f'Finished init {num_gen_winning_prob_cal_data_processes} simulate_processes.')
 
     # reward receiving thread
-    Thread(target=receive_game_result_thread, args=(game_result_out_queue, env_info_dict), daemon=True).start()
+    game_finalized_signal_queue1 = MPQueue()
+    Thread(target=receive_game_result_thread, args=(game_result_out_queue, env_info_dict, game_finalized_signal_queue1), daemon=True).start()
 
     # game simulation threads (train and evaluate)
     # 必须保证线程数 > batch_size * 2，以在train中gpu基本打满，在eval中不死锁
@@ -159,15 +160,15 @@ if __name__ == '__main__':
     load_model_and_synchronize(model, model_init_checkpoint_path, update_model_param_queue_list, workflow_ack_queue_list, batch_predict_model_type)
 
     # control game simulation thread, to prevent excess task produced by producer
-    game_finalized_signal_queue = Queue()
+    game_finalized_signal_queue2 = Queue()
     game_id_counter = counter.Counter()
     seed_counter = counter.Counter()
-    Thread(target=train_game_control_thread, args=(train_game_id_signal_queue, game_finalized_signal_queue, env_info_dict, game_id_counter, seed_counter), daemon=True).start()
+    Thread(target=train_game_control_thread, args=(train_game_id_signal_queue, game_finalized_signal_queue2, env_info_dict, game_id_counter, seed_counter), daemon=True).start()
 
     # gather train result and save to buffer
     step_counter = counter.Counter()
     finished_game_info_dict = dict()
-    Thread(target=train_gather_result_thread, args=(train_game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, finished_game_info_dict, model, step_counter), daemon=True).start()
+    Thread(target=train_gather_result_thread, args=(train_game_finished_signal_queue, game_finalized_signal_queue1, game_finalized_signal_queue2, env_info_dict, finished_game_info_dict, model, step_counter), daemon=True).start()
 
     # init training thread to separate cpu/gpu time
     is_save_model = True

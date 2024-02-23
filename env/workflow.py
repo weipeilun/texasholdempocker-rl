@@ -220,11 +220,20 @@ def simulate_processes(in_queue, out_queue, simulation_recurrent_param_dict, pid
 
 
 # 聚合模拟数据reward结果（主进程）
-def receive_game_result_thread(in_queue, env_info_dict):
+def receive_game_result_thread(in_queue, env_info_dict, game_finalized_signal_queue):
+    finalized_game_id_set = set()
     while True:
         if interrupt.interrupt_callback():
             logging.info("receive_reward_thread detect interrupt")
             break
+
+        while True:
+            try:
+                finalized_game_id = game_finalized_signal_queue.get(block=False)
+                finalized_game_id_set.add(finalized_game_id)
+                del env_info_dict[finalized_game_id]
+            except Empty:
+                break
 
         try:
             game_id, player_name, current_round, num_current_task_estimation, game_result_sum = in_queue.get(block=True, timeout=0.1)
@@ -233,7 +242,7 @@ def receive_game_result_thread(in_queue, env_info_dict):
             # GamePlayerResult的取值范围是是[-1, 1]，归一到[0, 1]
             winning_probability = player_result_value * 0.5 + 0.5
 
-            if game_id in env_info_dict:
+            if game_id in env_info_dict and game_id not in finalized_game_id_set:
                 game_info_dict = env_info_dict[game_id]
                 if player_name in game_info_dict:
                     player_round_info_dict = game_info_dict[player_name]
@@ -933,7 +942,7 @@ def eval_task_begin(seed, game_id_signal_queue, eval_task_num_games=1000):
 
 
 # train流程结尾，模拟数据存入buffer（主进程）
-def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal_queue, env_info_dict, finished_game_info_dict, model, step_counter):
+def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal_queue1, game_finalized_signal_queue2, env_info_dict, finished_game_info_dict, model, step_counter):
     while True:
         if interrupt.interrupt_callback():
             logging.info("train_gather_result_thread detect interrupt")
@@ -980,8 +989,8 @@ def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal
         # 清掉这局的数据cache
         for finalized_game_id in finalized_game_id_set:
             # 清掉这局的数据cache
-            del env_info_dict[finalized_game_id]
-            game_finalized_signal_queue.put(finalized_game_id)
+            game_finalized_signal_queue1.put(finalized_game_id)
+            game_finalized_signal_queue2.put(finalized_game_id)
 
         finished_game_info_dict.clear()
         finished_game_info_dict.update(not_finalized_game_info_dict)
