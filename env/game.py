@@ -64,7 +64,8 @@ class GameEnv(object):
         self.current_round_value_dict = None
         self.historical_round_action_list = None
         self.historical_round_value_list = None
-        
+
+        # current_round -> player_name, action, bet, delta_bet
         self.all_round_player_action_value_dict = None
 
         self.info_sets = None

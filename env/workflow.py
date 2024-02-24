@@ -12,6 +12,7 @@ from utils.workflow_utils import *
 from utils.tensorrt_utils import *
 from utils.math_utils import *
 import objgraph
+from mem_top import mem_top
 
 try:
     from cuda import cudart
@@ -885,19 +886,19 @@ def train_eval_process(train_eval_thread_param_list, is_init_train_thread, is_in
     Thread(target=map_data_thread, args=(workflow_game_loop_signal_queue, workflow_signal_map_queue_list, tid_process_tid_map, 0.1), daemon=True).start()
     Thread(target=map_data_thread, args=(eval_workflow_signal_queue, eval_workflow_signal_map_queue_list, tid_process_tid_map, 0.1), daemon=True).start()
 
-    def monitor_thread(pid):
-        while True:
-            if interrupt.interrupt_callback():
-                logging.info("performance_monitor_thread detect interrupt")
-                break
-
-            num_objects = objgraph.typestats()
-            num_leaking_objects = objgraph.typestats(objgraph.get_leaking_objects())
-            logging.info(f'train_eval_process_{pid} objects:{num_objects}')
-            logging.info(f'train_eval_process_{pid} leaking objects:{num_leaking_objects}')
-            time.sleep(120)
-
-    Thread(target=monitor_thread, args=(pid, ), daemon=True).start()
+    # def monitor_thread(pid):
+    #     while True:
+    #         if interrupt.interrupt_callback():
+    #             logging.info("performance_monitor_thread detect interrupt")
+    #             break
+    #
+    #         num_objects = objgraph.typestats()
+    #         num_leaking_objects = objgraph.typestats(objgraph.get_leaking_objects())
+    #         logging.info(f'train_eval_process_{pid} objects:{num_objects}')
+    #         logging.info(f'train_eval_process_{pid} leaking objects:{num_leaking_objects}')
+    #         time.sleep(120)
+    #
+    # Thread(target=monitor_thread, args=(pid, ), daemon=True).start()
 
     while True:
         if interrupt.interrupt_callback():
@@ -1009,10 +1010,12 @@ def performance_monitor_thread(winning_probability_generating_task_queue, env_in
 
         logging.info(f'winning_rate estimation qsize:{winning_probability_generating_task_queue.qsize()}')
 
-        num_objects = objgraph.typestats()
-        num_leaking_objects = objgraph.typestats(objgraph.get_leaking_objects())
-        logging.info(f'main process objects:{num_objects}')
-        logging.info(f'main process leaking objects:{num_leaking_objects}')
+        # num_objects = objgraph.typestats()
+        # num_leaking_objects = objgraph.typestats(objgraph.get_leaking_objects())
+        # logging.info(f'main process objects:{num_objects}')
+        # logging.info(f'main process leaking objects:{num_leaking_objects}')
+
+        logging.info(mem_top(limit=15, width=80))
 
         env_info_dict_tmp = env_info_dict.copy()
         finished_game_info_dict_tmp = finished_game_info_dict.copy()
