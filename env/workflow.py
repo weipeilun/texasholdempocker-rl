@@ -813,7 +813,8 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
                     logging.info(f"eval_game_loop_thread {thread_name} detect interrupt")
                     break
 
-                action, _ = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.ARGMAX)
+                # select action by probability in evaluation is a special need by poker to distract opponents, which is different from chess and go
+                action, _ = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.PROBABILITY)
                 t1 = time.time()
                 # logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, eval_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
 
