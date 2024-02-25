@@ -221,7 +221,7 @@ if __name__ == '__main__':
                 workflow_status = switch_workflow_default(WorkflowStatus.TRAIN_FINISH_WAIT, workflow_queue_list, workflow_ack_queue_list)
                 logging.info(f"Main thread switched workflow to {workflow_status.name}")
 
-                new_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id, model_for_save, batch_predict_model_type, params)
+                new_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_eval_snapshot_path_format % eval_task_id, model_for_save, batch_predict_model_type, params, backup_trt_path=tmp_checkpoint_path)
             except Empty:
                 # 先切换队列状态，如果队列状态不变，只在train任务中同步模型
                 step_num, train_model_state_dict = None, None
@@ -232,7 +232,7 @@ if __name__ == '__main__':
                         break
                 if step_num is not None and train_model_state_dict is not None:
                     if batch_predict_model_type == ModelType.TENSORRT:
-                        tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save, batch_predict_model_type, params)
+                        tmp_checkpoint_path = save_model_by_state_dict(train_model_state_dict, None, model_workflow_tmp_checkpoint_path, model_for_save, batch_predict_model_type, params, backup_trt_path=tmp_checkpoint_path)
                     for train_update_model_queue in train_update_model_queue_list:
                         if batch_predict_model_type == ModelType.PYTORCH:
                             train_update_model_queue.put((step_num, train_model_state_dict))
@@ -314,7 +314,7 @@ if __name__ == '__main__':
             # batch predict切换模型，继续开始train任务
             if is_update_old_model:
                 # 在此处切换新旧模型pointer
-                best_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path, model_for_save, batch_predict_model_type, params)
+                best_model_trt_filename = save_model_by_state_dict(new_model_state_dict, new_optimizer_state_dict, model_best_checkpoint_path, model_for_save, batch_predict_model_type, params, backup_trt_path=tmp_checkpoint_path)
                 best_model_state_dict = new_model_state_dict
 
             # 永远使用最佳模型训练，依据AlphaGO Zero论文，Method章Self-play节：

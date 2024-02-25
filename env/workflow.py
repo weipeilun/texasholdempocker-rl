@@ -28,7 +28,7 @@ def save_model(model, path):
     logging.info(f'model saved to {path}')
 
 
-def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model, batch_predict_model_type, params):
+def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model, batch_predict_model_type, params, backup_trt_path=None):
     models_dict = dict()
     models_dict['model'] = model_state_dict
     if optimizer_state_dict is not None:
@@ -55,9 +55,16 @@ def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model
 
         trt_path = path.replace('.pth', '.trt')
         trt_model_engine = build_engine(onnx_path, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
-        with open(trt_path, "wb") as f:
-            f.write(trt_model_engine)
-        logging.info(f'finished writing TensorRT model file {trt_path}')
+        if trt_model_engine is None:
+            with open(trt_path, "wb") as f:
+                f.write(trt_model_engine)
+            logging.info(f'finished writing TensorRT model file {trt_path}')
+        else:
+            if backup_trt_path is None:
+                raise ValueError(f'failed to write TensorRT model file {trt_path}, build_engine returned None')
+            else:
+                logging.warning(f'failed to write TensorRT model file {trt_path}, build_engine returned None')
+                trt_path = backup_trt_path
 
         logging.info(f'model saved to {path}, {onnx_path}, {trt_path}')
         return trt_path
