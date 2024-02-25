@@ -55,7 +55,7 @@ def save_model_by_state_dict(model_state_dict, optimizer_state_dict, path, model
 
         trt_path = path.replace('.pth', '.trt')
         trt_model_engine = build_engine(onnx_path, params['predict_batch_size_min'], params['predict_batch_size'], params['predict_batch_size_max'], params['predict_feature_size_list'])
-        if trt_model_engine is None:
+        if trt_model_engine is not None:
             with open(trt_path, "wb") as f:
                 f.write(trt_model_engine)
             logging.info(f'finished writing TensorRT model file {trt_path}')
