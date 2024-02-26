@@ -64,7 +64,8 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
                                 log_to_file=self.mcts_log_to_file,
                                 pid=self.player_id)
         action_probs = mcts.simulate(observation=self.observation, env=self.env)
-        action, action_mask_idx = mcts.get_action(action_probs, env=self.env, choice_method=ChoiceMethod.ARGMAX)
+        # select action by probability in play is a special need by poker to distract opponents, which is different from chess and go
+        action, action_mask_idx = mcts.get_action(action_probs, env=self.env, choice_method=ChoiceMethod.PROBABILITY)
 
         observation, _, terminated, _ = self.env.step(action)
         if not terminated:
