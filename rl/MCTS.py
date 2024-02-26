@@ -39,6 +39,8 @@ class MCTS:
         self.file_writer_choice = None
         # 最后一步的R很重要，要拉倒很接近的数值上才能说明整个MCTS是有效的。因此强制输出最后一步的R到日志。
         self.file_writer_final_status = None
+        # 记录整棵树的模拟过程
+        self.file_tree_simulation = None
 
         self.children = None
 
@@ -94,6 +96,7 @@ class MCTS:
             self.file_writer_n_term = open(f"log/n_term.csv", "w", encoding='UTF-8')
             self.file_writer_choice = open(f"log/choice.csv", "w", encoding='UTF-8')
             self.file_writer_final_status = open("log/final_status.csv", "a", encoding='UTF-8')
+            self.file_tree_simulation = open("log/tree_simulation.html", "w", encoding='UTF-8')
 
         acting_player_name = env.acting_player_name
         action_prob, estimate_reward_value, _ = self.predict(observation)
@@ -133,6 +136,8 @@ class MCTS:
             if self.file_writer_q is not None:
                 self.file_writer_q.write(','.join('%.3f' % i for i in self.children_q_array) + '\n')
 
+        self.write_tree_simulation()
+
         if self.log_to_file and self.pid == 0:
             self.file_writer_n.close()
             self.file_writer_q.close()
@@ -141,7 +146,73 @@ class MCTS:
             self.file_writer_n_term.close()
             self.file_writer_choice.close()
             self.file_writer_final_status.close()
+            self.file_tree_simulation.close()
         return self._cal_action_probs(self.tau)
+
+    def write_tree_simulation(self):
+        action_names = [
+            'fold',
+            'check/call',
+            'raise-0',
+            'raise-0.0125',
+            'raise-0.025',
+            'raise-0.05',
+            'raise-0.1',
+            'raise-0.2',
+            'raise-0.4',
+            'raise-0.6',
+            'raise-0.8',
+            'allin',
+        ]
+        if self.file_tree_simulation is not None:
+            self.file_tree_simulation.write("<html>\n")
+            self.file_tree_simulation.write("  <head>\n")
+            self.file_tree_simulation.write("    <script type=\"text/javascript\" src=\"https://www.gstatic.com/charts/loader.js\"></script>\n")
+            self.file_tree_simulation.write("    <script type=\"text/javascript\">\n")
+            self.file_tree_simulation.write("      google.charts.load('current', {'packages':['treemap']});\n")
+            self.file_tree_simulation.write("      google.charts.setOnLoadCallback(drawChart);\n")
+            self.file_tree_simulation.write("      function drawChart() {\n")
+            self.file_tree_simulation.write("        var data = google.visualization.arrayToDataTable([\n")
+
+            self.file_tree_simulation.write("          ['Action', 'Parent', 'N', 'Q'],\n")
+            self.file_tree_simulation.write("          ['Global', null, 0, 0],\n")
+            for action_name, n, q in zip(action_names, self.children_n_array, self.children_q_array):
+                self.file_tree_simulation.write(f"          ['{action_name}', 'Global', {n}, {q}],\n")
+
+            for idx, parent_action_name in enumerate(action_names):
+                if idx > 0 and self.children_n_array[idx] > 0 and self.children[idx] is not None:
+                    child_node = self.children[idx]
+                    for child_idx, (child_action_name, child_n, child_q) in enumerate(zip(action_names, child_node.children_n_array, child_node.children_q_array)):
+                        self.file_tree_simulation.write(f"          ['{parent_action_name}-{child_action_name}', '{parent_action_name}', {child_n}, {child_q}],\n")
+
+                        if child_idx > 0 and child_node.children_n_array[child_idx] > 0 and child_node.children[child_idx] is not None:
+                            grand_child_node = child_node.children[child_idx]
+                            for grand_child_action_name, grand_child_n, grand_child_q in zip(action_names, grand_child_node.children_n_array, grand_child_node.children_q_array):
+                                self.file_tree_simulation.write(f"          ['{parent_action_name}-{child_action_name}-{grand_child_action_name}', '{parent_action_name}-{child_action_name}', {grand_child_n}, {grand_child_q}],\n")
+
+            self.file_tree_simulation.write("        ]);\n")
+            self.file_tree_simulation.write("        tree = new google.visualization.TreeMap(document.getElementById('chart_div'));\n")
+            self.file_tree_simulation.write("        tree.draw(data, {\n")
+            self.file_tree_simulation.write("          minColor: '#f00',\n")
+            self.file_tree_simulation.write("          midColor: '#ddd',\n")
+            self.file_tree_simulation.write("          maxColor: '#0d0',\n")
+            self.file_tree_simulation.write("          headerHeight: 15,\n")
+            self.file_tree_simulation.write("          fontColor: 'black',\n")
+            self.file_tree_simulation.write("          showScale: true,\n")
+            self.file_tree_simulation.write("          generateTooltip: showStaticTooltip\n")
+            self.file_tree_simulation.write("        });\n")
+
+            self.file_tree_simulation.write("        function showStaticTooltip(row, size, value) {\n")
+            self.file_tree_simulation.write("          return '<div style=\"background:#fd9; padding:10px; border-style:solid\">' + data.getValue(row, 2) + ' </div>'\n")
+            self.file_tree_simulation.write("        }\n")
+
+            self.file_tree_simulation.write("      }\n")
+            self.file_tree_simulation.write("    </script>\n")
+            self.file_tree_simulation.write("  </head>\n")
+            self.file_tree_simulation.write("  <body>\n")
+            self.file_tree_simulation.write("    <div id=\"chart_div\" style=\"width: 900px; height: 500px;\"></div>\n")
+            self.file_tree_simulation.write("  </body>\n")
+            self.file_tree_simulation.write("</html>\n")
 
     # πa ∝ pow(N(s, a), 1 / τ)
     def _cal_action_probs(self, tau):
