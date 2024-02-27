@@ -74,6 +74,7 @@ if __name__ == '__main__':
     mcts_dirichlet_noice_epsilon = params['mcts_dirichlet_noice_epsilon']
     mcts_model_Q_epsilon = params['mcts_model_Q_epsilon']
     mcts_choice_method = params['mcts_choice_method']
+    simulate_random_round_probs = params['simulate_random_round_probs']
     workflow_lock = Condition()
     workflow_game_loop_signal_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
     workflow_game_loop_ack_signal_queue = Manager().Queue()
@@ -127,7 +128,7 @@ if __name__ == '__main__':
 
             # eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, predict_batch_in_best_queue_info[0].producer_list[thread_id], predict_batch_in_new_queue_info[0].producer_list[thread_id], num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
 
-            train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], train_game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
+            train_thread_param = (train_game_id_signal_queue, model_param_dict['num_output_class'], train_game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, simulate_random_round_probs, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_game_loop_ack_signal_queue, mcts_log_to_file, mcts_choice_method, thread_id, thread_name)
 
             eval_thread_param = (eval_game_id_signal_queue, model_param_dict['num_output_class'], eval_game_finished_reward_queue, eval_workflow_ack_signal_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, thread_id, thread_name)
 

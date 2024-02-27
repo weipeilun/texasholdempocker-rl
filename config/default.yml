@@ -35,6 +35,7 @@ mcts_dirichlet_noice_epsilon: 0.1  # 增加随机性，避免模型过于依赖�
 mcts_model_Q_epsilon: 0.2  # 当模型更有效后，适当调大这个值
 mcts_choice_method: 'probability'  # choices: 'argmax', 'probability'
 mcts_log_to_file: False
+simulate_random_round_probs: [0.4, 0.15, 0.15, 0.15, 0.15]
 
 # model params
 num_bins: 10

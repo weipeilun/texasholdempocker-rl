@@ -569,7 +569,7 @@ class RandomEnv(Env):
         if round_probs is not None:
             self.round_probs = round_probs
         else:
-            self.round_probs = np.asarray([0.01, 0.09, 0.2, 0.3, 0.4])
+            self.round_probs = [0.01, 0.09, 0.2, 0.3, 0.4]
 
         self.target_round_step_stop_probs = [0.2, 0.25, 0.333, 0.5]
 

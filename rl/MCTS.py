@@ -183,12 +183,12 @@ class MCTS:
                 if idx > 0 and self.children_n_array[idx] > 0 and self.children[idx] is not None:
                     child_node = self.children[idx]
                     for child_idx, (child_action_name, child_n, child_q) in enumerate(zip(action_names, child_node.children_n_array, child_node.children_q_array)):
-                        self.file_tree_simulation.write(f"          ['{parent_action_name}-{child_action_name}', '{parent_action_name}', {child_n}, {child_q}],\n")
+                        self.file_tree_simulation.write(f"          ['{child_action_name}-{parent_action_name}', '{parent_action_name}', {child_n}, {child_q}],\n")
 
                         if child_idx > 0 and child_node.children_n_array[child_idx] > 0 and child_node.children[child_idx] is not None:
                             grand_child_node = child_node.children[child_idx]
                             for grand_child_action_name, grand_child_n, grand_child_q in zip(action_names, grand_child_node.children_n_array, grand_child_node.children_q_array):
-                                self.file_tree_simulation.write(f"          ['{parent_action_name}-{child_action_name}-{grand_child_action_name}', '{parent_action_name}-{child_action_name}', {grand_child_n}, {grand_child_q}],\n")
+                                self.file_tree_simulation.write(f"          ['{grand_child_action_name}-{child_action_name}-{parent_action_name}', '{parent_action_name}-{child_action_name}', {grand_child_n}, {grand_child_q}],\n")
 
             self.file_tree_simulation.write("        ]);\n")
             self.file_tree_simulation.write("        tree = new google.visualization.TreeMap(document.getElementById('chart_div'));\n")
