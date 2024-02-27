@@ -1,5 +1,5 @@
 import time
-from multiprocessing import shared_memory, Manager
+from multiprocessing import shared_memory, Queue as MPQueue
 from abc import abstractmethod
 import numpy as np
 import math
@@ -77,10 +77,10 @@ class One2OneQueue(AbstractQueue):
                 self.shm_np.append(np.ndarray(shape=e_shape, dtype=e_dtype, buffer=shm.buf))
 
             if signal_queue is None:
-                signal_queue = Manager().Queue(maxsize=max_queue_size)
+                signal_queue = MPQueue(maxsize=max_queue_size)
 
         if trigger_queue is None:
-            trigger_queue = Manager().Queue(maxsize=max_queue_size)
+            trigger_queue = MPQueue(maxsize=max_queue_size)
 
         self.trigger_queue = trigger_queue
         self.signal_queue = signal_queue
@@ -251,8 +251,8 @@ class One2ManyQueue(AbstractQueue):
         self.ignore_array = ignore_array
         self.verbose = verbose
 
-        self.signal_queue = Manager().Queue(maxsize=n_consumers_over_process * n_consumers_in_process)
-        self.trigger_queue_list = [Manager().Queue(maxsize=n_consumers_over_process * n_consumers_in_process) for _ in range(self.n_consumers_over_process)]
+        self.signal_queue = MPQueue(maxsize=n_consumers_over_process * n_consumers_in_process)
+        self.trigger_queue_list = [MPQueue(maxsize=n_consumers_over_process * n_consumers_in_process) for _ in range(self.n_consumers_over_process)]
 
         self.shms_list = list()
         self.shms_np_list = list()
@@ -420,8 +420,8 @@ class Many2OneQueue(AbstractQueue):
         self.n_producers_in_process = n_producers_in_process
         self.verbose = verbose
 
-        self.signal_queue_list = [Manager().Queue(maxsize=n_producers_over_process * n_producers_in_process) for _ in range(self.n_producers_over_process)]
-        self.trigger_queue = Manager().Queue(maxsize=n_producers_over_process * n_producers_in_process)
+        self.signal_queue_list = [MPQueue(maxsize=n_producers_over_process * n_producers_in_process) for _ in range(self.n_producers_over_process)]
+        self.trigger_queue = MPQueue(maxsize=n_producers_over_process * n_producers_in_process)
 
         self.shms_list = list()
         self.shms_np_list = list()
