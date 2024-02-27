@@ -4,7 +4,7 @@ from tools.param_parser import *
 from tools.high_performance_queue import Many2OneQueue, One2ManyQueue
 from tools import counter
 from queue import Queue
-from torch.multiprocessing import Manager, Process, Condition, Queue as MPQueue
+from torch.multiprocessing import Manager, Process, Condition
 
 
 if __name__ == '__main__':
@@ -24,11 +24,11 @@ if __name__ == '__main__':
 
     num_predict_batch_process = params['num_predict_batch_process']
     assert num_predict_batch_process % 2 == 0, 'num_predict_batch_process must be even'
-    update_model_param_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
+    update_model_param_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
     logging.info(f'Finished init {num_predict_batch_process} update_model_param_queue_list.')
-    workflow_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
+    workflow_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
     logging.info(f'Finished init {num_predict_batch_process} workflow_queue_list.')
-    workflow_ack_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
+    workflow_ack_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
     logging.info(f'Finished init {num_predict_batch_process} workflow_ack_queue_list.')
 
     # 游戏设置
@@ -47,13 +47,13 @@ if __name__ == '__main__':
     simulation_recurrent_param_dict = params['simulation_recurrent_params']
     env_info_dict = dict()
     winning_probability_generating_task_queue = Manager().Queue()
-    game_result_out_queue = MPQueue()
+    game_result_out_queue = Manager().Queue()
     for pid in range(num_gen_winning_prob_cal_data_processes):
         Process(target=simulate_processes, args=(winning_probability_generating_task_queue, game_result_out_queue, simulation_recurrent_param_dict, pid, log_level), daemon=True).start()
     logging.info(f'Finished init {num_gen_winning_prob_cal_data_processes} simulate_processes.')
 
     # reward receiving thread
-    game_finalized_signal_queue1 = MPQueue()
+    game_finalized_signal_queue1 = Manager().Queue()
     Thread(target=receive_game_result_thread, args=(game_result_out_queue, env_info_dict, game_finalized_signal_queue1), daemon=True).start()
 
     # game simulation threads (train and evaluate)
@@ -75,17 +75,17 @@ if __name__ == '__main__':
     mcts_model_Q_epsilon = params['mcts_model_Q_epsilon']
     mcts_choice_method = params['mcts_choice_method']
     workflow_lock = Condition()
-    workflow_game_loop_signal_queue_list = [MPQueue() for _ in range(num_train_eval_process)]
-    workflow_game_loop_ack_signal_queue = MPQueue()
+    workflow_game_loop_signal_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
+    workflow_game_loop_ack_signal_queue = Manager().Queue()
     logging.info(f'Finished init {num_train_eval_process} workflow_game_loop_signal_queue_list.')
     # train thread参数
-    train_game_finished_signal_queue = MPQueue()
-    train_game_id_signal_queue = MPQueue()
+    train_game_finished_signal_queue = Manager().Queue()
+    train_game_id_signal_queue = Manager().Queue()
     # eval thread参数
-    eval_game_finished_reward_queue = MPQueue()
-    eval_game_id_signal_queue = MPQueue()
-    eval_workflow_signal_queue_list = [MPQueue() for _ in range(num_train_eval_process)]
-    eval_workflow_ack_signal_queue = MPQueue()
+    eval_game_finished_reward_queue = Manager().Queue()
+    eval_game_id_signal_queue = Manager().Queue()
+    eval_workflow_signal_queue_list = [Manager().Queue() for _ in range(num_train_eval_process)]
+    eval_workflow_ack_signal_queue = Manager().Queue()
     logging.info(f'Finished init {num_train_eval_process} eval_workflow_signal_queue_list.')
     # in_queue, train_tid_pid_map, eval_tid_pid_map
     predict_feature_size_list = params['predict_feature_size_list']
@@ -146,10 +146,10 @@ if __name__ == '__main__':
     logging.info('All train_eval_process inited.')
 
     # 训练中更新模型参数
-    train_update_model_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
-    train_update_model_ack_queue = MPQueue()
-    train_hold_signal_queue_list = [MPQueue() for _ in range(num_predict_batch_process)]
-    train_hold_signal_ack_queue = MPQueue()
+    train_update_model_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+    train_update_model_ack_queue = Manager().Queue()
+    train_hold_signal_queue_list = [Manager().Queue() for _ in range(num_predict_batch_process)]
+    train_hold_signal_ack_queue = Manager().Queue()
     # batch predict process：接收一个in_queue的输入，从out_queue_list中选择一个输出，选择规则遵从map_dict
     for pid, ((predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval), predict_batch_out_queue, workflow_queue, workflow_ack_queue, update_model_param_queue, train_update_model_queue, train_hold_signal_queue) in enumerate(zip(predict_batch_in_queue_info_list, predict_batch_out_queue_list, workflow_queue_list, workflow_ack_queue_list, update_model_param_queue_list, train_update_model_queue_list, train_hold_signal_queue_list)):
         Process(target=predict_batch_process, args=(predict_batch_in_queue, model_predict_batch_out_map_dict_train, model_predict_batch_out_map_dict_eval, batch_predict_model_type, params, update_model_param_queue, workflow_queue, workflow_ack_queue, train_update_model_queue, train_update_model_ack_queue, train_hold_signal_queue, train_hold_signal_ack_queue, predict_batch_out_queue, pid, log_level), daemon=True).start()
