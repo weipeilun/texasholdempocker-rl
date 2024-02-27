@@ -4,7 +4,7 @@ from tools.param_parser import *
 from tools.high_performance_queue import Many2OneQueue, One2ManyQueue
 from tools import counter
 from queue import Queue
-from torch.multiprocessing import Process, Condition, Queue as MPQueue
+from torch.multiprocessing import Manager, Process, Condition, Queue as MPQueue
 
 
 if __name__ == '__main__':
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     num_gen_winning_prob_cal_data_processes = params['num_gen_winning_prob_cal_data_processes']
     simulation_recurrent_param_dict = params['simulation_recurrent_params']
     env_info_dict = dict()
-    winning_probability_generating_task_queue = Queue()
+    winning_probability_generating_task_queue = Manager().Queue()
     game_result_out_queue = MPQueue()
     for pid in range(num_gen_winning_prob_cal_data_processes):
         Process(target=simulate_processes, args=(winning_probability_generating_task_queue, game_result_out_queue, simulation_recurrent_param_dict, pid, log_level), daemon=True).start()
