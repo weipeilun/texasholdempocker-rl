@@ -116,7 +116,7 @@ class GameEnv(object):
         # 重新随机初始化未知的牌堆，不要重新初始化玩家手牌
         all_known_cards_set = set()
 
-        for player_info_set in new_env.info_sets.values():
+        for player_info_set in new_env.info_sets[self.acting_player_name]:
             for card in player_info_set.player_hand_cards:
                 all_known_cards_set.add(card)
         if new_env.current_round >= 1:
@@ -136,6 +136,13 @@ class GameEnv(object):
 
         num_new_cards = 5 + new_env.num_players * 2 - len(all_known_cards_set)
         new_random_cards = random.sample(all_unknown_cards, num_new_cards)
+        for player_name, player_info_set in new_env.info_sets.items():
+            if player_name != self.acting_player_name:
+                new_player_hand_cards = list()
+                for _ in range(2):
+                    new_player_hand_cards.append(new_random_cards.pop())
+                new_player_hand_cards.sort()
+                player_info_set.player_hand_cards = new_player_hand_cards
         if new_env.current_round < 1:
             new_flop_cards = list()
             for _ in range(3):

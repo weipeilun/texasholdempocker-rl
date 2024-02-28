@@ -23,7 +23,7 @@ CARD_FIGURE_MAP = {
     '9': CardFigure.CARD_FIGURE_9,
     'T': CardFigure.CARD_FIGURE_10,
     'J': CardFigure.CARD_FIGURE_JACK,
-    'Q': CardFigure.CARD_FIGURE_QUEUE,
+    'Q': CardFigure.CARD_FIGURE_QUEEN,
     'K': CardFigure.CARD_FIGURE_KING,
     'A': CardFigure.CARD_FIGURE_ACE
 }

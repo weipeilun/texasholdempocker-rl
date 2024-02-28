@@ -136,7 +136,7 @@ class MCTS:
             if self.file_writer_q is not None:
                 self.file_writer_q.write(','.join('%.3f' % i for i in self.children_q_array) + '\n')
 
-        self.write_tree_simulation()
+        self.write_tree_simulation(env, acting_player_name)
 
         if self.log_to_file and self.pid == 0:
             self.file_writer_n.close()
@@ -149,7 +149,28 @@ class MCTS:
             self.file_tree_simulation.close()
         return self._cal_action_probs(self.tau)
 
-    def write_tree_simulation(self):
+    def write_tree_simulation(self, env, acting_player_name):
+        def get_cards_info_str(env, acting_player_name):
+            player_hand_cards_dict = dict()
+            for player_name, player_info_set in env._env.info_sets.items():
+                player_hand_cards_dict[player_name] = player_info_set.player_hand_cards
+            public_card_list = list()
+            if env._env.current_round >= 1:
+                public_card_list.extend(env._env.flop_cards)
+            if env._env.current_round >= 2:
+                public_card_list.extend(env._env.turn_cards)
+            if env._env.current_round >= 3:
+                public_card_list.extend(env._env.river_cards)
+
+            acting_player_card_str = ','.join(str(card) for card in player_hand_cards_dict[acting_player_name])
+            del player_hand_cards_dict[acting_player_name]
+            opponents_card_str_list = list()
+            for player_cards in player_hand_cards_dict.values():
+                opponent_card_str = f"[{','.join(str(card) for card in player_cards)}]"
+                opponents_card_str_list.append(opponent_card_str)
+            cards_str = f"public:[{','.join(str(card) for card in public_card_list)}], acting:[{acting_player_card_str}], opponents:[{','.join(opponents_card_str_list)}]"
+            return cards_str
+
         action_names = [
             'fold',
             'check/call',
@@ -174,10 +195,11 @@ class MCTS:
             self.file_tree_simulation.write("      function drawChart() {\n")
             self.file_tree_simulation.write("        var data = google.visualization.arrayToDataTable([\n")
 
-            self.file_tree_simulation.write("          ['Action', 'Parent', 'N', 'Q'],\n")
-            self.file_tree_simulation.write("          ['Global', null, 0, 0],\n")
+            global_str = get_cards_info_str(env, acting_player_name)
+            self.file_tree_simulation.write(f"          ['Action', 'Parent', 'N', 'Q'],\n")
+            self.file_tree_simulation.write(f"          ['{global_str}', null, 0, 0],\n")
             for action_name, n, q in zip(action_names, self.children_n_array, self.children_q_array):
-                self.file_tree_simulation.write(f"          ['{action_name}', 'Global', {n}, {q}],\n")
+                self.file_tree_simulation.write(f"          ['{action_name}', '{global_str}', {n}, {q}],\n")
 
             for idx, parent_action_name in enumerate(action_names):
                 if idx > 0 and self.children_n_array[idx] > 0 and self.children[idx] is not None:
@@ -188,7 +210,7 @@ class MCTS:
                         if child_idx > 0 and child_node.children_n_array[child_idx] > 0 and child_node.children[child_idx] is not None:
                             grand_child_node = child_node.children[child_idx]
                             for grand_child_action_name, grand_child_n, grand_child_q in zip(action_names, grand_child_node.children_n_array, grand_child_node.children_q_array):
-                                self.file_tree_simulation.write(f"          ['{grand_child_action_name}-{child_action_name}-{parent_action_name}', '{parent_action_name}-{child_action_name}', {grand_child_n}, {grand_child_q}],\n")
+                                self.file_tree_simulation.write(f"          ['{grand_child_action_name}-{child_action_name}-{parent_action_name}', '{child_action_name}-{parent_action_name}', {grand_child_n}, {grand_child_q}],\n")
 
             self.file_tree_simulation.write("        ]);\n")
             self.file_tree_simulation.write("        tree = new google.visualization.TreeMap(document.getElementById('chart_div'));\n")
