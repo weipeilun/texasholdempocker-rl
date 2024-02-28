@@ -116,9 +116,8 @@ class GameEnv(object):
         # 重新随机初始化未知的牌堆，不要重新初始化玩家手牌
         all_known_cards_set = set()
 
-        for player_info_set in new_env.info_sets[self.acting_player_name]:
-            for card in player_info_set.player_hand_cards:
-                all_known_cards_set.add(card)
+        for card in new_env.info_sets[self.acting_player_name].player_hand_cards:
+            all_known_cards_set.add(card)
         if new_env.current_round >= 1:
             for card in new_env.flop_cards:
                 all_known_cards_set.add(card)
