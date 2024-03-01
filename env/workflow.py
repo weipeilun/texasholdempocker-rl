@@ -979,7 +979,7 @@ def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal
 
                     round_num = step_info[KEY_ROUND_NUM]
                     player_name = step_info[KEY_ACTED_PLAYER_NAME]
-                    if all(current_player_name in game_info_dict for current_player_name in ALL_PLAYER_NAMES) and round_num in game_info_dict[player_name]:
+                    if all(current_player_name in game_info_dict for current_player_name in ALL_PLAYER_NAMES) and all(round_num in game_info_dict[current_player_name] for current_player_name in ALL_PLAYER_NAMES):
                         # reward_dict = env._get_final_reward()
                         _, reward_value, _, card_result_value = finished_reward_dict[player_name]
                         # todo：当前仅支持两个玩家
