@@ -99,7 +99,7 @@ class MCTS:
             self.file_tree_simulation = open("log/tree_simulation.html", "w", encoding='UTF-8')
 
         acting_player_name = env.acting_player_name
-        action_prob, estimate_reward_value, _ = self.predict(observation)
+        action_prob, estimate_reward_value = self.predict(observation)
         if self.is_root and self.apply_dirichlet_noice:
             dirichlet_noise = np.random.dirichlet(action_prob)
             action_prob = (1 - self.dirichlet_noice_epsilon) * action_prob + self.dirichlet_noice_epsilon * dirichlet_noise
@@ -348,7 +348,7 @@ class MCTS:
             self.children_q_array = np.zeros(self.n_actions)
 
         acting_player_name = env.acting_player_name
-        action_prob, estimate_reward_value, _ = self.predict(observation)
+        action_prob, estimate_reward_value = self.predict(observation)
         action_bin, action = self._choose_action(action_prob, env)
 
         observation_, reward_dict, terminated, info = env.step(action)
@@ -466,9 +466,8 @@ class SingleThreadMCTS(MCTS):
         with torch.no_grad():
             observation_array = np.array([observation])
             observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=self.model.device, requires_grad=False)
-            action_probs_logits_tensor, estimate_reward_value_tensor, winning_prob_tensor = self.model(observation_tensor)
+            action_probs_logits_tensor, estimate_reward_value_tensor, _, _, _ = self.model(observation_tensor)
             action_probs_tensor = torch.softmax(action_probs_logits_tensor, dim=1)
             action_prob = action_probs_tensor.cpu().numpy()[0]
             estimate_reward_value = estimate_reward_value_tensor.cpu().numpy()[0]
-            winning_prob = winning_prob_tensor.cpu().numpy()[0]
-        return action_prob, estimate_reward_value, winning_prob
+        return action_prob, estimate_reward_value
