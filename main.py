@@ -171,7 +171,7 @@ if __name__ == '__main__':
     finished_game_info_dict = dict()
     num_winning_prob_bins = model_param_dict['num_winning_prob_bins']
     winning_prob_cutter = CutByThreshold([0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95])
-    assert len(winning_prob_cutter.threshold_list) == num_winning_prob_bins, f'num_winning_prob_bins:{num_winning_prob_bins} should be equal to {len(winning_prob_cutter.threshold_list)}'
+    assert len(winning_prob_cutter.threshold_list) + 1 == num_winning_prob_bins, f'num_winning_prob_bins:{num_winning_prob_bins} should be equal to {len(winning_prob_cutter.threshold_list)}'
     Thread(target=train_gather_result_thread, args=(train_game_finished_signal_queue, game_finalized_signal_queue1, game_finalized_signal_queue2, env_info_dict, finished_game_info_dict, model, step_counter, winning_prob_cutter), daemon=True).start()
 
     # init training thread to separate cpu/gpu time
