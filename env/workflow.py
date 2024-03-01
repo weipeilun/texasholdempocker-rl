@@ -318,9 +318,9 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                 break
 
             try:
-                action_probs_list, reward_value_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
+                action_probs_list, reward_value_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
-                for action_probs, reward_value, send_pid in zip(action_probs_list, reward_value_list, winning_prob_list, send_pid_list):
+                for action_probs, reward_value, send_pid in zip(action_probs_list, reward_value_list, send_pid_list):
                     # if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
                     #     # logging.info(f'send_out_queue_map_dict_train={send_out_queue_map_dict_train}')
                     #     send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
