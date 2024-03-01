@@ -261,7 +261,7 @@ def receive_game_result_thread(in_queue, env_info_dict, game_finalized_signal_qu
 
                     player_round_info_dict[current_round] = winning_probability
             else:
-                logging.error(f'game_id {game_id} not found in env_info_dict')
+                logging.error(f'game_id {game_id} not found in env_info_dict, player_name:{player_name}, current_round:{current_round}')
         except Empty:
             continue
         except:
