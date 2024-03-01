@@ -119,7 +119,7 @@ class MCTS:
             if self.file_writer_choice is not None:
                 self.file_writer_choice.write(f'{i},{action_bin}\n')
 
-            observation_, reward_dict, terminated, info = new_env.step(action)
+            observation_, reward_dict, terminated, info = new_env.step(action, action_bin)
             if not terminated:
                 if self.children[action_bin] is None:
                     self.children[action_bin] = self.new_child()
@@ -257,7 +257,7 @@ class MCTS:
         action_mask_int_list = [int(not mask) for mask in action_mask_list]
 
         choice_idx = choose_idx_by_array(valid_action_probs, choice_method)
-        return map_action_bin_to_actual_action_and_value_v2(choice_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind), action_mask_int_list
+        return choice_idx, map_action_bin_to_actual_action_and_value_v2(choice_idx, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind), action_mask_int_list
 
     def get_player_action_reward(self, reward, acting_player_name):
         # 注意此处要取到的值是：对于玩家的相对价值得失
@@ -351,7 +351,7 @@ class MCTS:
         action_prob, estimate_reward_value = self.predict(observation)
         action_bin, action = self._choose_action(action_prob, env)
 
-        observation_, reward_dict, terminated, info = env.step(action)
+        observation_, reward_dict, terminated, info = env.step(action, action_bin)
         if not terminated:
             if self.children[action_bin] is None:
                 self.children[action_bin] = self.new_child()

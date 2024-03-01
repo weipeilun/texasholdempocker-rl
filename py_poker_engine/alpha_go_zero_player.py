@@ -40,7 +40,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
         else:
             logging.warning(f'model not found at {model_path}')
 
-        self.n_actions = self.params['num_bins']
+        self.n_actions = self.params['num_action_bins']
         self.num_output_class = self.params['model_param_dict']['num_output_class']
         self.small_blind = self.params['small_blind']
         self.num_mcts_simulation_per_step = self.params['num_mcts_simulation_per_step']
@@ -65,9 +65,9 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
                                 pid=self.player_id)
         action_probs = mcts.simulate(observation=self.observation, env=self.env)
         # select action by probability in play is a special need by poker to distract opponents, which is different from chess and go
-        action, action_mask_idx = mcts.get_action(action_probs, env=self.env, choice_method=ChoiceMethod.PROBABILITY)
+        action_bin, action, action_mask_idx = mcts.get_action(action_probs, env=self.env, choice_method=ChoiceMethod.PROBABILITY)
 
-        observation, _, terminated, _ = self.env.step(action)
+        observation, _, terminated, _ = self.env.step(action, action_bin)
         if not terminated:
             self.observation = observation
         self.has_just_taken_action = True
@@ -118,7 +118,8 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
             self.env.check_others_action(action, self.uuid_player_name_dict)
 
             mapped_action = (ACTION_TO_ACTION_MAP[action['action']], action['amount'])
-            self.env.step(mapped_action)
+            # todo：此处特征拼接有问题：action_bin为空，在message_builder.py:63
+            self.env.step(mapped_action, None)
             self.env.check_round_state(round_state, self.uuid_player_name_dict)
 
     def receive_round_result_message(self, winners, hand_info, round_state):

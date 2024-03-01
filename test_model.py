@@ -26,7 +26,7 @@ if __name__ == '__main__':
     update_model_bb_per_100_thres = params['update_model_bb_per_100_thres']
 
     # 用户所有连续特征分桶embedding
-    num_bins = params['num_bins']
+    num_bins = params['num_action_bins']
     model_param_dict = params['model_param_dict']
     model_init_checkpoint_path = params['model_init_checkpoint_path']
     model = AlphaGoZero(**model_param_dict)

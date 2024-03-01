@@ -2,15 +2,16 @@ import logging
 import random
 import numpy as np
 from tools.biner import *
+from copy import deepcopy
 from .cards import *
 from .game import GameEnv, deck
-from utils.workflow_utils import map_action_bin_to_actual_action_and_value_v2
+from utils.workflow_utils import map_action_bin_to_actual_action_and_value_v2, get_opponent_player_name
 
 class Env:
     """
     Doudizhu multi-agent wrapper
     """
-    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=True):
+    def __init__(self, winning_probability_generating_task_queue, num_action_bins, historical_action_per_round, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=True):
         """
         Here, we use dummy agents.
         This is because, in the orignial game, the players
@@ -22,7 +23,8 @@ class Env:
         will perform the actual action in the game engine.
         """
         self.winning_probability_generating_task_queue = winning_probability_generating_task_queue
-        self.num_bins = num_bins
+        self.num_action_bins = num_action_bins
+        self.historical_action_per_round = historical_action_per_round
         self.ignore_all_async_tasks = ignore_all_async_tasks
         self.settle_automatically = settle_automatically
 
@@ -71,25 +73,15 @@ class Env:
             CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
         ]
 
-        # # 行为后
-        # self.after_action_player_history_bet_to_pots_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST), include_invalid_bin=True)
-        # self.after_action_player_history_bet_to_assets_cutter_list = [
-        #     CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
-        #     CutByThreshold(np.array(CUTTER_BINS_LIST), include_invalid_bin=True),
-        #     CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
-        # ]
-        # self.after_action_pot_to_assets_cutter_list = [
-        #     CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
-        #     CutByThreshold(np.array(CUTTER_BINS_LIST) * MAX_PLAYER_NUMBER, include_invalid_bin=True),
-        #     CutByThreshold(np.array(CUTTER_SELF_BINS_LIST), include_invalid_bin=True),
-        # ]
-
         # 玩家间特征
         self.player_value_left_to_init_value_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST))
         # 以下，其他玩家财力大于当前玩家越多，当前玩家下大价值风险越大，则要对小于1和大于1的部分都有细分刻画，且包含一个远大于的部分
         self.player_init_value_to_acting_player_init_value_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST + [1.]) * MAX_PLAYER_NUMBER)
 
         self.game_id = None
+
+        # 最多4个回合可以行动
+        self.default_historical_actions_list = [self.num_action_bins] * (self.historical_action_per_round * 4)
 
     def reset(self, game_id, seed=None, cards_dict=None):
         """
@@ -110,7 +102,7 @@ class Env:
         return self.get_obs(infoset)
 
     # 修改经典step框架，异步计算reward
-    def step(self, action):
+    def step(self, action, action_bin):
         """
         Step function takes as input the action, which
         is a list of integers, and output the next obervation,
@@ -118,7 +110,7 @@ class Env:
         current game is finished. It also returns an empty
         dictionary that is reserved to pass useful information.
         """
-        acted_round_num, acted_player_name = self._env.step(action)
+        acted_round_num, acted_player_name = self._env.step(action, action_bin)
 
         info = dict()
         info[KEY_ROUND_NUM] = acted_round_num
@@ -167,7 +159,7 @@ class Env:
     def new_random(self):
         # new_random只会在MCTS模拟中用到，所以设置settle_automatically为True
         return Env(winning_probability_generating_task_queue=None,
-                   num_bins=self.num_bins,
+                   num_action_bins=self.num_action_bins,
                    num_players=self.num_players,
                    init_value=self.init_value,
                    small_blind=self.small_blind,
@@ -242,11 +234,6 @@ class Env:
             river_cards = game_infoset.river_cards
             for river_card in game_infoset.river_cards:
                 all_known_cards.add(river_card)
-
-        # all_unknown_cards = []
-        # for card in deck:
-        #     if card not in all_known_cards:
-        #         all_unknown_cards.append(card)
 
         # self.generate_reward_cal_task_recurrent(self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card)
         self.winning_probability_generating_task_queue.put((self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card))
@@ -392,7 +379,7 @@ class Env:
         """
         return self._env.game_over
 
-    def _map_obs_idx_to_model_index(self, current_round, current_player_role, cards, acting_player_status_list, other_player_status_list):
+    def _map_obs_idx_to_model_index(self, current_round, current_player_role, cards, acting_player_status_list, other_player_status_list, acting_player_historical_actions_list, opponent_historical_action_list):
         sorted_item_list = list()
         sorted_item_list.append(current_round)
         sorted_item_list.append(current_player_role)
@@ -413,6 +400,9 @@ class Env:
         for i in range(self.num_player_fields):
             for j in range(MAX_PLAYER_NUMBER - 1):
                 sorted_item_list.append(other_player_status_list[j][i])
+
+        sorted_item_list.extend(acting_player_historical_actions_list)
+        sorted_item_list.extend(opponent_historical_action_list)
 
         return np.array(sorted_item_list, dtype=np.int32)
 
@@ -460,14 +450,29 @@ class Env:
 
         acting_player_status_list, other_player_status_list = self.get_all_player_current_status(infoset)
 
-        # all_historical_player_action = get_all_historical_action(infoset)
+        acting_player_historical_actions_list, opponent_historical_action_list = self.get_all_historical_action(infoset)
         # 干掉sorted_cards，疑似重复信息字段，测试模型是否可以学到规则
         # return self._map_obs_idx_to_model_index(current_round, acting_player_id,
         #         [hand_cards, flop_cards, turn_cards, river_cards],
         #         sorted_cards, acting_player_status_list, other_player_status_list)
         return self._map_obs_idx_to_model_index(current_round, acting_player_id,
                 [hand_cards, flop_cards, turn_cards, river_cards],
-                acting_player_status_list, other_player_status_list)
+                acting_player_status_list, other_player_status_list,
+                acting_player_historical_actions_list, opponent_historical_action_list)
+
+    def get_all_historical_action(self, infoset):
+        all_player_historical_action_bins_dict = dict()
+        for player_name in ALL_PLAYER_NAMES:
+            historical_actions_list = deepcopy(self.default_historical_actions_list)
+            for i, round_action_bins in enumerate(infoset.all_player_round_action_bins_dict[player_name]):
+                for j, action_bin in enumerate(round_action_bins):
+                    historical_actions_list[i * self.historical_action_per_round + j] = action_bin
+            all_player_historical_action_bins_dict[player_name] = historical_actions_list
+
+        # todo:目前只支持2个玩家
+        opponent_player_name = get_opponent_player_name(infoset.player_name, ALL_PLAYER_NAMES)
+        return all_player_historical_action_bins_dict[infoset.player_name], all_player_historical_action_bins_dict[opponent_player_name]
+
 
     def get_all_player_current_status(self, infoset):
         assert infoset is not None, "The infoset should not be None."
@@ -570,8 +575,8 @@ class Env:
 
 class RandomEnv(Env):
 
-    def __init__(self, winning_probability_generating_task_queue, num_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=True, action_probs=None, round_probs=None):
-        Env.__init__(self, winning_probability_generating_task_queue=winning_probability_generating_task_queue, num_bins=num_bins, num_players=num_players, init_value=init_value, small_blind=small_blind, big_blind=big_blind, num_player_fields=num_player_fields, game_env=game_env, ignore_all_async_tasks=ignore_all_async_tasks, settle_automatically=settle_automatically)
+    def __init__(self, winning_probability_generating_task_queue, num_action_bins, historical_action_per_round, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=True, action_probs=None, round_probs=None):
+        Env.__init__(self, winning_probability_generating_task_queue=winning_probability_generating_task_queue, num_action_bins=num_action_bins, historical_action_per_round=historical_action_per_round, num_players=num_players, init_value=init_value, small_blind=small_blind, big_blind=big_blind, num_player_fields=num_player_fields, game_env=game_env, ignore_all_async_tasks=ignore_all_async_tasks, settle_automatically=settle_automatically)
 
         if action_probs is not None:
             self.action_probs = action_probs
@@ -590,7 +595,7 @@ class RandomEnv(Env):
     def __generate_random_step(self, action_probs, force_check=False):
         action_mask_list, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise = self.get_valid_action_info_v2()
         if force_check and not action_mask_list[1]:
-            return PlayerActions.CHECK_CALL, self._env.current_round_min_value
+            return 1, (PlayerActions.CHECK_CALL, self._env.current_round_min_value)
         else:
             valid_action_probs = np.copy(action_probs)
             valid_action_probs[action_mask_list] = 0
@@ -605,7 +610,7 @@ class RandomEnv(Env):
             for i, prob in enumerate(valid_action_probs):
                 cumulative_prob += prob
                 if random_num <= cumulative_prob:
-                    return map_action_bin_to_actual_action_and_value_v2(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind)
+                    return i, map_action_bin_to_actual_action_and_value_v2(i, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind)
             raise ValueError(f"action_probs should be a probability distribution, but={action_probs}")
 
     def take_step_to_round(self, max_round):
@@ -629,7 +634,7 @@ class RandomEnv(Env):
                     force_check = True
                 else:
                     force_check = False
-                action = self.__generate_random_step(self.action_probs, force_check=force_check)
+                action_bin, action = self.__generate_random_step(self.action_probs, force_check=force_check)
                 if action[0] == PlayerActions.RAISE:
                     num_bets += 1
                 elif action[0] == PlayerActions.CHECK_CALL:
@@ -639,7 +644,7 @@ class RandomEnv(Env):
                         stop_simulation = True
                         break
 
-                self._env.step(action)
+                self._env.step(action, action_bin)
                 if current_round != self._env.current_round:
                     break
                 if self.game_over:

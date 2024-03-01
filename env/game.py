@@ -67,6 +67,8 @@ class GameEnv(object):
 
         # current_round -> player_name, action, bet, delta_bet
         self.all_round_player_action_value_dict = None
+        # player_name -> [current_round] -> action_bin_list
+        self.all_player_round_action_bins_dict = None
 
         self.info_sets = None
         self.game_infoset = None
@@ -103,6 +105,7 @@ class GameEnv(object):
         new_env.historical_round_value_list = copy.deepcopy(self.historical_round_value_list)
 
         new_env.all_round_player_action_value_dict = copy.deepcopy(self.all_round_player_action_value_dict)
+        new_env.all_player_round_action_bins_dict = copy.deepcopy(self.all_player_round_action_bins_dict)
 
         new_env.info_sets = copy.deepcopy(self.info_sets)
         # new_env在step()前用不上game_infoset，可以置空
@@ -284,6 +287,7 @@ class GameEnv(object):
             (small_bind_player_name, PlayerActions.SMALL_BLIND_RAISE, small_blind_actual_bet, small_blind_actual_bet),
             (big_bind_player_name, PlayerActions.BIG_BLIND_RAISE, big_blind_actual_bet, max(big_blind_actual_bet - small_blind_actual_bet, small_blind_actual_bet)),
         ]
+        self.all_player_round_action_bins_dict = dict()
 
         self.info_sets = {player_name: InfoSet(player_name, self.player_init_value_dict, self.init_value) for player_name in self.players.keys()}
 
@@ -360,6 +364,7 @@ class GameEnv(object):
         acting_player_info_sets.current_round = self.current_round
 
         acting_player_info_sets.all_round_player_action_value_dict = deepcopy(self.all_round_player_action_value_dict)
+        acting_player_info_sets.all_player_round_action_bins_dict = deepcopy(self.all_player_round_action_bins_dict)
 
         current_status_value_left_dict = dict()
         for player_name, player in self.players.items():
@@ -435,7 +440,7 @@ class GameEnv(object):
 
         return winner_value_dict
 
-    def step(self, action):
+    def step(self, action, action_bin):
         if self.game_over:
             return
 
@@ -456,6 +461,18 @@ class GameEnv(object):
 
         self.current_round_action_dict[self.acting_player_name] = action[0]
         self.current_round_value_dict[self.acting_player_name] = action[1]
+
+        if self.acting_player_name in self.all_player_round_action_bins_dict:
+            round_action_bin_list = self.all_player_round_action_bins_dict[self.acting_player_name]
+        else:
+            round_action_bin_list = list()
+            self.all_player_round_action_bins_dict[self.acting_player_name] = round_action_bin_list
+        if len(round_action_bin_list) <= self.current_round:
+            action_bin_list = []
+            round_action_bin_list.append(action_bin_list)
+        else:
+            action_bin_list = round_action_bin_list[self.current_round]
+        action_bin_list.append(action_bin)
 
         # 用于特征拼接
         self.pot_value += action[2]
@@ -1061,6 +1078,8 @@ class InfoSet(object):
         self.current_round = None
         # All moves of all players in historical rounds. It is a dict with str-->(int, int)
         self.all_round_player_action_value_dict = None
+        # All moves idx list of all players in historical rounds. It is a dict with str-->int-->int_list
+        self.all_player_round_action_bins_dict = None
         # Current status of all players. A dict
         self.player_status_value_left_bet_dict = None
         # Number of players. A str

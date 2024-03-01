@@ -22,7 +22,7 @@ def train_process(params, n_loop, log_level):
     update_model_bb_per_100_thres = params['update_model_bb_per_100_thres']
 
     # 用户所有连续特征分桶embedding
-    num_bins = params['num_bins']
+    num_bins = params['num_action_bins']
     model_param_dict = params['model_param_dict']
     model = AlphaGoZero(**model_param_dict)
 

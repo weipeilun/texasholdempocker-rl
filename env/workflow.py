@@ -697,9 +697,9 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
 
 
 # 游戏对弈（train_eval_process进程）
-def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_signal_queue, winning_probability_generating_task_queue, num_bins, small_blind, big_blind, simulate_random_round_probs, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_ack_signal_queue, mcts_log_to_file, mcts_choice_method, pid, thread_name, workflow_signal_queue, model_predict_in_queue, model_predict_out_queue):
+def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_signal_queue, winning_probability_generating_task_queue, num_output_class, historical_action_per_round, small_blind, big_blind, simulate_random_round_probs, num_mcts_simulation_per_step, mcts_c_puct, mcts_tau, mcts_dirichlet_noice_epsilon, mcts_model_Q_epsilon, workflow_lock, workflow_ack_signal_queue, mcts_log_to_file, mcts_choice_method, pid, thread_name, workflow_signal_queue, model_predict_in_queue, model_predict_out_queue):
     # 训练线程，使用RandomEnv，来生成更离散的数据，避免模型过拟合导致训练数据过于集中
-    env = RandomEnv(winning_probability_generating_task_queue, num_bins, num_players=MAX_PLAYER_NUMBER, small_blind=small_blind, big_blind=big_blind, round_probs=simulate_random_round_probs)
+    env = RandomEnv(winning_probability_generating_task_queue, num_output_class, historical_action_per_round, num_players=MAX_PLAYER_NUMBER, small_blind=small_blind, big_blind=big_blind, round_probs=simulate_random_round_probs)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue, model_predict_in_queue)
 
     game_id = None
@@ -743,11 +743,11 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_s
                 break
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS before take action step {game_step_id}')
 
-            action, action_mask_idx = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.PROBABILITY)
+            action_bin, action, action_mask_idx = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.PROBABILITY)
             t1 = time.time()
             logging.info(f'train_game_loop_thread {thread_name} game {game_id} MCTS took action:({action[0].name}, %d), cost:%.2fs, ' % (action[1], t1 - t0))
 
-            observation_, reward, terminated, info = env.step(action)
+            observation_, reward, terminated, info = env.step(action, action_bin)
             game_action_info_buffer.append(([observation, action_probs, action_mask_idx], info))
 
             if not terminated:
@@ -760,8 +760,8 @@ def train_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_s
 
 
 # 游戏对弈（train_eval_process进程）
-def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_reward_queue, eval_workflow_ack_signal_queue, num_bins, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, pid, thread_name, eval_workflow_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new, model_predict_out_queue_best, model_predict_out_queue_new):
-    env = Env(None, num_bins, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
+def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_reward_queue, eval_workflow_ack_signal_queue, num_output_class, historical_action_per_round, small_blind, big_blind, num_mcts_simulation_per_step, mcts_c_puct, mcts_model_Q_epsilon, mcts_choice_method, pid, thread_name, eval_workflow_signal_queue, model_predict_in_queue_best, model_predict_in_queue_new, model_predict_out_queue_best, model_predict_out_queue_new):
+    env = Env(None, num_output_class, historical_action_per_round, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
     player_name_predict_in_queue_dict = get_player_name_model_dict(model_predict_in_queue_best, model_predict_in_queue_new)
     player_name_predict_out_queue_dict = get_player_name_model_dict(model_predict_out_queue_best, model_predict_out_queue_new)
 
@@ -782,7 +782,7 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
                 try:
                     received_pid, workflow_status = eval_workflow_signal_queue.get(block=False)
                     assert pid == received_pid, ValueError(f'train_eval_process.map_data_thread data mapping error: self.pid={pid} but pid received={received_pid}')
-                    env = Env(None, num_bins, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
+                    env = Env(None, num_output_class, historical_action_per_round, num_players=MAX_PLAYER_NUMBER, ignore_all_async_tasks=True, small_blind=small_blind, big_blind=big_blind)
 
                     eval_workflow_ack_signal_queue.put(workflow_status)
                     logging.info(f"eval_game_loop_thread {thread_name} reset")
@@ -812,11 +812,11 @@ def eval_game_loop_thread(game_id_seed_signal_queue, n_actions, game_finished_re
                     break
 
                 # select action by probability in evaluation is a special need by poker to distract opponents, which is different from chess and go
-                action, _ = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.PROBABILITY)
+                action_bin, action, _ = mcts.get_action(action_probs, env=env, choice_method=ChoiceMethod.PROBABILITY)
                 t1 = time.time()
                 # logging.info(f'MCTS took action:({action[0]}, %.4f), cost:%.2fs, eval_game_loop_thread id:{thread_name}' % (action[1], t1 - t0))
 
-                observation_, reward, terminated, info = env.step(action)
+                observation_, reward, terminated, info = env.step(action, action_bin)
 
                 if not terminated:
                     observation = observation_
@@ -984,11 +984,7 @@ def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal
                         _, reward_value, _, card_result_value = finished_reward_dict[player_name]
                         # todo：当前仅支持两个玩家
                         player_winning_prob = game_info_dict[player_name][round_num]
-                        opponent_name = None
-                        for current_player_name in ALL_PLAYER_NAMES:
-                            if current_player_name != player_name:
-                                opponent_name = current_player_name
-                                break
+                        opponent_name = get_opponent_player_name(player_name, ALL_PLAYER_NAMES)
                         opponent_winning_prob = game_info_dict[opponent_name][round_num]
 
                         player_winning_prob_bin = winning_prob_cutter.cut(player_winning_prob, 1)

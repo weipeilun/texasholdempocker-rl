@@ -18,7 +18,7 @@ class DDPG(nn.Module, BaseRLModel):
                  embedding_dim=512,
                  positional_embedding_dim=128,
                  num_layers=6,
-                 historical_action_sequence_length=56,
+                 historical_action_per_round=56,
                  batch_size=32,
                  actor_learning_rate=1e-3,
                  critic_learning_rate=2e-3,
@@ -53,12 +53,12 @@ class DDPG(nn.Module, BaseRLModel):
             self.epsilon_max = epsilon_max
             self.random_choice = np.arange(0, self.n_actions)
 
-        self.actor_eval_network = TransformerActorModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_sequence_length, num_player_fields, device).to(self.device)
-        self.actor_target_network = TransformerActorModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_sequence_length, num_player_fields, device).to(self.device)
+        self.actor_eval_network = TransformerActorModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_per_round, num_player_fields, device).to(self.device)
+        self.actor_target_network = TransformerActorModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_per_round, num_player_fields, device).to(self.device)
         self.actor_optimizer = torch.optim.Adam(params=[{'params': self.actor_eval_network.parameters()}], lr=actor_learning_rate)
 
-        self.critic_eval_network = TransformerCriticalModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_sequence_length, num_player_fields, device).to(self.device)
-        self.critic_target_network = TransformerCriticalModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_sequence_length, num_player_fields, device).to(self.device)
+        self.critic_eval_network = TransformerCriticalModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_per_round, num_player_fields, device).to(self.device)
+        self.critic_target_network = TransformerCriticalModel(num_bins, embedding_dim, positional_embedding_dim, num_layers, historical_action_per_round, num_player_fields, device).to(self.device)
         self.critic_optimizer = torch.optim.Adam(params=[{'params': self.critic_eval_network.parameters()}], lr=critic_learning_rate)
         self.value_critic_loss = torch.nn.MSELoss()
         self.win_rate_critic_loss = torch.nn.MSELoss()

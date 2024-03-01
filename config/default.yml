@@ -39,7 +39,6 @@ mcts_log_to_file: False
 simulate_random_round_probs: [0.4, 0.15, 0.15, 0.15, 0.15]
 
 # model params
-num_bins: 10
 batch_predict_model_type: 'TensorRT'  # choices: ['PyTorch', 'TensorRT']
 model_param_dict:
     n_observation: 5
@@ -50,7 +49,7 @@ model_param_dict:
     positional_embedding_dim: 128
     transformer_head_dim: 64
     num_layers: 8
-    historical_action_sequence_length: 16
+    historical_action_per_round: 6
     epsilon: 0.05
     epsilon_max: 0.8
     gamma: 0.9

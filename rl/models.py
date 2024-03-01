@@ -11,11 +11,12 @@ from utils.workflow_utils import *
 
 
 class EnvEmbedding(nn.Module):
-    def __init__(self, embedding_dim, historical_action_sequence_length, num_bins, do_position_embedding=False, positional_embedding_dim=128, embedding_sequence_len=-1, num_starters=1, num_acting_player_fields=9, num_other_player_fields=3, num_append_segments=0, device='cpu'):
+    def __init__(self, embedding_dim, num_output_class, historical_action_per_round, num_bins, do_position_embedding=False, positional_embedding_dim=128, embedding_sequence_len=-1, num_starters=1, num_acting_player_fields=9, num_other_player_fields=3, num_append_segments=0, device='cpu'):
         super().__init__()
 
         self.embedding_dim = embedding_dim
-        self.historical_action_sequence_length = historical_action_sequence_length
+        self.num_output_class = num_output_class
+        self.historical_action_per_round = historical_action_per_round
         self.do_position_embedding = do_position_embedding
         self.positional_embedding_dim = positional_embedding_dim
         self.embedding_sequence_len = embedding_sequence_len
@@ -25,7 +26,7 @@ class EnvEmbedding(nn.Module):
         self.num_other_player_fields = num_other_player_fields
         self.device = device
 
-        assert self.embedding_dim > 0 and self.historical_action_sequence_length > 0, ValueError(f'embedding_dim({self.embedding_dim}) and historical_action_sequence_length({self.historical_action_sequence_length}) must greater than 0.')
+        assert self.embedding_dim > 0 and self.historical_action_per_round > 0, ValueError(f'embedding_dim({self.embedding_dim}) and historical_action_per_round({self.historical_action_per_round}) must greater than 0.')
 
         # starters
         # all 4 rounds: pre-flop, flop, turn, river
@@ -60,18 +61,12 @@ class EnvEmbedding(nn.Module):
                           (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),     # action_value_to_assets_cutter_list
                           (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),     # action_value_to_assets_cutter_list
 
-                          # # 行为后
-                          # (num_action_feature_bins, len(CUTTER_DEFAULT_LIST) + 1),  # after_action_player_history_bet_to_pots_cutter
-                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
-                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
-                          # (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_player_history_bet_to_assets_cutter_list
-                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
-                          # (num_action_feature_bins, len(CUTTER_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
-                          # (num_action_feature_bins, len(CUTTER_SELF_BINS_LIST) + 1),  # after_action_pot_to_assets_cutter_list
-
                           (MAX_PLAYER_NUMBER - 1, len(PlayerStatus)),
                           (MAX_PLAYER_NUMBER - 1, num_bins),
                           (MAX_PLAYER_NUMBER - 1, num_bins + 1),
+
+                          # 历史行为分桶, 4个回合，historical_action_per_round个历史行为，MAX_PLAYER_NUMBER个玩家
+                          (4 * historical_action_per_round * MAX_PLAYER_NUMBER, num_output_class + 1),
                           ]
         self.starter_idx_array = nn.Parameter(torch.arange(0, num_starters, dtype=torch.int32), requires_grad=False)
         current_start_idx = num_starters
@@ -86,7 +81,7 @@ class EnvEmbedding(nn.Module):
         # card_segments = [0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4]
         # num_segment_diff_by_card = len(card_segments) * 2 - max(card_segments) - 1
 
-        if self.do_position_embedding and self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_sequence_length > 0:
+        if self.do_position_embedding and self.positional_embedding_dim > 0 and self.embedding_sequence_len > 0 and self.historical_action_per_round > 0:
             # 人工编码带有位置和段信息的embedding认为没有大意义
             # self.position_embedding = nn.Embedding(num_embeddings=num_starters + self.embedding_sequence_len - len(card_segments), embedding_dim=self.positional_embedding_dim)
             # position_embedding_idx_1 = torch.arange(num_starters + 2, dtype=torch.int64)
@@ -295,7 +290,7 @@ class TransformerActorModel(nn.Module):
                  embedding_dim=512,
                  positional_embedding_dim=128,
                  num_layers=6,
-                 historical_action_sequence_length=56,
+                 historical_action_per_round=6,
                  num_player_fields=10,
                  device='cpu'
                  ):
@@ -308,7 +303,7 @@ class TransformerActorModel(nn.Module):
         embedding_sequence_len = 2 + 4 * 7 + num_player_fields * MAX_PLAYER_NUMBER
 
         self.env_embedding = EnvEmbedding(embedding_dim,
-                                          historical_action_sequence_length=historical_action_sequence_length,
+                                          historical_action_per_round=historical_action_per_round,
                                           num_bins=num_bins,
                                           do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
@@ -349,7 +344,7 @@ class TransformerCriticalModel(nn.Module):
                  embedding_dim=512,
                  positional_embedding_dim=128,
                  num_layers=6,
-                 historical_action_sequence_length=56,
+                 historical_action_per_round=6,
                  num_player_fields=10,
                  device='cpu'
                  ):
@@ -357,14 +352,14 @@ class TransformerCriticalModel(nn.Module):
 
         self.embedding_dim = embedding_dim
         self.positional_embedding_dim = positional_embedding_dim
-        self.historical_action_sequence_length = historical_action_sequence_length
+        self.historical_action_per_round = historical_action_per_round
         self.device = device
 
         # round, role, figure * 7 * 2, decor * 7 * 2, player_status(num_player_fields) * num_player, action, action_value
         embedding_sequence_len = 2 + 4 * 7 + num_player_fields * MAX_PLAYER_NUMBER + 2
 
         self.env_embedding = EnvEmbedding(embedding_dim,
-                                          historical_action_sequence_length=historical_action_sequence_length,
+                                          historical_action_per_round=historical_action_per_round,
                                           num_bins=num_bins,
                                           do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
@@ -413,7 +408,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                  positional_embedding_dim=128,
                  num_layers=6,
                  transformer_head_dim=64,
-                 historical_action_sequence_length=56,
+                 historical_action_per_round=6,
                  num_acting_player_fields=9,
                  num_other_player_fields=3,
                  device='cpu'
@@ -422,18 +417,19 @@ class TransformerAlphaGoZeroModel(nn.Module):
 
         self.embedding_dim = embedding_dim
         self.positional_embedding_dim = positional_embedding_dim
-        self.historical_action_sequence_length = historical_action_sequence_length
+        self.historical_action_per_round = historical_action_per_round
         self.device = device
 
         # to normalize embedding for transformer
         self.actual_embedding_dim = int(embedding_dim + positional_embedding_dim)
         self.sqrt_of_actual_embedding_dim = math.sqrt(self.actual_embedding_dim)
 
-        # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players
-        embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1)
+        # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players, round_number * historical_action_per_round * all_player_number
+        embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1) + 4 * historical_action_per_round * MAX_PLAYER_NUMBER
 
         self.env_embedding = EnvEmbedding(embedding_dim,
-                                          historical_action_sequence_length=historical_action_sequence_length,
+                                          num_output_class=num_output_class,
+                                          historical_action_per_round=historical_action_per_round,
                                           num_bins=num_bins,
                                           do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,

@@ -197,3 +197,11 @@ def log_inference(observation_list, action_probs_list, action_Qs_list, winning_p
         if data_idx >= num_data_print_per_inference:
             break
         logging.info(f'action_probs={",".join(["%.4f" % item for item in action_probs])}\npredict_action_probs={",".join(["%.4f" % item for item in predict_action_probs.tolist()])}\naction_Qs={",".join(["%.4f" % item for item in action_Qs])}\npredict_action_Qs={",".join(["%.4f" % item for item in predict_action_Qs.tolist()])}\nwinning_prob={winning_prob}\npredict_winning_prob={predict_winning_prob}\n')
+
+
+# todo:目前只支持2个玩家
+def get_opponent_player_name(player_name, all_player_name_list):
+    for current_player_name in all_player_name_list:
+        if current_player_name != player_name:
+            return current_player_name
+    raise ValueError(f'Error all_player_name_list={all_player_name_list}, while player_name:{player_name}')
