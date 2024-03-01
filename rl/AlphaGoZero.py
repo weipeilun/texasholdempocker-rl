@@ -135,8 +135,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         # action_masks_tensor = torch.tensor(action_masks_array, dtype=torch.int32, device=self.device, requires_grad=False).bool()
         reward_value_tensor = torch.tensor(reward_value_array, dtype=torch.float32, device=self.device, requires_grad=False)
         card_result_value_tensor = torch.tensor(card_result_value_array, dtype=torch.float32, device=self.device, requires_grad=False)
-        player_winning_prob_bin_tensor = torch.tensor(player_winning_prob_bin_array, dtype=torch.int32, device=self.device, requires_grad=False)
-        opponent_winning_prob_bin_tensor = torch.tensor(opponent_winning_prob_bin_array, dtype=torch.int32, device=self.device, requires_grad=False)
+        player_winning_prob_bin_tensor = torch.tensor(player_winning_prob_bin_array, dtype=torch.int64, device=self.device, requires_grad=False)
+        opponent_winning_prob_bin_tensor = torch.tensor(opponent_winning_prob_bin_array, dtype=torch.int64, device=self.device, requires_grad=False)
 
         self.model.train()
         action_prob_logits, reward_value_logits, card_result_logits, player_winning_prob_logits, opponent_winning_prob_logits = self.model(observation_tensor)
