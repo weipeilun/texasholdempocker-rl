@@ -464,9 +464,12 @@ class Env:
         all_player_historical_action_bins_dict = dict()
         for player_name in ALL_PLAYER_NAMES:
             historical_actions_list = deepcopy(self.default_historical_actions_list)
-            for i, round_action_bins in enumerate(infoset.all_player_round_action_bins_dict[player_name]):
-                for j, action_bin in enumerate(round_action_bins):
-                    historical_actions_list[i * self.historical_action_per_round + j] = action_bin
+            if player_name in infoset.all_player_round_action_bins_dict:
+                for i, round_action_bins in enumerate(infoset.all_player_round_action_bins_dict[player_name]):
+                    for j, action_bin in enumerate(round_action_bins):
+                        if j >= self.historical_action_per_round:
+                            break
+                        historical_actions_list[i * self.historical_action_per_round + j] = action_bin
             all_player_historical_action_bins_dict[player_name] = historical_actions_list
 
         # todo:目前只支持2个玩家
