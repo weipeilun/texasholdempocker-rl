@@ -10,7 +10,7 @@ historical_data_filename: data/history.txt
 predict_batch_size_min: 1
 predict_batch_size_max: 32
 predict_batch_size_list: [1, 2, 4, 8, 16, 24]
-predict_feature_size_list: [69, ]
+predict_feature_size_list: [117, ]
 
 # train process params
 first_train_data_step: 500
