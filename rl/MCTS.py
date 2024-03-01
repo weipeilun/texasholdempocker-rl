@@ -262,7 +262,7 @@ class MCTS:
     def get_player_action_reward(self, reward, acting_player_name):
         # 注意此处要取到的值是：对于玩家的相对价值得失
         # win/lose/draw(1/-1/0), win_value/value_game_start[0, 1]
-        player_result_value, reward_value, net_win_value = reward[acting_player_name]
+        game_result_value, reward_value, net_win_value, card_result_value = reward[acting_player_name]
         return reward_value
 
     def _choose_action(self, p_array, env, num_simulation=None, do_log=False):
