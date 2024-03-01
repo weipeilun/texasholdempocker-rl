@@ -6,9 +6,10 @@ from pypokerengine.engine.player import Player
 
 class PyPokerEngineEnv(Env):
 
-    def __init__(self, winning_probability_generating_task_queue, num_action_bins, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=False):
+    def __init__(self, winning_probability_generating_task_queue, num_action_bins, historical_action_per_round, num_players: int = MAX_PLAYER_NUMBER, init_value: int = 100_000, small_blind=25, big_blind=50, num_player_fields=3, game_env=None, ignore_all_async_tasks=False, settle_automatically=False):
         super().__init__(winning_probability_generating_task_queue=winning_probability_generating_task_queue,
                          num_action_bins=num_action_bins,
+                         historical_action_per_round=historical_action_per_round,
                          num_players=num_players,
                          init_value=init_value,
                          small_blind=small_blind,

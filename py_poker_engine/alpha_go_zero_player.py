@@ -28,7 +28,8 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
 
         self.observation = None
 
-        self.model = AlphaGoZero(**self.params['model_param_dict'])
+        model_param_dict = self.params['model_param_dict']
+        self.model = AlphaGoZero(**model_param_dict)
         model_path = self.params['model_init_checkpoint_path']
         if os.path.exists(model_path):
             checkpoint = torch.load(model_path, map_location='cpu')
@@ -40,8 +41,8 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
         else:
             logging.warning(f'model not found at {model_path}')
 
-        self.n_actions = self.params['num_action_bins']
-        self.num_output_class = self.params['model_param_dict']['num_output_class']
+        self.num_output_class = model_param_dict['num_output_class']
+        self.historical_action_per_round = model_param_dict['historical_action_per_round']
         self.small_blind = self.params['small_blind']
         self.num_mcts_simulation_per_step = self.params['num_mcts_simulation_per_step']
         self.mcts_c_puct = self.params['mcts_c_puct']
@@ -82,7 +83,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
             self.uuid_player_name_dict[seat['uuid']] = seat['name']
 
         if self.env is None:
-            self.env = PyPokerEngineEnv(None, self.n_actions, num_players=MAX_PLAYER_NUMBER, small_blind=game_info['rule']['small_blind_amount'], big_blind=game_info['rule']['small_blind_amount'] * 2, init_value=game_info['rule']['initial_stack'], ignore_all_async_tasks=True)
+            self.env = PyPokerEngineEnv(None, self.num_output_class, historical_action_per_round=self.historical_action_per_round, num_players=MAX_PLAYER_NUMBER, small_blind=game_info['rule']['small_blind_amount'], big_blind=game_info['rule']['small_blind_amount'] * 2, init_value=game_info['rule']['initial_stack'], ignore_all_async_tasks=True)
         self.env.check_game_info(game_info, self.params)
 
     def receive_round_start_message(self, round_count, hole_card, seats):
