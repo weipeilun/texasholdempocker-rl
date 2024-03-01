@@ -43,6 +43,7 @@ class Env:
 
         # 使用round_num + player_name作为key过滤任务，减少无用计算
         self.reward_cal_task_set = set()
+        self.round_need_to_calculate_reward_set = set()
 
         # 初始化连续特征的分桶器
         self.player_init_value_to_game_init_cutter = CutByThreshold(np.array(CUTTER_DEFAULT_LIST) * MAX_PLAYER_NUMBER)
@@ -131,7 +132,7 @@ class Env:
             self._gen_cal_reward_task(acted_player_name, acted_round_num, player_hand_card, game_infoset)
 
             self.reward_cal_task_set.add(task_key)
-            logging.info(f'self.reward_cal_task_set:{self.reward_cal_task_set}')
+            self.round_need_to_calculate_reward_set.add(acted_round_num)
         if self.game_over:
             if self.settle_automatically:
                 done = True
@@ -144,13 +145,14 @@ class Env:
                     # 计算对手牌力
                     game_infoset = self._env.game_infoset
                     for current_round_num in range(acted_round_num + 1):
-                        for current_player_name in ALL_PLAYER_NAMES:
-                            if (current_round_num, current_player_name) not in self.reward_cal_task_set:
-                                logging.info(f'add calculation task: current_round_num:{current_round_num}, current_player_name:{current_player_name}, self.reward_cal_task_set:{self.reward_cal_task_set}')
-                                current_player_hand_card = self._env.info_sets[current_player_name].player_hand_cards
-                                self._gen_cal_reward_task(current_player_name, current_round_num, current_player_hand_card, game_infoset)
+                        if current_round_num in self.round_need_to_calculate_reward_set:
+                            for current_player_name in ALL_PLAYER_NAMES:
+                                if (current_round_num, current_player_name) not in self.reward_cal_task_set:
+                                    current_player_hand_card = self._env.info_sets[current_player_name].player_hand_cards
+                                    self._gen_cal_reward_task(current_player_name, current_round_num, current_player_hand_card, game_infoset)
 
                     self.reward_cal_task_set.clear()
+                    self.round_need_to_calculate_reward_set.clear()
             else:
                 done = True
                 reward = None
