@@ -296,7 +296,7 @@ if __name__ == '__main__':
                     assert finished_eval_game_id not in finished_eval_game_id_set, f'game_id:{finished_eval_game_id} repeated for finished evaluation task'
                     finished_eval_game_id_set.add(finished_eval_game_id)
 
-                    player_result_value, reward_value, net_win_value = eval_reward_dict[new_model_player_name]
+                    player_result_value, reward_value, net_win_value, card_result_value = eval_reward_dict[new_model_player_name]
                     new_model_net_win_value_sum += net_win_value
                 except Empty:
                     continue
