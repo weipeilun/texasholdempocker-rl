@@ -117,6 +117,8 @@ _PLAYER_PREFIX = 'player_'
 GET_PLAYER_NAME = lambda key: f'{_PLAYER_PREFIX}{key}'
 GET_PLAYER_ID_BY_NAME = lambda name: int(name.lstrip(_PLAYER_PREFIX))
 
+ALL_PLAYER_NAMES = [GET_PLAYER_NAME(i) for i in range(MAX_PLAYER_NUMBER)]
+
 # envs
 CARDS_FLOP = 'cards_flop'
 CARDS_TURN = 'cards_turn'

@@ -61,6 +61,7 @@ model_param_dict:
     step_size_down: 2500
     l2_weight: 0.0
     num_bins: 10
+    num_winning_prob_bins: 10
     num_acting_player_fields: 50
     save_train_data: True
     # 要保证用相对较新的数据学习，以确保模型在未在旧数据过拟合前朝向新数据收敛。

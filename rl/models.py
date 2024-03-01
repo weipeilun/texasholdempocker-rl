@@ -407,6 +407,7 @@ class TransformerCriticalModel(nn.Module):
 class TransformerAlphaGoZeroModel(nn.Module):
     def __init__(self,
                  num_bins,
+                 num_winning_prob_bins,
                  num_output_class,
                  embedding_dim=512,
                  positional_embedding_dim=128,
@@ -437,7 +438,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           do_position_embedding=True,
                                           positional_embedding_dim=positional_embedding_dim,
                                           embedding_sequence_len=embedding_sequence_len,
-                                          num_starters=3,
+                                          num_starters=5,
                                           num_acting_player_fields=num_acting_player_fields,
                                           num_other_player_fields=num_other_player_fields,
                                           device=self.device)
@@ -447,14 +448,19 @@ class TransformerAlphaGoZeroModel(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(d_model=self.actual_embedding_dim, nhead=num_transformer_head, batch_first=True)
         self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers)
 
-        self.winning_prob_logits_sigmoid = torch.nn.Sigmoid()
+        self.card_result_value_logits_sigmoid = torch.nn.Sigmoid()
 
         # 预测action的概率分布
         self.action_prob_dense = nn.Linear(self.actual_embedding_dim, num_output_class, bias=True)
         # 预测action的Q值分布
         self.reward_value_dense = nn.Linear(self.actual_embedding_dim, 1, bias=True)
-        # 预测'客观胜率'
-        self.winning_prob_dense = nn.Linear(self.actual_embedding_dim, 1, bias=True)
+        # 预测'客观胜负'
+        self.card_result_value_dense = nn.Linear(self.actual_embedding_dim, 1, bias=True)
+        # 预测玩家'客观牌力范围'
+        self.player_winning_prob_dense = nn.Linear(self.actual_embedding_dim, num_winning_prob_bins, bias=True)
+        # 预测对手'客观牌力范围'
+        # todo：当前只支持两个玩家
+        self.opponent_winning_prob_dense = nn.Linear(self.actual_embedding_dim, num_winning_prob_bins, bias=True)
 
     def forward(self, x):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
@@ -470,6 +476,10 @@ class TransformerAlphaGoZeroModel(nn.Module):
 
         reward_value_logits = self.reward_value_dense(x[:, 1, :]).squeeze(1)
 
-        winning_prob_logits = self.winning_prob_dense(x[:, 2, :])
-        winning_prob = self.winning_prob_logits_sigmoid(winning_prob_logits).squeeze(1)
-        return action_prob_logits, reward_value_logits, winning_prob
+        card_result_value_logits = self.card_result_value_logits_sigmoid(self.card_result_value_dense(x[:, 2, :])).squeeze(1)
+
+        player_winning_prob_logits = self.player_winning_prob_dense(x[:, 3, :])
+
+        opponent_winning_prob_logits = self.opponent_winning_prob_dense(x[:, 4, :])
+
+        return action_prob_logits, reward_value_logits, card_result_value_logits, player_winning_prob_logits, opponent_winning_prob_logits

@@ -320,7 +320,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
             try:
                 action_probs_list, reward_value_list, winning_prob_list, send_pid_list, send_workflow_status = send_in_queue.get(block=True, timeout=0.01)
 
-                for action_probs, reward_value, winning_prob, send_pid in zip(action_probs_list, reward_value_list, winning_prob_list, send_pid_list):
+                for action_probs, reward_value, send_pid in zip(action_probs_list, reward_value_list, winning_prob_list, send_pid_list):
                     # if send_workflow_status == WorkflowStatus.TRAINING or send_workflow_status == WorkflowStatus.TRAIN_FINISH_WAIT:
                     #     # logging.info(f'send_out_queue_map_dict_train={send_out_queue_map_dict_train}')
                     #     send_out_queue_list[send_out_queue_map_dict_train[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
@@ -328,7 +328,7 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
                     #     send_out_queue_list[send_out_queue_map_dict_eval[send_pid]].put((send_pid, (action_probs, reward_value, winning_prob)))
                     # else:
                     #     raise ValueError(f'Invalid workflow_status: {send_workflow_status.name} when batch predicting.')
-                    send_out_queue.put((send_pid, (reward_value, winning_prob), action_probs))
+                    send_out_queue.put((send_pid, reward_value, action_probs))
                     # logging.info(f'send_pid={send_pid}, action_prob={action_probs}, estimate_reward_value={reward_value}, winning_prob={winning_prob}, {action_probs.dtype}, {type(reward_value)}, {type(winning_prob)}')
 
                 logging_queue.put(len(action_probs_list))
@@ -373,24 +373,22 @@ def predict_batch_process(in_queue, out_queue_map_dict_train, out_queue_map_dict
         with torch.no_grad():
             observation_array = np.array(predict_send_batch_list)
             observation_tensor = torch.tensor(observation_array, dtype=torch.int32, device=model.device, requires_grad=False)
-            action_probs_logits_tensor, reward_value_tensor, winning_prob_tensor = predict_send_model(observation_tensor)
+            action_probs_logits_tensor, reward_value_tensor, _, _, _ = predict_send_model(observation_tensor)
             action_probs_tensor = torch.softmax(action_probs_logits_tensor, dim=1)
             action_probs_list = action_probs_tensor.cpu().numpy()
             reward_value_list = reward_value_tensor.cpu().numpy()
-            winning_prob_list = winning_prob_tensor.cpu().numpy()
 
-        predict_send_send_in_queue.put((action_probs_list, reward_value_list, winning_prob_list, predict_send_pid_list, predict_send_workflow_status))
+        predict_send_send_in_queue.put((action_probs_list, reward_value_list, predict_send_pid_list, predict_send_workflow_status))
 
     def predict_and_send_trt(data_list, data_pid_list, predict_send_send_in_queue, predict_send_workflow_status, context, bindings, batch_size, input_shape, input_dim, inputs, outputs, stream):
         context.set_input_shape("input", input_shape)
         data_np = np.asarray(data_list).reshape(input_dim)
         np.copyto(inputs[0].host, data_np)
-        action_prob_logits, reward_value, winning_prob = do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        action_prob_logits, reward_value, _, _, _ = do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
         action_prob_logits = np.copy(action_prob_logits).reshape((batch_size, -1))
         reward_value = np.copy(reward_value)
-        winning_prob = np.copy(winning_prob)
         action_probs = softmax_np(action_prob_logits)
-        predict_send_send_in_queue.put((action_probs, reward_value, winning_prob, data_pid_list, predict_send_workflow_status))
+        predict_send_send_in_queue.put((action_probs, reward_value, data_pid_list, predict_send_workflow_status))
 
     batch_list = list()
     pid_list = list()
@@ -612,11 +610,11 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
             step_counter.increment()
 
             if step_counter.get_value() >= next_train_step:
-                action_probs_loss, reward_value_loss, winning_prob_loss = model.learn()
+                action_probs_loss, reward_value_loss, card_result_loss, player_winning_prob_loss, opponent_winning_prob_loss = model.learn()
                 train_step_num += 1
 
                 if train_step_num % log_step_num == 0:
-                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, reward_value_loss={reward_value_loss}, winning_prob_loss={winning_prob_loss}')
+                    logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, reward_value_loss={reward_value_loss}, card_result_loss={card_result_loss}, player_winning_prob_loss={player_winning_prob_loss}, opponent_winning_prob_loss={opponent_winning_prob_loss}')
 
                 # 避免训练数据过多重复
                 next_train_step += train_per_step
@@ -666,10 +664,10 @@ def training_thread(model, model_path, step_counter, is_save_model, eval_model_q
                     assert train_hold_status == TrainHoldStatus.WAITING_MODEL, f'train_hold_status should be {TrainHoldStatus.WAITING_MODEL.name}, but {train_hold_status.name}'
                 logging.info(f'Train: train_step {train_step_num}, start to train.')
 
-                action_probs_loss, reward_value_loss, winning_prob_loss = None, None, None
+                action_probs_loss, reward_value_loss, card_result_loss, player_winning_prob_loss, opponent_winning_prob_loss = None, None, None, None, None
                 for _ in range(update_model_per_train_step):
-                    action_probs_loss, reward_value_loss, winning_prob_loss = model.learn()
-                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, reward_value_loss={reward_value_loss}, winning_prob_loss={winning_prob_loss}')
+                    action_probs_loss, reward_value_loss, card_result_loss, player_winning_prob_loss, opponent_winning_prob_loss = model.learn()
+                logging.info(f'train_step {train_step_num}, action_probs_loss={action_probs_loss}, reward_value_loss={reward_value_loss}, card_result_loss={card_result_loss}, player_winning_prob_loss={player_winning_prob_loss}, opponent_winning_prob_loss={opponent_winning_prob_loss}')
 
                 new_state_dict = get_state_dict_from_model(model)
                 train_update_model_signal_queue.put((train_step_num, new_state_dict))
@@ -952,7 +950,7 @@ def eval_task_begin(seed, game_id_signal_queue, eval_task_num_games=1000):
 
 
 # train流程结尾，模拟数据存入buffer（主进程）
-def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal_queue1, game_finalized_signal_queue2, env_info_dict, finished_game_info_dict, model, step_counter):
+def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal_queue1, game_finalized_signal_queue2, env_info_dict, finished_game_info_dict, model, step_counter, winning_prob_cutter):
     while True:
         if interrupt.interrupt_callback():
             logging.info("train_gather_result_thread detect interrupt")
@@ -981,11 +979,21 @@ def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal
 
                     round_num = step_info[KEY_ROUND_NUM]
                     player_name = step_info[KEY_ACTED_PLAYER_NAME]
-                    if player_name in game_info_dict and round_num in game_info_dict[player_name]:
+                    if all(current_player_name in game_info_dict for current_player_name in ALL_PLAYER_NAMES) and round_num in game_info_dict[player_name]:
                         # reward_dict = env._get_final_reward()
-                        reward_value = finished_reward_dict[player_name][1]
-                        winning_prob = game_info_dict[player_name][round_num]
-                        model.store_transition(*train_data_list, reward_value, winning_prob)
+                        _, reward_value, _, card_result_value = finished_reward_dict[player_name]
+                        # todo：当前仅支持两个玩家
+                        player_winning_prob = game_info_dict[player_name][round_num]
+                        opponent_name = None
+                        for current_player_name in ALL_PLAYER_NAMES:
+                            if current_player_name != player_name:
+                                opponent_name = current_player_name
+                                break
+                        opponent_winning_prob = game_info_dict[opponent_name][round_num]
+
+                        player_winning_prob_bin = winning_prob_cutter.cut(player_winning_prob, 1)
+                        opponent_winning_prob_bin = winning_prob_cutter.cut(opponent_winning_prob, 1)
+                        model.store_transition(*train_data_list, reward_value, card_result_value, player_winning_prob_bin, opponent_winning_prob_bin)
                         step_counter.increment()
                     else:
                         game_action_info_not_finalized_list.append(game_action_info)

@@ -22,6 +22,9 @@ class DummyAgent(object):
         self.value_win = 0
         self.game_result = GamePlayerResult.DEFAULT    # win/even/lose
 
+        # 排除action的单纯比牌结果
+        self.card_result = GamePlayerResult.DEFAULT    # win/even/lose
+
     def validate_action(self, action, current_round_min_value, raised_value):
         assert action is not None, ValueError(f"Critical: action can not be None.")
         assert self.status == PlayerStatus.ONBOARD, ValueError(f'Only onboard player can take action, current player status:{self.status}')

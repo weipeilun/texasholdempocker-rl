@@ -405,6 +405,7 @@ class GameEnv(object):
     def finish_game(self):
         self.game_over = True
 
+        # 实际游戏结果
         winner_value_dict, player_game_result_dict = self._share_value()
         for player_name, value in winner_value_dict.items():
             player = self.players[player_name]
@@ -413,6 +414,19 @@ class GameEnv(object):
         for player_name, player_game_result in player_game_result_dict.items():
             player = self.players[player_name]
             player.game_result = player_game_result
+
+        # 排除action的单纯比牌结果
+        all_player_hand_card_dict = {player_name: info_set.player_hand_cards for player_name, info_set in self.info_sets.items()}
+        winner_set = GameEnv.get_winner_set_v2(self.flop_cards, self.turn_cards, self.river_cards, all_player_hand_card_dict)
+        num_winner = len(winner_set)
+        for player_name, player in self.players.items():
+            if player_name in winner_set:
+                if num_winner == 1:
+                    player.card_result = GamePlayerResult.WIN
+                else:
+                    player.card_result = GamePlayerResult.EVEN
+            else:
+                player.card_result = GamePlayerResult.LOSE
 
         for player in self.players.values():
             player.action = None

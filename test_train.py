@@ -35,11 +35,11 @@ def train_process(params, n_loop, log_level):
     batch_size = params['model_param_dict']['batch_size']
     train_step_num = 0
     train_batch_gen = data_batch_generator(train_data_path, batch_size=batch_size, epoch=-1)
-    for observation_list, action_probs_list, action_mask_list, reward_value_list, winning_prob_list in train_batch_gen:
+    for observation_list, action_probs_list, action_mask_list, reward_value_list, card_result_value_list, player_winning_prob_bin_list, opponent_winning_prob_bin_list in train_batch_gen:
         # logging.info(f'get data for train_step {train_step_num}')
 
         try:
-            action_probs_loss, reward_value_loss, winning_prob_loss = model.learn(observation_list, action_probs_list, action_mask_list, reward_value_list, winning_prob_list)
+            action_probs_loss, reward_value_loss, winning_prob_loss = model.learn(observation_list, action_probs_list, action_mask_list, reward_value_list, card_result_value_list, player_winning_prob_bin_list, opponent_winning_prob_bin_list)
         except ValueError as e:
             logging.error(f'ValueError in model.learn: {e}')
             signal.alarm(0)

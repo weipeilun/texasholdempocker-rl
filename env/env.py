@@ -125,6 +125,7 @@ class Env:
 
         task_key = (acted_round_num, acted_player_name)
         if not self.ignore_all_async_tasks and task_key not in self.reward_cal_task_set:
+            # 计算玩家牌力
             player_hand_card = self._env.info_sets[acted_player_name].player_hand_cards
             game_infoset = self._env.game_infoset
             self._gen_cal_reward_task(acted_player_name, acted_round_num, player_hand_card, game_infoset)
@@ -139,6 +140,14 @@ class Env:
                 obs = None
 
                 if not self.ignore_all_async_tasks:
+                    # 计算对手牌力
+                    game_infoset = self._env.game_infoset
+                    for current_round_num in range(acted_round_num):
+                        for current_player_name in ALL_PLAYER_NAMES:
+                            if (current_round_num, current_player_name) not in self.reward_cal_task_set:
+                                current_player_hand_card = self._env.info_sets[current_player_name].player_hand_cards
+                                self._gen_cal_reward_task(current_player_name, current_round_num, current_player_hand_card, game_infoset)
+
                     self.reward_cal_task_set.clear()
             else:
                 done = True
@@ -199,9 +208,10 @@ class Env:
         all_player_final_reward = dict()
         for player_name, player in self._env.players.items():
             game_result_value = player.game_result.value
+            card_result_value = player.card_result.value
             net_win_value = player.value_win - player.value_bet
             reward_value = net_win_value / player.value_game_start
-            all_player_final_reward[player_name] = (game_result_value, reward_value, net_win_value)
+            all_player_final_reward[player_name] = (game_result_value, reward_value, net_win_value, card_result_value)
         return all_player_final_reward
 
     def _gen_cal_reward_task(self, player_name, current_round, player_hand_card, game_infoset):
@@ -229,10 +239,10 @@ class Env:
             for river_card in game_infoset.river_cards:
                 all_known_cards.add(river_card)
 
-        all_unknown_cards = []
-        for card in deck:
-            if card not in all_known_cards:
-                all_unknown_cards.append(card)
+        # all_unknown_cards = []
+        # for card in deck:
+        #     if card not in all_known_cards:
+        #         all_unknown_cards.append(card)
 
         # self.generate_reward_cal_task_recurrent(self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card)
         self.winning_probability_generating_task_queue.put((self.game_id, player_name, current_round, flop_cards, turn_cards, river_cards, player_hand_card))
