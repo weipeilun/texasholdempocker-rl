@@ -142,7 +142,7 @@ class Env:
                 if not self.ignore_all_async_tasks:
                     # 计算对手牌力
                     game_infoset = self._env.game_infoset
-                    for current_round_num in range(acted_round_num):
+                    for current_round_num in range(acted_round_num + 1):
                         for current_player_name in ALL_PLAYER_NAMES:
                             if (current_round_num, current_player_name) not in self.reward_cal_task_set:
                                 current_player_hand_card = self._env.info_sets[current_player_name].player_hand_cards
