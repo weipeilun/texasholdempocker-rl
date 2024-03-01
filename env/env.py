@@ -145,6 +145,7 @@ class Env:
                     for current_round_num in range(acted_round_num + 1):
                         for current_player_name in ALL_PLAYER_NAMES:
                             if (current_round_num, current_player_name) not in self.reward_cal_task_set:
+                                logging.info(f'add calculation task: current_round_num:{current_round_num} current_player_name:{current_player_name}')
                                 current_player_hand_card = self._env.info_sets[current_player_name].player_hand_cards
                                 self._gen_cal_reward_task(current_player_name, current_round_num, current_player_hand_card, game_infoset)
 
