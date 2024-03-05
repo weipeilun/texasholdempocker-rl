@@ -13,10 +13,11 @@ predict_batch_size_list: [1, 2, 4, 8, 16, 24]
 predict_feature_size_list: [117, ]
 
 # train process params
+# notice: train data are doubled in order to train 'unknown cards' (opponents' card which can not be observed in MCTS simulation)
 first_train_data_step: 500
 train_per_step: 8
-update_model_per_train_step: 200 # update_model_per_train_step * train_per_step = update_model_per_step
-eval_model_per_step: 3000 # eval_model_per_step * train_per_step = eval_model_per_step
+update_model_per_train_step: 400 # update_model_per_train_step * train_per_step = update_model_per_step
+eval_model_per_step: 6000 # eval_model_per_step * train_per_step = eval_model_per_step
 log_step_num: 200
 
 # game params
@@ -56,8 +57,8 @@ model_param_dict:
     batch_size: 64
     base_learning_rate: 0.000005
     max_learning_rate: 0.00002
-    step_size_up: 500
-    step_size_down: 2500
+    step_size_up: 1000
+    step_size_down: 5000
     l2_weight: 0.0
     num_bins: 10
     num_winning_prob_bins: 10
@@ -132,7 +133,7 @@ simulation_recurrent_params:
     - 990
 
 # checkpoints
-model_init_checkpoint_path: models/best.pth
+model_init_checkpoint_path: models/default_train.pth
 model_last_checkpoint_path: models/last.pth
 model_eval_snapshot_path_format: models/eval_%s.pth
 model_best_checkpoint_path: models/best.pth
