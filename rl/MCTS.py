@@ -119,11 +119,11 @@ class MCTS:
             if self.file_writer_choice is not None:
                 self.file_writer_choice.write(f'{i},{action_bin}\n')
 
-            observation_, reward_dict, terminated, info = new_env.step(action, action_bin)
+            observation_, reward_dict, terminated, info = new_env.step(action, action_bin, mcts_acting_player_name=acting_player_name)
             if not terminated:
                 if self.children[action_bin] is None:
                     self.children[action_bin] = self.new_child()
-                reward_dict = self.children[action_bin].expand(observation_, new_env)
+                reward_dict = self.children[action_bin].expand(observation_, new_env, acting_player_name)
             player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
             # according to AlphaGo (<Mastering_the_game_of_Go_with_deep_neural_networks_and_tree_search>), passage '4 Searching with Policy and Value Networks': V(sL) = (1 −λ)vθ(sL) + λzL
@@ -340,7 +340,7 @@ class MCTS:
         action, action_value = map_action_bin_to_actual_action_and_value_v2(action_bin, action_value_or_ranges_list, acting_player_value_left, current_round_acting_player_historical_value, delta_min_value_to_raise, self.small_blind)
         return action_bin, (action, action_value)
 
-    def expand(self, observation, env):
+    def expand(self, observation, env, root_acting_player_name):
         if self.children is None:
             self.children = [None] * self.n_actions
             self.children_w_array = np.zeros(self.n_actions)
@@ -351,11 +351,11 @@ class MCTS:
         action_prob, estimate_reward_value = self.predict(observation)
         action_bin, action = self._choose_action(action_prob, env)
 
-        observation_, reward_dict, terminated, info = env.step(action, action_bin)
+        observation_, reward_dict, terminated, info = env.step(action, action_bin, mcts_acting_player_name=root_acting_player_name)
         if not terminated:
             if self.children[action_bin] is None:
                 self.children[action_bin] = self.new_child()
-            reward_dict = self.children[action_bin].expand(observation_, env)
+            reward_dict = self.children[action_bin].expand(observation_, env, root_acting_player_name=root_acting_player_name)
         player_action_reward = self.get_player_action_reward(reward_dict, acting_player_name)
 
         self.children_w_array[action_bin] += self.model_Q_epsilon * estimate_reward_value + (1 - self.model_Q_epsilon) * player_action_reward

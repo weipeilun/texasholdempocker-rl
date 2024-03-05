@@ -205,3 +205,17 @@ def get_opponent_player_name(player_name, all_player_name_list):
         if current_player_name != player_name:
             return current_player_name
     raise ValueError(f'Error all_player_name_list={all_player_name_list}, while player_name:{player_name}')
+
+
+def mask_unknown_cards(observation):
+    new_observation = observation.copy()
+    figure_length = len(CardFigure)
+    decor_length = len(CardDecor)
+    for idx, value in enumerate(new_observation[2: 9]):
+        if value != figure_length + 1:
+            new_observation[2 + idx] = figure_length
+
+    for idx, value in enumerate(new_observation[9: 16]):
+        if value != decor_length + 1:
+            new_observation[9 + idx] = decor_length
+    return new_observation

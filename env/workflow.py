@@ -989,7 +989,14 @@ def train_gather_result_thread(game_finished_signal_queue, game_finalized_signal
 
                         player_winning_prob_bin = winning_prob_cutter.cut(player_winning_prob, 1)
                         opponent_winning_prob_bin = winning_prob_cutter.cut(opponent_winning_prob, 1)
+
                         model.store_transition(*train_data_list, reward_value, card_result_value, player_winning_prob_bin, opponent_winning_prob_bin)
+
+                        # mask cards as 'unknown cards' in order to train opponents representation in MCTS
+                        observation, action_probs, action_masks = train_data_list
+                        masked_observation = mask_unknown_cards(observation)
+                        model.store_transition(masked_observation, action_probs, action_masks, reward_value, card_result_value, player_winning_prob_bin, opponent_winning_prob_bin)
+
                         step_counter.increment()
                     else:
                         game_action_info_not_finalized_list.append(game_action_info)

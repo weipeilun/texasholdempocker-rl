@@ -102,7 +102,7 @@ class Env:
         return self.get_obs(infoset)
 
     # 修改经典step框架，异步计算reward
-    def step(self, action, action_bin):
+    def step(self, action, action_bin, mcts_acting_player_name=None):
         """
         Step function takes as input the action, which
         is a list of integers, and output the next obervation,
@@ -153,7 +153,7 @@ class Env:
             done = False
             # reward = self._get_reward(game_id, step_id, acted_player_name, self.reward_cal_task_dict)
             reward = None
-            obs = self.get_obs(self._game_infoset)
+            obs = self.get_obs(self._game_infoset, mcts_acting_player_name=mcts_acting_player_name)
         return obs, reward, done, info
 
     def new_random(self):
@@ -413,7 +413,7 @@ class Env:
     def get_valid_action_info_v2(self):
         return self._env.get_valid_action_info_v2()
 
-    def get_obs(self, infoset):
+    def get_obs(self, infoset, mcts_acting_player_name=None):
         """
         This function obtains observations with imperfect information
         from the infoset. It has three branches since we encode
@@ -442,10 +442,14 @@ class Env:
         # 注意这用相对位置，因为button位在局和局间变化，此处要刻画在该局游戏中玩家位置的强弱
         acting_player_id = get_relative_player_position(infoset.player_name, infoset.button_player_name, infoset.num_players)
 
-        hand_cards = get_card_representations(infoset.player_hand_cards, 2)
-        flop_cards = get_card_representations(infoset.flop_cards, 3)
-        turn_cards = get_card_representations(infoset.turn_cards, 1)
-        river_cards = get_card_representations(infoset.river_cards, 1)
+        # opponents' hand cards can not be observed in MCTS simulation
+        is_unknown_player_hand_cards = False
+        if mcts_acting_player_name is not None and infoset.player_name != mcts_acting_player_name:
+            is_unknown_player_hand_cards = True
+        hand_cards = get_card_representations(infoset.player_hand_cards, 2, is_unknown_cards=is_unknown_player_hand_cards)
+        flop_cards = get_card_representations(infoset.flop_cards, 3, is_unknown_cards=False)
+        turn_cards = get_card_representations(infoset.turn_cards, 1, is_unknown_cards=False)
+        river_cards = get_card_representations(infoset.river_cards, 1, is_unknown_cards=False)
 
         # sorted_cards = sort_card_representations(hand_cards, flop_cards, turn_cards, river_cards)
 
@@ -695,21 +699,27 @@ class RandomEnv(Env):
         return self.get_obs(self._game_infoset)
 
 
-def get_card_representations(list_cards, num_cards):
+def get_card_representations(list_cards, num_cards, is_unknown_cards):
     """
     A utility function that transforms the actions, i.e.,
     A list of integers into card matrix. Here we remove
     the six entries that are always zero and flatten the
     the representations.
     """
-    card_representation_list = [[len(CardFigure), len(CardDecor)] for _ in range(num_cards)]
+    card_representation_list = [[len(CardFigure) + 1, len(CardDecor) + 1] for _ in range(num_cards)]
     if list_cards is not None:
         list_cards_len = len(list_cards)
         assert list_cards_len == num_cards, f'Length of list_cards does not equal to num_cards.'
 
         for card, card_representation in zip(list_cards, card_representation_list):
-            card_representation[0] = card.figure.value
-            card_representation[1] = card.decor.value
+            # unknown cards means dealt cards which can not be observed
+            # give another slot for unknown cards
+            if is_unknown_cards:
+                card_representation[0] = len(CardFigure)
+                card_representation[1] = len(CardDecor)
+            else:
+                card_representation[0] = card.figure.value
+                card_representation[1] = card.decor.value
     return card_representation_list
 
 

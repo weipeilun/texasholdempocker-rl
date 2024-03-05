@@ -31,8 +31,8 @@ class EnvEmbedding(nn.Module):
         # starters
         # all 4 rounds: pre-flop, flop, turn, river
         # all players + `not a player`
-        # figures
-        # decors
+        # figures (all figures + unknown cards (opponents' card in MCTS simulation) + not dealt cards)
+        # decors (all decors + unknown cards (opponents' card in MCTS simulation) + not dealt cards)
         # player status
         # bins of acting player status
         # bins of other player status
@@ -40,8 +40,8 @@ class EnvEmbedding(nn.Module):
         num_action_feature_bins = get_num_feature_bins_v2()
         field_dim_list = [(1, 4),
                           (1, MAX_PLAYER_NUMBER + 1),
-                          (7, len(CardFigure) + 1),
-                          (7, len(CardDecor) + 1),
+                          (7, len(CardFigure) + 2),
+                          (7, len(CardDecor) + 2),
                           (1, len(CUTTER_DEFAULT_LIST)),
                           (1, len(CUTTER_DEFAULT_LIST)),
                           (1, len(CUTTER_DEFAULT_LIST)),
@@ -424,7 +424,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.actual_embedding_dim = int(embedding_dim + positional_embedding_dim)
         self.sqrt_of_actual_embedding_dim = math.sqrt(self.actual_embedding_dim)
 
-        # round, role, figure * 7 * 2, decor * 7 * 2, acting_player_features, other_player_features * num_other_players, round_number * historical_action_per_round * all_player_number
+        # round, role, figure * 7, decor * 7, acting_player_features, other_player_features * num_other_players, round_number * historical_action_per_round * all_player_number
         embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1) + 4 * historical_action_per_round * MAX_PLAYER_NUMBER
 
         self.env_embedding = EnvEmbedding(embedding_dim,
