@@ -50,7 +50,7 @@ model_param_dict:
     positional_embedding_dim: 128
     transformer_head_dim: 64
     num_layers: 8
-    historical_action_per_round: 6
+    historical_action_per_round: 3
     epsilon: 0.05
     epsilon_max: 0.8
     gamma: 0.9
