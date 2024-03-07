@@ -49,6 +49,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
         self.mcts_model_Q_epsilon = self.params['mcts_model_Q_epsilon']
         self.mcts_log_to_file = self.params['mcts_log_to_file']
         self.mcts_choice_method = self.params['mcts_choice_method']
+        self.tau = self.params['mcts_tau']
 
     #  we define the logic to make an action through this method. (so this method would be the core of your AI)
     def declare_action(self, valid_actions, hole_card, round_state):
@@ -59,7 +60,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
                                 model=self.model,
                                 n_simulation=self.num_mcts_simulation_per_step,
                                 c_puct=self.mcts_c_puct,
-                                tau=0,
+                                tau=self.tau,
                                 model_Q_epsilon=self.mcts_model_Q_epsilon,
                                 choice_method=self.mcts_choice_method,
                                 log_to_file=self.mcts_log_to_file,
@@ -89,8 +90,8 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
     def receive_round_start_message(self, round_count, hole_card, seats):
         self.hand_cards = sorted(map_pypokerengine_card_to_env_card(card) for card in hole_card)
         self.observation = self.env.reset(game_id=round_count, cards_dict={self.player_name: self.hand_cards})
-        self.env.check_seats(seats)
-        self.env.check_player_cards(self.player_name, self.hand_cards)
+        # self.env.check_seats(seats)
+        # self.env.check_player_cards(self.player_name, self.hand_cards)
 
     def receive_street_start_message(self, street, round_state):
         is_all_player_all_in = True
@@ -110,7 +111,7 @@ class AlphaGoZeroPlayer(BasePokerPlayer):
                 cards_dict[CARDS_RIVER] = sorted(map_pypokerengine_card_to_env_card(card) for card in round_state['community_card'][4:5])
             self.env.reinit_cards(cards_dict=cards_dict)
 
-            self.env.check_street_state(round_state, self.uuid_player_name_dict)
+            # self.env.check_street_state(round_state, self.uuid_player_name_dict)
 
     def receive_game_update_message(self, action, round_state):
         if self.has_just_taken_action:

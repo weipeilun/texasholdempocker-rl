@@ -23,14 +23,14 @@ log_step_num: 200
 # game params
 small_blind: 25
 big_blind: 50
-# puct越大，对N（mcts节点选择次数）系数影响越大，对模型概率预测影响越大，即对“应该选哪个”（直觉）的相对影响越大，对环境反馈（客观事实）的相对影响就越小。
+# larger puct means more exploration, smaller puct means more exploitation
 # 所以原则是：在保持模型和N的影响力的前提下（即结合场景调节对环境反馈的系数，这也让MCTS有效），尽量减小。1以减小num_mcts_simulation_per_step，即减少算力；2以减小模型badcase对后续训练数据的影响（对某一个类过高的直觉估计会导致过多执行该类，即在训练数据中N变大）。
 # 如何判断puct的影响力有效：
 # 1. 看N，每个类最重要保证一定的统计意义
 # 2. 看R，每个类最终要拉到很接近的数值上
 # 3. 看Q，每个类最终要符合环境的物理意义
-num_mcts_simulation_per_step: 800
-mcts_c_puct: 0.3
+num_mcts_simulation_per_step: 1200
+mcts_c_puct: 0.1
 # A large value of τ encourages more exploration by spending time visiting less-explored nodes, while a small value promotes exploitation by revisiting already explored nodes to gather more information.
 mcts_tau: 0.5
 mcts_dirichlet_noice_epsilon: 0.1  # 增加随机性，避免模型过于依赖历史数据。注意避免过大noise导致数据过脏，训练难以收敛
