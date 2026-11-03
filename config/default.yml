@@ -50,6 +50,8 @@ model_param_dict:
     positional_embedding_dim: 128
     transformer_head_dim: 64
     num_layers: 8
+    # embedding 初始化幅度（每个元素的 RMS）。auto = 一个 pre-norm 子层写入残差流的幅度 sqrt(1/18)≈0.236；null = PyTorch 默认 N(0, 1)
+    embedding_init_rms: auto
     historical_action_per_round: 3
     epsilon: 0.05
     epsilon_max: 0.8

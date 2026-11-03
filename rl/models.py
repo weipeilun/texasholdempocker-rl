@@ -8,6 +8,7 @@ import torch
 from torch import nn
 from env.constants import *
 from utils.workflow_utils import *
+from utils.torch_utils import resolve_embedding_init_rms
 
 
 class EnvEmbedding(nn.Module):
@@ -411,7 +412,8 @@ class TransformerAlphaGoZeroModel(nn.Module):
                  historical_action_per_round=6,
                  num_acting_player_fields=9,
                  num_other_player_fields=3,
-                 device='cpu'
+                 device='cpu',
+                 embedding_init_rms='auto'
                  ):
         super().__init__()
 
@@ -420,9 +422,7 @@ class TransformerAlphaGoZeroModel(nn.Module):
         self.historical_action_per_round = historical_action_per_round
         self.device = device
 
-        # to normalize embedding for transformer
         self.actual_embedding_dim = int(embedding_dim + positional_embedding_dim)
-        self.sqrt_of_actual_embedding_dim = math.sqrt(self.actual_embedding_dim)
 
         # round, role, figure * 7, decor * 7, acting_player_features, other_player_features * num_other_players, round_number * historical_action_per_round * all_player_number
         embedding_sequence_len = 2 + 2 * 7 + num_acting_player_fields + num_other_player_fields * (MAX_PLAYER_NUMBER - 1) + 4 * historical_action_per_round * MAX_PLAYER_NUMBER
@@ -438,11 +438,19 @@ class TransformerAlphaGoZeroModel(nn.Module):
                                           num_acting_player_fields=num_acting_player_fields,
                                           num_other_player_fields=num_other_player_fields,
                                           device=self.device)
+        # embedding 是 pre-norm 残差流的第一笔写入：字段 embedding 与位置 embedding 拼接后每个元素的幅度
+        # 与之后每个子层的单次写入（≈0.236，见 utils.torch_utils.PRE_NORM_FFN_WRITE_RMS）同一量级。
+        # embedding_init_rms=None 保留 PyTorch 默认 N(0, 1)
+        init_rms = resolve_embedding_init_rms(embedding_init_rms)
+        if init_rms is not None:
+            nn.init.normal_(self.env_embedding.field_embedding.weight, mean=0., std=init_rms)
+            nn.init.normal_(self.env_embedding.position_embedding.weight, mean=0., std=init_rms)
 
         assert self.actual_embedding_dim % transformer_head_dim == 0, f'embedding_dim({embedding_dim}) + positional_embedding_dim({positional_embedding_dim}) * 3 must be divisible by transformer_head_dim({transformer_head_dim}).'
         num_transformer_head = self.actual_embedding_dim // transformer_head_dim
-        encoder_layer = nn.TransformerEncoderLayer(d_model=self.actual_embedding_dim, nhead=num_transformer_head, batch_first=True)
-        self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers)
+        # pre-norm（x = x + f(LN(x))），最后一层之后再接一个 LayerNorm 供各输出头使用
+        encoder_layer = nn.TransformerEncoderLayer(d_model=self.actual_embedding_dim, nhead=num_transformer_head, batch_first=True, norm_first=True)
+        self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, norm=nn.LayerNorm(self.actual_embedding_dim))
 
         self.card_result_value_logits_sigmoid = torch.nn.Sigmoid()
 
@@ -462,8 +470,6 @@ class TransformerAlphaGoZeroModel(nn.Module):
         game_status_embedding, position_segment_embedding = self.env_embedding(x)
 
         x = torch.concat([game_status_embedding, position_segment_embedding], dim=2)
-        # to normalize embedding
-        x = x * self.sqrt_of_actual_embedding_dim
         x = self.transform_encoder(x)
         # x = x.reshape(x.shape[0], -1)
 

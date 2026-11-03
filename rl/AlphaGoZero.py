@@ -38,7 +38,8 @@ class AlphaGoZero(nn.Module, BaseRLModel):
                  save_train_data=False,
                  default_train_file_path='data/test.txt',
                  num_inference_per_step=200,
-                 num_data_print_per_inference=500
+                 num_data_print_per_inference=500,
+                 embedding_init_rms='auto'
                  ):
         super(AlphaGoZero, self).__init__()
 
@@ -60,7 +61,7 @@ class AlphaGoZero(nn.Module, BaseRLModel):
         self.epsilon_max = epsilon_max
         self.random_choice = np.arange(0, self.n_actions)
 
-        self.model = TransformerAlphaGoZeroModel(num_bins, num_winning_prob_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, transformer_head_dim, historical_action_per_round, num_acting_player_fields, num_other_player_fields, device).to(self.device)
+        self.model = TransformerAlphaGoZeroModel(num_bins, num_winning_prob_bins, num_output_class, embedding_dim, positional_embedding_dim, num_layers, transformer_head_dim, historical_action_per_round, num_acting_player_fields, num_other_player_fields, device, embedding_init_rms=embedding_init_rms).to(self.device)
         self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=max_learning_rate, weight_decay=l2_weight)
         # self.optimizer = torch.optim.RMSprop(params=[{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_weight)
         self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=base_learning_rate, max_lr=max_learning_rate, step_size_up=step_size_up, step_size_down=step_size_down, mode="triangular", cycle_momentum=False)
