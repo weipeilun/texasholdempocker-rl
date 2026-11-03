@@ -1,0 +1,14 @@
+# train_splendor.py 参数搜索（同 config/test_train.yml）：列表参数每个 loop 随机取一个值，覆盖 config/splendor_default.yml
+num_choices: 10
+
+num_iterations: 30
+# Gumbel AlphaZero 在较少模拟次数下也能保证策略改进
+num_mcts_simulation_per_step: [32, 64, 128]
+mcts_max_num_considered_actions: [16, 64]
+mcts_value_scale: [0.1, 0.3]
+
+model_param_dict:
+    embedding_dim: [256, 512]
+    num_layers: [4, 6, 8]
+    base_learning_rate: [0.00002, 0.00001]
+    max_learning_rate: [0.0002, 0.0001]

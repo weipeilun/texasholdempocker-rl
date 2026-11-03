@@ -1,4 +1,28 @@
+import math
 import torch
+
+
+# 初始化时，一个 pre-norm FFN 子层写入残差流的幅度（RMS）。
+# nn.TransformerEncoderLayer 默认 ReLU FFN，nn.Linear 默认初始化 U(±1/sqrt(fan_in))，即方差 1/(3·fan_in)：
+#   u = LayerNorm(x)          每个元素方差 1
+#   h = W1·u                  方差 d · 1/(3d) · 1 = 1/3（偏置贡献 1/(3d)，可忽略）
+#   relu(h)                   E[relu(h)^2] = 1/6
+#   W2·relu(h)                方差 ff · 1/(3ff) · 1/6 = 1/18
+# 与 d_model、dim_feedforward 都无关，RMS = sqrt(1/18) ≈ 0.236。
+PRE_NORM_FFN_WRITE_RMS = math.sqrt(1. / 18.)
+
+
+def resolve_embedding_init_rms(init_rms):
+    """'auto' -> PRE_NORM_FFN_WRITE_RMS；None -> None（保留 PyTorch 默认 N(0, 1)）；数值 -> 原值。
+
+    embedding 是残差流的第一笔写入。按 'auto' 初始化时，embedding 的幅度与之后每个子层的单次写入同一量级，
+    初始化时两者都不占主导。
+    """
+    if init_rms == 'auto':
+        return PRE_NORM_FFN_WRITE_RMS
+    if init_rms is None:
+        return None
+    return float(init_rms)
 
 
 def _clone_state_dict(state_dict):

@@ -1,0 +1,98 @@
+# 璀璨宝石 AlphaGoZero 训练默认参数（train_splendor.py）
+log_level: INFO
+seed: 20261103
+
+# workflow params（按 22 核 CPU + RTX PRO 6000 调整）
+# 瓶颈在 CPU 侧的 Python 搜索（每次模拟约 2-3ms），GPU 有富余。
+# 对局进程数：22 核留 2 个给推理进程（评估时 2 个）和主/训练进程；0 = 在训练进程内单线程对局（调试 / 无 GPU）
+num_game_process: 20
+# 每个进程的对局线程数：受 GIL 限制同一时刻只有一个线程在算，多出的线程只用来掩盖等待推理结果的延迟。
+# 约 1 + 等待时间(≈3-5ms) / 每次模拟 CPU 时间(≈2-3ms)
+num_game_thread_per_process: 4
+# 同时在途的请求最多 20 × 4 = 80 个；batch 凑不满时等 predict_batch_wait_seconds 后按现有数量推理
+predict_batch_size: 64
+predict_batch_wait_seconds: 0.002
+
+# loop params：每个 iteration = 自对弈 -> 训练 -> （每 eval_model_per_iteration 次）新模型对战最佳模型
+num_iterations: 100
+# 每次 run_games 都要新建 20+ 个进程（导入 torch、初始化 CUDA，约 10-20s），iteration 要足够大来摊薄这部分开销
+num_self_play_games_per_iteration: 512
+eval_model_per_iteration: 1
+# 评估局数，须为 6 的倍数（6 种座位安排，相邻两局同种子互补座位）。
+# 新模型胜率估计的标准差约 0.5/sqrt(局数)：48 局约 0.07，阈值 0.55 毫无统计意义；192 局约 0.036
+eval_task_num_games: 192
+eval_seed: 1000000000
+# 新模型占两个座位，势均力敌时胜率 0.5
+update_model_win_rate_thres: 0.55
+# blocked（无合法动作）/ truncated（超过 max_game_turns）的对局：value 目标全为 0；设为 True 则不进训练数据
+skip_unfinished_games: False
+max_game_turns: 400
+
+# train params
+# 自对弈数据追加写入此文件；train_with_historical_data=True 时启动先用它训练（同 main.py 的 historical_data_filename）
+train_data_path: data/splendor_history.txt
+train_with_historical_data: True
+first_train_data_step: 20000  # buffer 中数据少于此值不训练
+# 每 train_per_step 条新数据训练一步。每条数据平均被采样 batch_size / train_per_step 次：512 / 64 = 8
+train_per_step: 64
+min_train_steps_per_iteration: 1
+log_step_num: 100
+
+# MCTS params：Gumbel AlphaZero（Danihelka et al. 2022，实现对照 DeepMind mctx），算法见 rl/splendor_mcts.py
+# 不再有 c_puct / tau / Dirichlet 噪声 / 温度：探索由根节点 Gumbel 噪声提供，训练目标为改进策略 π'
+# Gumbel AlphaZero 在少量模拟下仍保证策略改进（论文在 Go / 国际象棋上用到 2-200 次）。
+# 64 次 ≈ 每局 7k 次模拟；先用 64 跑通，再在参数搜索里比较 32 / 64 / 128
+num_mcts_simulation_per_step: 64
+eval_num_mcts_simulation_per_step: 64
+# 根节点 Sequential Halving 的候选动作数 m（Gumbel-top-m 无放回采样），实际取 min(m, 合法动作数)。
+# mctx 默认 16；璀璨宝石每步合法动作中位数 26、最多约 32，m=16 会让约 1/3 的合法动作完全不被搜索，
+# 所以取 64 = 考虑全部合法动作（第一轮每个动作各访问一次；训练目标 π' 不用访问次数，不受影响）
+mcts_max_num_considered_actions: 64
+# 自对弈时的 Gumbel 噪声尺度；评估时固定为 0（贪心）
+mcts_gumbel_scale: 1.0
+# σ(q) = (mcts_maxvisit_init + max N) * mcts_value_scale * q̂，mctx 默认 0.1 / 50
+mcts_value_scale: 0.1
+mcts_maxvisit_init: 50.0
+# 是否把补全后的 Q 在节点内按合法动作 min-max 缩放到 [0, 1]
+mcts_rescale_values: True
+# AlphaGo 叶节点估值 V(s_L) = (1 - λ) * v_θ(s_L) + λ * z_L，z_L 为从叶节点用快速策略走完一局的结果。
+# 0 = AlphaGo Zero（只用价值网络，不 rollout）。>0 时每次模拟多一次 rollout（启发式策略约 50ms），显著变慢
+mcts_rollout_lambda: 0.0
+mcts_rollout_policy: 'heuristic'  # choices: 'heuristic', 'random'（splendor/bots.py）
+# 只是安全上限：每次模拟只扩展一个新节点，64 次模拟时树深一般不超过 6-8，这个值对速度和效果都没有影响
+mcts_max_search_depth: 64
+
+# model params
+model_param_dict:
+    device: 'auto'   # auto: cuda > mps > cpu
+    # 字段值 embedding 与位置 embedding（attr + owner + slot）相加，d_model = embedding_dim
+    embedding_dim: 256
+    transformer_head_dim: 64   # embedding_dim 须能被它整除
+    num_layers: 6
+    dropout: 0.1
+    # embedding（字段 + 位置之和）初始化的总幅度，内容与位置各占一半方差。
+    # auto = 一个 pre-norm 子层写入残差流的幅度 sqrt(1/18)≈0.236；null = PyTorch 默认 N(0, 1)
+    embedding_init_rms: auto
+    # FFN 中间层宽度。PyTorch 默认 2048（d=256 时为 8 倍），4 倍 d_model 是通常做法，单样本计算量从约 4.7 降到 3.0 GFLOP
+    dim_feedforward: 1024
+    # 'high' = float32 矩阵乘法走 TF32 张量核心（RTX PRO 6000 上约 2 倍于 FP32 CUDA 核心）；null = 不设置
+    float32_matmul_precision: high
+    # 训练 batch：GPU 显存充足，大 batch 提高利用率；学习率随之按 sqrt(4) 倍放大
+    batch_size: 512
+    base_learning_rate: 0.00002
+    max_learning_rate: 0.0002
+    step_size_up: 1000
+    step_size_down: 5000
+    l2_weight: 0.0
+    value_loss_weight: 1.0
+    # 回放池约为最近 5 个 iteration 的数据（每个 iteration 约 5.6 万条）
+    transition_buffer_len: 300000
+    save_train_data: True
+    num_inference_per_step: 500   # show prediction result per steps
+    num_data_print_per_inference: 3
+
+# checkpoints（%d = 参数搜索的 loop 序号）
+model_init_checkpoint_path: models/splendor_best.pth   # 存在则从它初始化
+model_save_checkpoint_path_format: models/splendor_train_%d.pth
+model_best_checkpoint_path_format: models/splendor_train_%d_best.pth
+model_eval_snapshot_path_format: models/splendor_train_%d_eval.pth
