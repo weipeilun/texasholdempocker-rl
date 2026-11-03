@@ -3,15 +3,19 @@ log_level: INFO
 seed: 20261103
 
 # workflow params（按 22 核 CPU + RTX PRO 6000 调整）
-# 瓶颈在 CPU 侧的 Python 搜索（每次模拟约 2-3ms），GPU 有富余。
-# 对局进程数：22 核留 2 个给推理进程（评估时 2 个）和主/训练进程；0 = 在训练进程内单线程对局（调试 / 无 GPU）
-num_game_process: 20
-# 每个进程的对局线程数：受 GIL 限制同一时刻只有一个线程在算，多出的线程只用来掩盖等待推理结果的延迟。
-# 约 1 + 等待时间(≈3-5ms) / 每次模拟 CPU 时间(≈2-3ms)
-num_game_thread_per_process: 4
-# 同时在途的请求最多 20 × 4 = 80 个；batch 凑不满时等 predict_batch_wait_seconds 后按现有数量推理
+# 每次模拟的 CPU 时间约 0.7ms，一次推理往返要几毫秒：对局进程大部分时间在等推理结果，
+# 所以要 (1) 每个进程多开线程，让等待期间有别的线程在算；(2) 多开推理进程，避免单个推理进程成为瓶颈。
+# 判断依据见日志：game_worker 行的 "process CPU"（目标接近 100%）与 "mean prediction round trip"，
+# predict_batch_process 行的 "process CPU"（接近 100% 说明推理进程不够）与 "mean batch"。
+# 对局进程数；0 = 在训练进程内单线程对局（调试 / 无 GPU）
+num_game_process: 18
+# 每个进程的对局线程数：约 1 + 推理往返时间 / 每次模拟 CPU 时间
+num_game_thread_per_process: 8
+# 每个模型的推理进程数：自对弈 4 个；评估有新旧两个模型，共 8 个（各分到一半请求）
+num_predict_process_per_model: 4
+# 每个推理进程的最大 batch；凑不满时等 predict_batch_wait_seconds 后按现有数量推理
 predict_batch_size: 64
-predict_batch_wait_seconds: 0.002
+predict_batch_wait_seconds: 0.001
 
 # loop params：每个 iteration = 自对弈 -> 训练 -> （每 eval_model_per_iteration 次）新模型对战最佳模型
 num_iterations: 100
@@ -27,10 +31,13 @@ update_model_win_rate_thres: 0.55
 # blocked（无合法动作）/ truncated（超过 max_game_turns）的对局：value 目标全为 0；设为 True 则不进训练数据
 skip_unfinished_games: False
 max_game_turns: 400
+# 持币上限规则：True = 官方规则，超过 10 枚须逐枚退回（动作 67-72）；False = 旧规则，禁止超过 10 枚（卡死率高得多）
+discard_over_limit: True
 
 # train params
 # 自对弈数据追加写入此文件；train_with_historical_data=True 时启动先用它训练（同 main.py 的 historical_data_filename）
-train_data_path: data/splendor_history.txt
+# 规则或编码变化后换文件名，不同版本的数据不混用（读取时也会跳过尺寸不符的样本）
+train_data_path: data/splendor_history_discard_v2.txt
 train_with_historical_data: True
 first_train_data_step: 20000  # buffer 中数据少于此值不训练
 # 每 train_per_step 条新数据训练一步。每条数据平均被采样 batch_size / train_per_step 次：512 / 64 = 8

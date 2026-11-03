@@ -10,7 +10,7 @@ RL pipeline needs on top of it, mirroring the role env/env.py plays for poker:
 * ``new_random()``: a copy of the state with a fresh RNG for the hidden information
   (future deck order), the splendor equivalent of resampling hidden cards in poker MCTS.
 
-Action space (67 actions):
+Action space (73 actions):
     0-9    take three different colors (itertools.combinations(range(5), 3))
     10-19  take two different colors   (only legal when the bank has exactly two colors left)
     20-24  take one color              (only legal when the bank has one color left)
@@ -19,6 +19,8 @@ Action space (67 actions):
     42-53  buy a market card,          index = level * 4 + slot
     54-56  buy own reserved card,      index = position in player.reserved
     57-66  choose noble N1..N10        (only in the noble phase)
+    67-72  return one token W/B/G/R/K/gold (only in the discard phase: official rule, tokens
+           above 10 are returned one at a time before nobles and the end of the turn)
 
 Buying always uses the payment that spends the least gold (the engine sorts payments by
 gold first, and the least-gold payment is unique). Voluntary gold substitution is
@@ -49,7 +51,8 @@ OFFSET_BUY_MARKET = OFFSET_RESERVE + 12               # 42
 OFFSET_BUY_RESERVED = OFFSET_BUY_MARKET + 12          # 54
 OFFSET_NOBLE = OFFSET_BUY_RESERVED + 3                # 57
 NOBLE_IDS = sorted(NOBLES, key=lambda n: int(n[1:]))
-N_ACTIONS = OFFSET_NOBLE + len(NOBLE_IDS)             # 67
+OFFSET_DISCARD = OFFSET_NOBLE + len(NOBLE_IDS)        # 67
+N_ACTIONS = OFFSET_DISCARD + NUM_COLORS + 1           # 73
 
 ACTION_NAMES = (
     [f'take3-{"".join("WBGRK"[c] for c in cs)}' for cs in TAKE3_COMBOS]
@@ -60,6 +63,7 @@ ACTION_NAMES = (
     + [f'buy-L{i // 4 + 1}S{i % 4 + 1}' for i in range(12)]
     + [f'buy-reserved{i + 1}' for i in range(3)]
     + [f'noble-{n}' for n in NOBLE_IDS]
+    + [f'discard-{"WBGRKY"[c]}' for c in range(NUM_COLORS + 1)]
 )
 assert len(ACTION_NAMES) == N_ACTIONS
 
@@ -79,7 +83,8 @@ MAX_TURN_BUCKET = 127
 CARD_FIELD_GROUPS = ['card_id'] + [f'cost_{c}' for c in COLORS] + ['card_points', 'card_bonus']
 
 VOCAB_SIZES = {
-    'phase': 2,
+    'phase': 3,                # action / noble / discard
+    'discard_needed': 4,       # tokens the acting player still has to return (0..3)
     'turn': MAX_TURN_BUCKET + 1,
     'noble_id': EMPTY_NOBLE + 1,
     'card_id': EMPTY_CARD + 1,
@@ -115,7 +120,7 @@ SLOTS = (['none']
 
 def _build_field_layout():
     """[(attr = vocab group, owner, slot)] in exactly the order encode_observation writes the fields."""
-    layout = [('phase', 'global', 'none'), ('turn', 'global', 'none')]
+    layout = [('phase', 'global', 'none'), ('discard_needed', 'global', 'none'), ('turn', 'global', 'none')]
     layout += [(f'bank_{c}', 'global', 'none') for c in COLORS + ('gold',)]
     layout += [('deck_remaining', 'global', f'deck_L{level + 1}') for level in range(3)]
     layout += [('noble_id', 'global', f'noble{i + 1}') for i in range(5)]
@@ -139,7 +144,7 @@ ATTRS = sorted(set(FIELD_GROUPS))
 FIELD_ATTR_IDX = [ATTRS.index(attr) for attr, _, _ in FIELD_LAYOUT]
 FIELD_OWNER_IDX = [OWNERS.index(owner) for _, owner, _ in FIELD_LAYOUT]
 FIELD_SLOT_IDX = [SLOTS.index(slot) for _, _, slot in FIELD_LAYOUT]
-N_OBSERVATION = len(FIELD_GROUPS)   # 268
+N_OBSERVATION = len(FIELD_GROUPS)   # 269
 
 
 def _card_tokens(card_id):
@@ -149,10 +154,15 @@ def _card_tokens(card_id):
     return [CARD_INDEX[card_id]] + [min(v, 7) for v in card.cost] + [card.points, card.bonus]
 
 
+PHASE_INDEX = {'action': 0, 'noble': 1, 'discard': 2}
+
+
 def encode_observation(game):
     """Integer observation from the acting player's point of view (seat 0 = acting player)."""
     me = game.current_player
-    obs = [0 if game.phase == 'action' else 1, min(game.turn // 2, MAX_TURN_BUCKET)]
+    held = sum(game.players[me].tokens)
+    obs = [PHASE_INDEX[game.phase], min(max(held - 10, 0), 3) if game.phase == 'discard' else 0,
+           min(game.turn // 2, MAX_TURN_BUCKET)]
     obs += [min(v, 7) for v in game.bank]
     obs += [min(len(pool), 40) for pool in game.remaining]
     nobles = [NOBLE_INDEX[n] for n in game.nobles] + [EMPTY_NOBLE] * (5 - len(game.nobles))
@@ -184,6 +194,8 @@ def action_to_index(game, action):
         return OFFSET_TAKE1 + cs[0]
     if action.kind == 'noble':
         return OFFSET_NOBLE + NOBLE_INDEX[action.noble_id]
+    if action.kind == 'discard':
+        return OFFSET_DISCARD + action.colors[0]
     for level, row in enumerate(game.market):
         for slot, card_id in enumerate(row):
             if card_id == action.card_id:
@@ -200,8 +212,9 @@ class SplendorRLEnv:
     n_observation = N_OBSERVATION
     n_players = N_PLAYERS
 
-    def __init__(self, max_turns=400, seed=None):
+    def __init__(self, max_turns=400, seed=None, discard_over_limit=True):
         self.max_turns = max_turns
+        self.discard_over_limit = discard_over_limit
         self.rng = random.Random(seed)
         self.game = None
         self.truncated = False
@@ -210,15 +223,29 @@ class SplendorRLEnv:
     # ----- lifecycle -----
     def reset(self, seed=None):
         self.rng = random.Random(seed)
-        self.game = new_game(self.rng)
+        self.game = new_game(self.rng, discard_over_limit=self.discard_over_limit)
         self.truncated = False
         self._legal_cache = None
         return self.observation()
+
+    def copy_for_search(self):
+        """Private copy of the state for one MCTS simulation. The search resolves card draws itself
+        (step(..., sample_chance=False) + resolve_chance), so the copy shares this env's RNG
+        instead of seeding a new one every simulation."""
+        env = SplendorRLEnv.__new__(SplendorRLEnv)
+        env.max_turns = self.max_turns
+        env.discard_over_limit = self.discard_over_limit
+        env.rng = self.rng
+        env.game = self.game.clone()
+        env.truncated = self.truncated
+        env._legal_cache = self._legal_cache
+        return env
 
     def new_random(self, seed=None):
         """Same public state, independent RNG for future (hidden) deck draws."""
         env = SplendorRLEnv.__new__(SplendorRLEnv)
         env.max_turns = self.max_turns
+        env.discard_over_limit = self.discard_over_limit
         env.rng = random.Random(seed)
         env.game = self.game.clone()
         env.truncated = self.truncated
@@ -251,7 +278,8 @@ class SplendorRLEnv:
         if self._legal_cache is None:
             result = dict()
             if not self.terminated:
-                for action in self.game.legal_actions():
+                # least-gold payment only: the action space has one purchase per card
+                for action in self.game.legal_actions(all_payments=False):
                     idx = action_to_index(self.game, action)
                     # engine sorts payments by gold first: keep the first (least gold) one
                     if idx not in result:
@@ -275,7 +303,8 @@ class SplendorRLEnv:
         legal = self.legal_actions()
         if action_idx not in legal:
             raise ValueError(f'illegal action {action_idx} ({ACTION_NAMES[action_idx]})')
-        self.game.step(legal[action_idx], self.rng if sample_chance else None)
+        # legal[action_idx] comes from legal_actions() of this exact state: skip the engine's re-check
+        self.game.step(legal[action_idx], self.rng if sample_chance else None, validate=False)
         self._after_transition()
         return self.terminated
 

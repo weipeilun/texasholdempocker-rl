@@ -180,7 +180,7 @@ class SplendorMCTS:
         """One fast rollout from env's state to the end of the game, outside the tree (env is consumed)."""
         game = env.game
         while game.phase in ('action', 'noble') and game.turn < env.max_turns:
-            game.step(bot_choose_action(game, self.rng, self.rollout_policy), self.rng)
+            game.step(bot_choose_action(game, self.rng, self.rollout_policy), self.rng, validate=False)
         if game.phase == 'terminal':
             return np.asarray(game.rewards(), dtype=np.float64)
         return np.zeros(N_PLAYERS, dtype=np.float64)
@@ -242,7 +242,7 @@ class SplendorMCTS:
             if self.interrupt_callback is not None and self.interrupt_callback():
                 return None
             # private copy of the root state; chance draws are chosen by the search, not by env.rng
-            self._simulate_decision(self.root, env.new_random(), 0)
+            self._simulate_decision(self.root, env.copy_for_search(), 0)
 
         completed_q = self._completed_qvalues(self.root)
         considered_visit = self.root.n.max()

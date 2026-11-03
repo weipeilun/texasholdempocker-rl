@@ -70,7 +70,7 @@ def play_game(game_id, seed, predictor_by_seat, params, mode, stop_event=None):
     Returns None when interrupted.
     """
     is_train = mode == 'train'
-    env = SplendorRLEnv(max_turns=params['max_game_turns'])
+    env = SplendorRLEnv(max_turns=params['max_game_turns'], discard_over_limit=params.get('discard_over_limit', True))
     env.reset(seed)
 
     def should_stop():
@@ -120,7 +120,7 @@ def play_game(game_id, seed, predictor_by_seat, params, mode, stop_event=None):
 
 
 # ============================================================================ predict process
-def predict_batch_process(server_id, model_param_dict, state_dict, in_queue, result_conn_table, predict_batch_size, predict_batch_wait_seconds, stop_event, log_level):
+def predict_batch_process(server_id, model_param_dict, state_dict, in_queue, result_conn_table, predict_batch_size, predict_batch_wait_seconds, stop_event, log_level, params_log_interval=60.):
     """Batched inference for one model version (best or new), PyTorch only.
 
     result_conn_table[worker_id][thread_id]: write end of that game thread's own result pipe.
@@ -134,9 +134,20 @@ def predict_batch_process(server_id, model_param_dict, state_dict, in_queue, res
     model.eval()
     logging.info(f'predict_batch_process {server_id} pid {os.getpid()} started on {model.device}')
 
-    num_predicted = 0
-    last_log_time = time.time()
+    num_predicted, num_batches, forward_seconds = 0, 0, 0.
+    last_log_time, last_cpu_time = time.time(), time.process_time()
     while not stop_event.is_set() and not interrupt.interrupt_callback():
+        now = time.time()
+        if now - last_log_time > params_log_interval:
+            elapsed = now - last_log_time
+            cpu_time = time.process_time()
+            logging.info(f'predict_batch_process {server_id}: {num_predicted / elapsed:.0f} predictions/s, '
+                         f'mean batch {num_predicted / max(num_batches, 1):.1f}, '
+                         f'GPU forward {1000 * forward_seconds / max(num_batches, 1):.2f} ms/batch '
+                         f'({100 * forward_seconds / elapsed:.0f}% of time), '
+                         f'process CPU {100 * (cpu_time - last_cpu_time) / elapsed:.0f}%, in_queue qsize {_qsize(in_queue)}')
+            num_predicted, num_batches, forward_seconds = 0, 0, 0.
+            last_log_time, last_cpu_time = now, cpu_time
         try:
             first = in_queue.get(block=True, timeout=0.1)
         except Empty:
@@ -150,16 +161,13 @@ def predict_batch_process(server_id, model_param_dict, state_dict, in_queue, res
                 break
 
         worker_ids, thread_ids, observations, masks = zip(*batch)
+        forward_begin = time.time()
         probs, values = model.predict_batch(observations, masks)
+        forward_seconds += time.time() - forward_begin
         for worker_id, thread_id, p, v in zip(worker_ids, thread_ids, probs, values):
             result_conn_table[worker_id][thread_id].send((p, v))
-
         num_predicted += len(batch)
-        now = time.time()
-        if now - last_log_time > 120:
-            logging.info(f'predict_batch_process {server_id}: {num_predicted / (now - last_log_time):.1f} predictions/s, in_queue qsize:{_qsize(in_queue)}')
-            num_predicted = 0
-            last_log_time = now
+        num_batches += 1
     logging.info(f'predict_batch_process {server_id} exit')
 
 
@@ -179,26 +187,50 @@ def game_worker_process(worker_id, params, mode, task_queue, result_queue, predi
     """
     init_logging(log_level)
     num_threads = len(result_conn_list)
+    # per-thread [number of predictions, seconds spent waiting for them]; summed by the monitor thread
+    wait_stats = [[0, 0.] for _ in range(num_threads)]
 
     def should_stop():
         return stop_event.is_set() or interrupt.interrupt_callback()
 
     def make_predictor(thread_id, server_id):
         result_conn = result_conn_list[thread_id]
+        stats = wait_stats[thread_id]
 
         def predictor(observation, mask):
-            predict_in_queue_list[server_id].put((worker_id, thread_id, observation, mask))
             begin_time = time.time()
+            predict_in_queue_list[server_id].put((worker_id, thread_id, observation, mask))
+            warn_time = begin_time
             # poll() releases the GIL while waiting
             while not result_conn.poll(0.1):
                 if should_stop():
                     # 返回均匀分布，MCTS 会在下一次检查中断时退出，本线程不再发请求
                     return mask / mask.sum(), np.zeros(4, dtype=np.float32)
-                if time.time() - begin_time > 60:
+                if time.time() - warn_time > 60:
                     logging.warning(f'game_worker {worker_id} thread {thread_id} waited prediction for {time.time() - begin_time:.0f}s')
-                    begin_time = time.time()
-            return result_conn.recv()
+                    warn_time = time.time()
+            result = result_conn.recv()
+            stats[0] += 1
+            stats[1] += time.time() - begin_time
+            return result
         return predictor
+
+    def monitor_thread(interval=60.):
+        last_time, last_cpu_time = time.time(), time.process_time()
+        last_count, last_wait = 0, 0.
+        while not should_stop():
+            time.sleep(1.)
+            now = time.time()
+            if now - last_time < interval:
+                continue
+            count = sum(s[0] for s in wait_stats)
+            wait = sum(s[1] for s in wait_stats)
+            cpu_time = time.process_time()
+            n = count - last_count
+            logging.info(f'game_worker {worker_id}: process CPU {100 * (cpu_time - last_cpu_time) / (now - last_time):.0f}%, '
+                         f'{n / (now - last_time):.0f} predictions/s, '
+                         f'mean prediction round trip {1000 * (wait - last_wait) / max(n, 1):.2f} ms')
+            last_time, last_cpu_time, last_count, last_wait = now, cpu_time, count, wait
 
     def game_loop_thread(thread_id):
         while not should_stop():
@@ -216,6 +248,7 @@ def game_worker_process(worker_id, params, mode, task_queue, result_queue, predi
             result['seat_server_ids'] = seat_server_ids
             result_queue.put(result)
 
+    threading.Thread(target=monitor_thread, daemon=True).start()
     threads = [threading.Thread(target=game_loop_thread, args=(tid,), daemon=True) for tid in range(num_threads)]
     for t in threads:
         t.start()
@@ -227,8 +260,12 @@ def game_worker_process(worker_id, params, mode, task_queue, result_queue, predi
 
 # ============================================================================ run a batch of games
 def run_games(params, state_dict_list, tasks, mode, log_level):
-    """Play `tasks` = [(game_id, seed, seat_server_ids)], one predict server per state dict.
+    """Play `tasks` = [(game_id, seed, seat_server_ids)], seat_server_ids indexing state_dict_list.
 
+    Each model gets num_predict_process_per_model predict processes; game worker w sends the
+    requests of model m to predict process (m, w % num_predict_process_per_model). Several predict
+    processes spread the per-request Python work (queue, pickling, batching) over cores and keep
+    the GPU busy with overlapping batches.
     num_game_process == 0 plays everything in this process (debug / no GPU).
     """
     model_param_dict = params['model_param_dict']
@@ -258,7 +295,9 @@ def run_games(params, state_dict_list, tasks, mode, log_level):
     stop_event = ctx.Event()
     task_queue = ctx.Queue()
     result_queue = ctx.Queue()
-    predict_in_queue_list = [ctx.Queue() for _ in state_dict_list]
+    num_predict_per_model = max(1, min(params.get('num_predict_process_per_model', 1), num_game_process))
+    # predict_in_queue_table[model][k]: request queue of the k-th predict process of that model
+    predict_in_queue_table = [[ctx.Queue() for _ in range(num_predict_per_model)] for _ in state_dict_list]
     # 每个对局线程一条专属的单向回传 pipe：推理进程持有写端，对局线程持有读端
     _ensure_fd_limit(4 * num_game_process * num_threads + 256)
     pipes = [[ctx.Pipe(duplex=False) for _ in range(num_threads)] for _ in range(num_game_process)]
@@ -266,12 +305,15 @@ def run_games(params, state_dict_list, tasks, mode, log_level):
     result_send_conn_table = [[send_conn for _, send_conn in row] for row in pipes]
 
     processes = list()
-    for server_id, state_dict in enumerate(state_dict_list):
-        p = ctx.Process(target=predict_batch_process, args=(server_id, model_param_dict, state_dict, predict_in_queue_list[server_id], result_send_conn_table, params['predict_batch_size'], params['predict_batch_wait_seconds'], stop_event, log_level), daemon=True)
-        p.start()
-        processes.append(p)
+    for model_id, state_dict in enumerate(state_dict_list):
+        for k in range(num_predict_per_model):
+            p = ctx.Process(target=predict_batch_process, args=(f'{model_id}.{k}', model_param_dict, state_dict, predict_in_queue_table[model_id][k], result_send_conn_table, params['predict_batch_size'], params['predict_batch_wait_seconds'], stop_event, log_level), daemon=True)
+            p.start()
+            processes.append(p)
+    num_predict_processes = len(processes)
     for worker_id in range(num_game_process):
-        p = ctx.Process(target=game_worker_process, args=(worker_id, params, mode, task_queue, result_queue, predict_in_queue_list, result_recv_conn_table[worker_id], stop_event, log_level), daemon=True)
+        worker_predict_queues = [predict_in_queue_table[model_id][worker_id % num_predict_per_model] for model_id in range(len(state_dict_list))]
+        p = ctx.Process(target=game_worker_process, args=(worker_id, params, mode, task_queue, result_queue, worker_predict_queues, result_recv_conn_table[worker_id], stop_event, log_level), daemon=True)
         p.start()
         processes.append(p)
 
@@ -287,7 +329,7 @@ def run_games(params, state_dict_list, tasks, mode, log_level):
         try:
             result = result_queue.get(block=True, timeout=1.)
         except Empty:
-            if not any(p.is_alive() for p in processes[len(state_dict_list):]):
+            if not any(p.is_alive() for p in processes[num_predict_processes:]):
                 logging.error('all game workers exited before finishing the tasks')
                 break
             continue

@@ -274,7 +274,15 @@ def save_model(model, path):
 
 
 def load_model(model, path, load_optimizer=True):
+    """Returns True if loaded. A checkpoint of another architecture / action space is skipped with a warning."""
     checkpoint = torch.load(path, map_location='cpu')
+    own_state = model.state_dict()
+    mismatched = [k for k, v in checkpoint['model'].items() if k in own_state and own_state[k].shape != v.shape]
+    if mismatched:
+        logging.warning(f'{path} does not match the current model ({len(mismatched)} tensors with other shapes, '
+                        f'e.g. {mismatched[:3]}): probably saved before an observation / action-space change. '
+                        f'Not loaded, training starts from a fresh model.')
+        return False
     model.load_state_dict(checkpoint['model'], strict=False)
     if load_optimizer and 'optimizer' in checkpoint:
         try:
@@ -282,21 +290,33 @@ def load_model(model, path, load_optimizer=True):
         except ValueError as e:
             logging.warning(f'optimizer state not loaded from {path}: {e}')
     logging.info(f'model loaded from {path}')
+    return True
 
 
 def splendor_train_data_generator(filename, epoch=1):
-    """Reads the text dump written by SplendorAlphaGoZero.store_transition."""
+    """Reads the text dump written by SplendorAlphaGoZero.store_transition.
+
+    Samples whose observation / action / value sizes differ from the current
+    splendor.rl_env layout (written before a rule or encoding change) are skipped and counted.
+    """
     current_epoch = 1
     while True:
+        num_skipped = 0
         with open(filename, 'r', encoding='UTF-8') as f:
             while True:
                 lines = [f.readline() for _ in range(5)]
                 if any(line == '' for line in lines[:4]):
                     break
-                yield (np.asarray([int(v) for v in lines[0].rstrip().split(',')], dtype=np.int32),
-                       np.asarray([float(v) for v in lines[1].rstrip().split(',')], dtype=np.float32),
-                       np.asarray([int(v) for v in lines[2].rstrip().split(',')], dtype=bool),
-                       np.asarray([float(v) for v in lines[3].rstrip().split(',')], dtype=np.float32))
+                sample = (np.asarray([int(v) for v in lines[0].rstrip().split(',')], dtype=np.int32),
+                          np.asarray([float(v) for v in lines[1].rstrip().split(',')], dtype=np.float32),
+                          np.asarray([int(v) for v in lines[2].rstrip().split(',')], dtype=bool),
+                          np.asarray([float(v) for v in lines[3].rstrip().split(',')], dtype=np.float32))
+                if (len(sample[0]), len(sample[1]), len(sample[2]), len(sample[3])) != (N_OBSERVATION, N_ACTIONS, N_ACTIONS, N_PLAYERS):
+                    num_skipped += 1
+                    continue
+                yield sample
+        if num_skipped:
+            logging.warning(f'{filename}: skipped {num_skipped} samples written with another observation / action layout')
         if 0 <= epoch <= current_epoch:
             break
         current_epoch += 1
