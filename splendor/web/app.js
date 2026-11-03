@@ -28,6 +28,7 @@ function actionText(a) {
   if (a.kind === "reserve") return "公开预留 " + a.card_id;
   if (a.kind === "buy") return `购买 ${a.card_id}（${paymentText(a.payment)}）`;
   if (a.kind === "noble") return "选择贵族 " + a.noble_id;
+  if (a.kind === "discard") return "退回 " + names[a.colors[0]];
   return "未知动作";
 }
 function stop() {
@@ -143,7 +144,11 @@ function renderBank() {
     : "选择三种不同颜色，或连点同色选择两枚";
   const held = s.players[s.current_player].tokens.reduce((a, b) => a + b, 0);
   $("token-hint").textContent =
-    `玩家 ${s.current_player + 1} 持币 ${held}/10 · 剩余容量 ${10 - held}`;
+    s.phase === "discard"
+      ? `玩家 ${s.current_player + 1} 持币 ${held}/10 · 还需退回 ${held - 10} 枚`
+      : s.discard_over_limit
+        ? `玩家 ${s.current_player + 1} 持币 ${held}/10 · 超过 10 枚须在回合结束前退回`
+        : `玩家 ${s.current_player + 1} 持币 ${held}/10 · 剩余容量 ${10 - held}`;
 }
 function renderDecision() {
   const s = view.state,
@@ -152,7 +157,19 @@ function renderDecision() {
     box.innerHTML = `<h3>${s.phase === "blocked" ? "玩家 " + (s.current_player + 1) + " 无合法动作 · 僵局停止" : "胜者：" + s.winners.map((i) => "玩家 " + (i + 1)).join("、")}</h3><p>共 ${s.turn} 次玩家行动。${s.phase === "blocked" ? "无跳过操作，本局不判胜负。" : ""}可导出对局复盘，或用相同种子重新开始。</p>`;
     return;
   }
-  if (s.phase === "noble") {
+  if (s.phase === "discard") {
+    const tokens = s.players[s.current_player].tokens;
+    const held = tokens.reduce((a, b) => a + b, 0);
+    box.innerHTML =
+      `<h3>退回筹码</h3><p>持币 ${held} 枚，超过上限，还需退回 ${held - 10} 枚。可退回任意颜色，包括刚拿的和黄金；退完后结算贵族并结束回合。</p><div class="payment-list">` +
+      view.actions
+        .map(
+          (a, i) =>
+            `<button class="payment-option" data-action="${i}"><span class="chip" style="--gem:${gem(a.colors[0])}"><i class="dot"></i>${tokens[a.colors[0]]}</span> 退回 1 枚${names[a.colors[0]]}</button>`,
+        )
+        .join("") +
+      "</div>";
+  } else if (s.phase === "noble") {
     box.innerHTML =
       "<h3>选择一位贵族</h3><p>本回合尚未结束；必须选择一位满足条件的贵族。</p>" +
       view.actions
@@ -199,7 +216,7 @@ function render() {
       ? `模拟停止：玩家 ${current + 1} 无合法动作，不允许跳过，本局未结算。`
       : s.phase === "terminal"
         ? `对局结束：${s.winners.map((i) => "玩家 " + (i + 1)).join("、")} 获胜。`
-        : `轮到玩家 ${current + 1}${s.phase === "noble" ? "选择贵族" : "行动"} · 当前持币 ${s.players[current].tokens.reduce((a, b) => a + b, 0)}/10`;
+        : `轮到玩家 ${current + 1}${s.phase === "noble" ? "选择贵族" : s.phase === "discard" ? "退回筹码" : "行动"} · 当前持币 ${s.players[current].tokens.reduce((a, b) => a + b, 0)}/10`;
   $("nobles").innerHTML = s.nobles
     .map(
       (id) =>

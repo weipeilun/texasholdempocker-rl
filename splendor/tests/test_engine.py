@@ -61,7 +61,8 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(CARDS["black-L1-05"].cost, (0, 0, 1, 3, 1))
 
     def test_hard_cap_eight_nine_ten_and_atomic_rejection(self):
-        g = self.game
+        # Legacy rule: discard_over_limit=False.
+        g = new_game(self.rng, discard_over_limit=False)
         set_tokens(g, 0, [2, 2, 2, 2, 0, 0])
         actions = g.legal_actions()
         self.assertFalse(any(a.kind == "take" and len(set(a.colors)) == 3 for a in actions))
@@ -275,7 +276,8 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(g.rewards(), [.5, .5, 0, 0])
 
     def test_no_pass_action_and_blocked_player_stops_without_scoring(self):
-        g = self.game
+        # Legacy hard cap: with the discard rule this player could still take tokens.
+        g = new_game(self.rng, discard_over_limit=False)
         self.assertNotIn(Action("pass"), g.legal_actions())
         # Player 2 has 10 blue/green/black tokens, three costly reserves and
         # cannot buy any of the exposed high-cost cards. Player 1 still acts.
@@ -319,10 +321,10 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(replay.game.key(), before)
 
     def test_random_and_heuristic_games_preserve_all_invariants(self):
-        for seed in range(30):
+        for seed in range(60):
             rng = random.Random(seed)
             policy_rng = random.Random(seed + 1000)
-            game = new_game(rng)
+            game = new_game(rng, discard_over_limit=seed < 30)
             policy = "random" if seed % 2 else "heuristic"
             for _ in range(1200):
                 if game.phase in ("terminal", "blocked"):
@@ -334,6 +336,97 @@ class RulesTest(unittest.TestCase):
                 self.assertAlmostEqual(sum(game.rewards()), 1)
             else:
                 self.assertEqual(game.winners, [])
+
+
+
+class DiscardRuleTest(unittest.TestCase):
+    """Official rule (default): exceed 10, then return tokens one at a time before the turn ends."""
+
+    def setUp(self):
+        self.rng = random.Random(7)
+        self.game = new_game(self.rng)
+        self.assertTrue(self.game.discard_over_limit)
+
+    def test_take_above_ten_enters_discard_and_turn_waits(self):
+        g = self.game
+        set_tokens(g, 0, [2, 2, 2, 2, 1, 0])
+        self.assertIn(Action("take", colors=(0, 1, 2)), g.legal_actions())
+        self.assertIn(Action("take", colors=(3, 3)), g.legal_actions())
+        g.step(Action("take", colors=(0, 1, 2)), self.rng)
+        self.assertEqual(sum(g.players[0].tokens), 12)
+        self.assertEqual((g.phase, g.current_player, g.turn), ("discard", 0, 0))
+        self.assertTrue(all(a.kind == "discard" for a in g.legal_actions()))
+        self.assertEqual({a.colors[0] for a in g.legal_actions()}, {0, 1, 2, 3, 4})
+        g.assert_valid()
+        g.step(Action("discard", colors=(4,)), self.rng)
+        self.assertEqual((g.phase, g.current_player, g.turn), ("discard", 0, 0))
+        g.step(Action("discard", colors=(0,)), self.rng)
+        self.assertEqual(g.players[0].tokens, [2, 3, 3, 2, 0, 0])
+        self.assertEqual((g.phase, g.current_player, g.turn), ("action", 1, 1))
+        g.assert_valid()
+
+    def test_can_return_tokens_just_taken_and_gold(self):
+        g = self.game
+        set_tokens(g, 0, [2, 2, 2, 2, 1, 1])
+        g.step(Action("take", colors=(0, 1, 2)), self.rng)
+        actions = g.legal_actions()
+        self.assertEqual({a.colors[0] for a in actions}, {0, 1, 2, 3, 4, 5})
+        self.assertNotIn(Action("take", colors=(0, 1, 3)), actions)
+        bank_gold = g.bank[5]
+        g.step(Action("discard", colors=(5,)), self.rng)
+        self.assertEqual(g.bank[5], bank_gold + 1)
+        g.step(Action("discard", colors=(0,)), self.rng)
+        g.step(Action("discard", colors=(1,)), self.rng)
+        self.assertEqual(g.players[0].tokens, [2, 2, 3, 2, 1, 0])
+        g.assert_valid()
+
+    def test_discard_actions_only_in_discard_phase(self):
+        g = self.game
+        set_tokens(g, 0, [2, 2, 2, 0, 0, 0])
+        with self.assertRaises(ValueError):
+            g.step(Action("discard", colors=(0,)), self.rng)
+
+    def test_reserve_with_gold_at_ten_refills_then_discards(self):
+        g = self.game
+        set_tokens(g, 0, [2, 2, 2, 2, 2, 0])
+        action = next(a for a in g.legal_actions() if a.kind == "reserve")
+        chance = g.apply(action)
+        self.assertEqual(chance.phase, "chance")
+        self.assertEqual(sum(chance.players[0].tokens), 11)
+        chance.assert_valid()
+        chance.resolve_chance(chance.chance_outcomes()[0][0])
+        self.assertEqual((chance.phase, chance.current_player), ("discard", 0))
+        chance.step(Action("discard", colors=(5,)), self.rng)
+        self.assertEqual((chance.phase, chance.current_player, chance.turn), ("action", 1, 1))
+        chance.assert_valid()
+
+    def test_nobles_and_fifteen_points_are_settled_after_returning(self):
+        g = self.game
+        g.nobles = ["N1", "N2", "N3", "N4", "N5"]
+        give_bonuses(g, [4, 4, 0, 0, 0])
+        give_points(g, [5, 4, 3], 0)
+        set_tokens(g, 0, [2, 2, 2, 2, 1, 0])
+        g.step(Action("take", colors=(0, 1, 2)), self.rng)
+        self.assertEqual(g.phase, "discard")
+        self.assertEqual(g.players[0].nobles, [])
+        for color in (0, 1):
+            g.step(Action("discard", colors=(color,)), self.rng)
+        self.assertEqual(g.players[0].nobles, ["N1"])
+        self.assertEqual((g.phase, g.current_player, g.turn), ("terminal", 0, 1))
+        g.assert_valid()
+
+    def test_discard_rule_blocks_far_less_than_hard_cap(self):
+        blocked = {True: 0, False: 0}
+        for rule in blocked:
+            for seed in range(60):
+                rng, policy_rng = random.Random(seed), random.Random(seed + 1)
+                game = new_game(rng, discard_over_limit=rule)
+                while game.phase not in ("terminal", "blocked") and game.turn < 600:
+                    game.step(choose_action(game, policy_rng, "random"), rng)
+                blocked[rule] += game.phase == "blocked"
+        # Random play: about 55% blocked with the hard cap, about 13% with the discard rule.
+        self.assertLess(blocked[True] * 3, blocked[False])
+        # What is left needs an empty colour bank, three reserves and no affordable card.
 
 
 if __name__ == "__main__":

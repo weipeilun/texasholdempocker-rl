@@ -5,7 +5,7 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 
 from splendor.engine import Action
-from splendor.server import SCHEMA, Session, make_handler
+from splendor.server import SCHEMA, SCHEMA_HARD_CAP, Session, make_handler
 
 
 class ServerTest(unittest.TestCase):
@@ -69,6 +69,23 @@ class ServerTest(unittest.TestCase):
         self.post("/api/undo")
         self.post("/api/undo")
         self.assertEqual(self.session.game.key(), initial)
+
+    def test_legacy_hard_cap_save_replays_with_its_own_rule(self):
+        legacy = Session(5, discard_over_limit=False)
+        policy = __import__("random").Random(3)
+        from splendor.bots import choose_action
+        for _ in range(40):
+            if legacy.game.phase in ("terminal", "blocked"):
+                break
+            legacy.perform(choose_action(legacy.game, policy))
+        record = legacy.record()
+        self.assertEqual(record["schema"], SCHEMA_HARD_CAP)
+        self.assertEqual(self.post("/api/import", {"record": record})[0], 200)
+        self.assertFalse(self.session.game.discard_over_limit)
+        self.assertEqual(self.session.game.key(), legacy.game.key())
+        self.assertEqual(self.post("/api/new", {"seed": 1})[0], 200)
+        self.assertFalse(self.session.game.discard_over_limit)
+        self.session.discard_over_limit = True
 
     def test_stale_write_and_invalid_action_are_rejected_without_mutation(self):
         version = self.session.version

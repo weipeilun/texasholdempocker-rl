@@ -21,9 +21,18 @@ def choose_action(game, rng=None, policy="heuristic"):
     def distance(card, tokens):
         return max(0, sum(max(0, c - b - t) for c, b, t in zip(card.cost, bonuses, tokens)) - tokens[5])
 
+    def hand_value(tokens):
+        return sum(sorted(((1 + card.points * .4) / (1 + distance(card, tokens)) for card in targets),
+                          reverse=True)[:3])
+
     def score(action):
         if action.kind == "noble":
             return 100
+        if action.kind == "discard":
+            # Return the token whose loss hurts the progress towards the best targets least.
+            tokens = p.tokens[:]
+            tokens[action.colors[0]] -= 1
+            return hand_value(tokens)
         if action.kind == "buy":
             card = CARDS[action.card_id]
             after = bonuses[:]

@@ -1,5 +1,11 @@
 """Dependency-free rules engine. Randomness belongs to the caller, never the state.
 
+Token limit (Game.discard_over_limit):
+    True  (default, official rule): a player may go above 10 tokens by taking or reserving and must
+          then return tokens one at a time ("discard" phase, any colour incl. gold and the ones just
+          taken) until holding 10, before nobles are checked and the turn ends.
+    False (legacy house rule): any action that would exceed 10 tokens is illegal; no returning.
+
 Use apply(action, rng) for a sampled transition, or apply(action) to stop at a
 chance node and enumerate chance_outcomes()/resolve_chance(card_id). Search
 branches must supply independent RNGs; cloning a state cannot reveal a deck order.
@@ -106,9 +112,17 @@ class Game:
     pending_refill: tuple[int, int] | None = None
     end_reason: str | None = None
     winners: list[int] = field(default_factory=list)
+    discard_over_limit: bool = True
 
     def clone(self):
-        return copy.deepcopy(self)
+        """Independent copy (explicit field copy; several times faster than copy.deepcopy)."""
+        return Game(
+            players=[Player(p.tokens[:], p.purchased[:], p.reserved[:], p.nobles[:]) for p in self.players],
+            bank=self.bank[:], market=[row[:] for row in self.market],
+            remaining=[pool[:] for pool in self.remaining], nobles=self.nobles[:],
+            current_player=self.current_player, turn=self.turn, phase=self.phase,
+            pending_refill=self.pending_refill, end_reason=self.end_reason,
+            winners=self.winners[:], discard_over_limit=self.discard_over_limit)
 
     def key(self):
         """Canonical Markov key for transpositions; no turn history or RNG state."""
@@ -121,10 +135,11 @@ class Game:
             self.end_reason, tuple(self.winners),
         )
 
-    def payments(self, card_id):
+    def payments(self, card_id, bonuses=None):
         """All distinct legal payments, including voluntary gold substitution."""
         p = self.players[self.current_player]
-        cost = [max(0, c - b) for c, b in zip(CARDS[card_id].cost, p.bonuses)]
+        bonuses = p.bonuses if bonuses is None else bonuses
+        cost = [max(0, c - b) for c, b in zip(CARDS[card_id].cost, bonuses)]
         minimum_gold = sum(max(0, c - t) for c, t in zip(cost, p.tokens))
         if minimum_gold > p.tokens[5]:
             return []
@@ -142,28 +157,52 @@ class Game:
         bonuses = self.players[self.current_player].bonuses
         return [n for n in self.nobles if all(b >= c for b, c in zip(bonuses, NOBLES[n].cost))]
 
-    def legal_actions(self):
+    def legal_actions(self, all_payments=True):
+        """all_payments=False lists only the least-gold payment of each purchase (cheaper; used by RL)."""
         if self.phase in ("chance", "terminal", "blocked"):
             return []
         if self.phase == "noble":
             return [Action("noble", noble_id=n) for n in self.eligible_nobles()]
         p = self.players[self.current_player]
+        if self.phase == "discard":
+            return [Action("discard", colors=(c,)) for c in range(6) if p.tokens[c] > 0]
         held = sum(p.tokens)
+
+        def fits(extra):
+            return self.discard_over_limit or held + extra <= 10
+
         result = []
         available = [c for c in range(5) if self.bank[c] > 0]
         # Fewer than three only when fewer than three colors remain in the bank.
         count = min(3, len(available))
-        if count and held + count <= 10:
+        if count and fits(count):
             result.extend(Action("take", colors=cs) for cs in combinations(available, count))
-        if held + 2 <= 10:
+        if fits(2):
             result.extend(Action("take", colors=(c, c)) for c in range(5) if self.bank[c] >= 4)
         market_ids = [c for row in self.market for c in row if c is not None]
-        if len(p.reserved) < 3 and held + int(self.bank[5] > 0) <= 10:
+        if len(p.reserved) < 3 and fits(int(self.bank[5] > 0)):
             result.extend(Action("reserve", card_id=c) for c in market_ids)
+        bonuses = p.bonuses
         for card_id in market_ids + p.reserved:
-            result.extend(Action("buy", card_id=card_id, payment=payment)
-                          for payment in self.payments(card_id))
+            if all_payments:
+                result.extend(Action("buy", card_id=card_id, payment=payment)
+                              for payment in self.payments(card_id, bonuses))
+            else:
+                payment = self.least_gold_payment(card_id, bonuses)
+                if payment is not None:
+                    result.append(Action("buy", card_id=card_id, payment=payment))
         return result
+
+    def least_gold_payment(self, card_id, bonuses=None):
+        """payments(card_id)[0] without enumerating the others; None if unaffordable."""
+        p = self.players[self.current_player]
+        bonuses = p.bonuses if bonuses is None else bonuses
+        cost = [max(0, c - b) for c, b in zip(CARDS[card_id].cost, bonuses)]
+        colored = [min(c, t) for c, t in zip(cost, p.tokens)]
+        gold = sum(cost) - sum(colored)
+        if gold > p.tokens[5]:
+            return None
+        return tuple(colored) + (gold,)
 
     def chance_outcomes(self):
         if self.phase != "chance":
@@ -195,11 +234,21 @@ class Game:
         result.step(action, rng)
         return result
 
-    def step(self, action, rng=None):
-        """Validated in-place transition. Invalid actions leave this state unchanged."""
-        if action not in self.legal_actions():
-            raise ValueError("非法动作：库存、支付、阶段或十枚硬上限不满足")
+    def step(self, action, rng=None, validate=True):
+        """Validated in-place transition. Invalid actions leave this state unchanged.
+
+        validate=False skips the legality check; only for actions taken from legal_actions() of this
+        exact state (search/self-play hot path).
+        """
+        if validate and action not in self.legal_actions():
+            raise ValueError("非法动作：库存、支付、阶段或持币上限不满足")
         p = self.players[self.current_player]
+        if action.kind == "discard":
+            color = action.colors[0]
+            p.tokens[color] -= 1
+            self.bank[color] += 1
+            self._after_action()
+            return
         if action.kind == "noble":
             p.nobles.append(action.noble_id)
             self.nobles.remove(action.noble_id)
@@ -237,6 +286,10 @@ class Game:
         self._after_action()
 
     def _after_action(self):
+        if self.discard_over_limit and sum(self.players[self.current_player].tokens) > 10:
+            # Return tokens one at a time before nobles and the end of the turn.
+            self.phase = "discard"
+            return
         eligible = self.eligible_nobles()
         if len(eligible) == 1:
             noble = eligible[0]
@@ -259,8 +312,8 @@ class Game:
         else:
             self.current_player = (self.current_player + 1) % 4
             self.phase = "action"
-            if not self.legal_actions():
-                # No invented pass, discard, or winner. Preserve the blocked state.
+            if not self.legal_actions(all_payments=False):
+                # No invented pass or winner. Preserve the blocked state.
                 self.phase = "blocked"
                 self.end_reason = "blocked"
 
@@ -272,11 +325,15 @@ class Game:
 
     def assert_valid(self):
         assert len(self.players) == 4 and 0 <= self.current_player < 4
-        assert self.phase in ("action", "chance", "noble", "terminal", "blocked")
+        assert self.phase in ("action", "chance", "noble", "discard", "terminal", "blocked")
+        assert self.phase != "discard" or self.discard_over_limit
         assert len(self.bank) == 6 and all(v >= 0 for v in self.bank)
-        for p in self.players:
+        for i, p in enumerate(self.players):
             assert len(p.tokens) == 6 and all(v >= 0 for v in p.tokens)
-            assert sum(p.tokens) <= 10 and len(p.reserved) <= 3
+            # Above 10 only for the current player between taking/reserving and returning tokens.
+            over_limit_allowed = (self.discard_over_limit and i == self.current_player
+                                  and self.phase in ("discard", "chance"))
+            assert sum(p.tokens) <= (13 if over_limit_allowed else 10) and len(p.reserved) <= 3
         for c, total in enumerate((7, 7, 7, 7, 7, 5)):
             assert self.bank[c] + sum(p.tokens[c] for p in self.players) == total
         seen = [c for row in self.market for c in row if c is not None]
@@ -305,12 +362,14 @@ class Game:
             "nobles": self.nobles[:], "current_player": self.current_player,
             "turn": self.turn, "phase": self.phase, "pending_refill": self.pending_refill,
             "end_reason": self.end_reason, "winners": self.winners[:],
+            "discard_over_limit": self.discard_over_limit,
         }
 
 
-def new_game(rng=None):
+def new_game(rng=None, discard_over_limit=True):
+    """discard_over_limit=True: official "return tokens down to 10" rule; False: legacy hard cap."""
     rng = rng if rng is not None else random.Random()
-    game = Game()
+    game = Game(discard_over_limit=discard_over_limit)
     game.remaining = [[c.id for c in CARDS.values() if c.level == level] for level in (1, 2, 3)]
     # Sample only the twelve visible initial cards, without shuffling future decks.
     for level in range(3):

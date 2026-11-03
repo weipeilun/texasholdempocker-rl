@@ -13,6 +13,7 @@ python -m splendor
 ```bash
 python -m splendor --seed 42 --port 8765 --no-browser
 python -m splendor --simulate 100 --seed 0
+python -m splendor --token-rule hard-cap   # 旧规则：禁止超过 10 枚
 python -m unittest discover -s splendor/tests -v
 ```
 
@@ -27,11 +28,11 @@ python -m unittest discover -s splendor/tests -v
 | 牌库 | 基础版 90 张发展牌（40/30/20），每层公开 4 张 |
 | 贵族 | 从 10 位中随机公开 5 位，每位 3 分 |
 | 拿三色 | 银行可用颜色不少于三种时，必须选三种不同色各一枚 |
-| 库存不足三色 | 取银行剩余的一色或两色各一枚，仍不能超过十枚 |
+| 库存不足三色 | 取银行剩余的一色或两色各一枚 |
 | 拿同色 | 银行该色至少 4 枚，才能拿 2 枚；不适用于黄金 |
-| 十枚硬上限 | 禁止任何会令持币超过 10 枚的动作，不存在退币；持币 8 枚不能拿三色 |
+| 十枚上限（默认，官方规则） | 拿币或预留后可以超过 10 枚，但必须在回合结束前逐枚退回到 10 枚（`discard` 阶段），可退任意颜色，包括刚拿的和黄金；退完后才结算贵族与 15 分。旧规则"禁止任何会令持币超过 10 枚的动作"可用 `--token-rule hard-cap` 或 `new_game(rng, discard_over_limit=False)` 启用 |
 | 预留 | 只可预留桌面公开牌，始终公开，最多 3 张，不支持从牌堆暗扣 |
-| 预留的黄金 | 银行有黄金必须领取；持币 10 枚且银行有黄金时禁止预留；无黄金仍可预留 |
+| 预留的黄金 | 银行有黄金必须领取，若因此超过 10 枚则退回；无黄金仍可预留 |
 | 购买 | 可买桌面或自己的预留牌；永久折扣不消耗；支付的筹码退回银行 |
 | 黄金支付 | 可替代任意颜色，包括手里已有该颜色筹码时；枚举全部合法支付结果 |
 | 贵族结算 | 每次行动后必须获赠一位满足条件的贵族；多位时进入选择阶段，只取一位 |
@@ -39,7 +40,7 @@ python -m unittest discover -s splendor/tests -v
 | 排名 | 按分数，同分按已购发展牌更少，再相同共享胜利；正常可达对局中即达标玩家胜出 |
 | 无合法动作 | **不存在跳过操作。** 引擎进入 `blocked`，停止模拟，保留局面，不判胜负、不赋予和局奖励 |
 
-十枚硬上限与禁止跳过会导致部分可达局面无法继续。这是当前规则的结果，模拟报告把 `blocked` 与正常结束 `score`、运行步数限制 `truncated` 分开统计。
+禁止跳过会导致少数可达局面无法继续：银行没有任何彩色宝石、当前玩家已预留 3 张且买不起任何牌。模拟报告把 `blocked` 与正常结束 `score`、运行步数限制 `truncated` 分开统计。随机走子时，旧的十枚硬上限约 55% 的对局卡死，退回规则下约 13%；启发式走子分别约 4% 和 0%。
 
 ## 给后续搜索使用的接口
 
@@ -67,10 +68,11 @@ for card_id, probability in chance.chance_outcomes():
 - 搜索分支分别提供独立的 RNG；不要把真实环境的 RNG 拷给搜索，也不要以相同种子固定所有分支。自动策略的 RNG 与环境 RNG 独立。
 - `apply` 返回克隆；`step` 是校验后的原地转移；概率节点用 `sample_chance(rng)` 或 `resolve_chance(card_id)` 处理。剩余牌抽空后保持空位，不建立空概率节点。
 - `legal_actions()` 枚举当前阶段的所有合法动作，包括黄金支付组合和贵族选择。黄金支付相同的结果不会因为替代了不同颜色而重复出现。
-- `phase`：`action`（主动作）、`chance`（补牌）、`noble`（贵族选择）、`terminal`（已结算）、`blocked`（无合法动作、未结算）。贵族选择不额外增加行动次数。
+- `phase`：`action`（主动作）、`chance`（补牌）、`discard`（退回超过 10 枚的筹码，每次一枚）、`noble`（贵族选择）、`terminal`（已结算）、`blocked`（无合法动作、未结算）。退币与贵族选择都不额外增加行动次数。
+- `legal_actions(all_payments=False)` 只列出每次购买中用金币最少的支付方式；`step(action, rng, validate=False)` 跳过合法性复查，仅用于取自当前状态 `legal_actions()` 的动作（搜索与自对弈的热路径）。
 - `observation()` 提供公开信息，包括可由完整牌表推导的无序剩余牌池；不含种子、随机数状态或未来牌序。HTTP 控制界面额外展示种子用于复盘，策略应使用引擎观察接口。
 - `key()` 可用于搜索中的重复局面合并，不含历史和随机状态；`rewards()` 只在正常结算后返回四位玩家收益，共享胜利平分 1。`blocked` 不生成虚假训练标签。
-- `assert_valid()` 检查筹码守恒、十枚限制、预留限制、90 张牌唯一性、贵族唯一性及牌层归属。
+- `assert_valid()` 检查筹码守恒、十枚限制（退币阶段及其之前的补牌阶段允许当前玩家暂时超过）、预留限制、90 张牌唯一性、贵族唯一性及牌层归属。
 
 JSON 存档保存规则版本、初始种子和完整动作，载入时重新执行并验证；错误存档不会覆盖当前游戏。撤销使用相同流程恢复环境随机状态。种子复现面向相同规则版本与 Python 随机实现，不承诺跨版本永久稳定。
 
@@ -78,7 +80,7 @@ JSON 存档保存规则版本、初始种子和完整动作，载入时重新执
 
 ## 数据依据
 
-- [出版社规则页](https://www.spacecowboys-games.com/game/splendor/) 与 [官方基础规则 PDF](https://cdn.svc.asmodee.net/production-spacecowboys/uploads/2025/10/SCSPL01EN_SPLENDOR_RULES_LIGHT.pdf)。上述十枚限制、公开预留、立即结束和无跳过是本项目约定，优先于原规则。
+- [出版社规则页](https://www.spacecowboys-games.com/game/splendor/) 与 [官方基础规则 PDF](https://cdn.svc.asmodee.net/production-spacecowboys/uploads/2025/10/SCSPL01EN_SPLENDOR_RULES_LIGHT.pdf)。公开预留、立即结束和无跳过是本项目约定，优先于原规则；十枚上限默认按原规则退回。
 - `data/cards.csv` 使用 [anicolao/splendor 的实物照片核验数据](https://github.com/anicolao/splendor/blob/main/data/verified_card_properties.csv)，源文件 SHA `e5c5d8ca04e5c2c82a17553fd5c9eb496e1b3a99`。牌 ID 和字段名称保持来源形式，不使用网上部分旧 CSV 中错误的 `blue-L1-03` 费用。
 - 十位贵族的需求与 [seal256/splendor 的 NOBLES 常量](https://github.com/seal256/splendor/blob/master/pysplendor/splendor.py) 交叉核对。此处按颜色需求编号 `N1` 至 `N10`，不使用牌面人物图片。
 

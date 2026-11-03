@@ -16,14 +16,18 @@ from .engine import Action, CARDS, NOBLES, new_game
 from dataclasses import asdict
 
 WEB = Path(__file__).parent / "web"
-SCHEMA = "splendor-public-four-player-immediate-no-pass-v1"
+# Save-file rule versions. v2: tokens above 10 are returned (official); v1: legacy hard cap of 10.
+SCHEMA = "splendor-public-four-player-immediate-no-pass-discard-v2"
+SCHEMA_HARD_CAP = "splendor-public-four-player-immediate-no-pass-v1"
+SCHEMA_RULES = {SCHEMA: True, SCHEMA_HARD_CAP: False}
 
 
 class Session:
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, discard_over_limit=True):
         self.lock = threading.Lock()
         self.version = 0
         self.policy_rng = random.Random()
+        self.discard_over_limit = discard_over_limit
         self.reset(seed)
 
     def reset(self, seed=None):
@@ -31,7 +35,7 @@ class Session:
         if type(seed) is not int or abs(seed) > 2**53 - 1:
             raise ValueError("种子必须是安全范围内的整数")
         rng = random.Random(seed)
-        game = new_game(rng)
+        game = new_game(rng, discard_over_limit=self.discard_over_limit)
         self.seed, self.rng, self.game, self.history, self.events = seed, rng, game, [], []
         self.version += 1
 
@@ -44,22 +48,25 @@ class Session:
         self.version += 1
 
     def restore(self, record):
-        if record.get("schema") != SCHEMA:
+        if record.get("schema") not in SCHEMA_RULES:
             raise ValueError("存档规则版本不匹配")
         actions = record.get("actions")
         if not isinstance(actions, list) or len(actions) > 10000:
             raise ValueError("存档动作列表无效或过长")
         # Validate replay in a temporary session; a bad file never destroys a game.
-        candidate = Session(record["seed"])
+        # The save decides the token rule, so legacy hard-cap games replay exactly.
+        candidate = Session(record["seed"], discard_over_limit=SCHEMA_RULES[record["schema"]])
         for value in actions:
             candidate.perform(Action.from_dict(value))
         candidate.game.assert_valid()
         self.seed, self.rng, self.game, self.history = candidate.seed, candidate.rng, candidate.game, candidate.history
         self.events = candidate.events
+        self.discard_over_limit = candidate.discard_over_limit
         self.version += 1
 
     def record(self):
-        return {"schema": SCHEMA, "seed": self.seed, "actions": self.history[:]}
+        schema = SCHEMA if self.game.discard_over_limit else SCHEMA_HARD_CAP
+        return {"schema": schema, "seed": self.seed, "actions": self.history[:]}
 
     def view(self):
         return {"state": self.game.observation(), "seed": self.seed, "version": self.version,
@@ -137,11 +144,11 @@ def make_handler(session):
     return Handler
 
 
-def simulate(games, seed, max_turns=2000):
+def simulate(games, seed, max_turns=2000, discard_over_limit=True):
     stats = {"score": 0, "blocked": 0, "truncated": 0, "wins": [0.] * 4, "turns": 0}
     for index in range(games):
         rng, policy_rng = random.Random(seed + index), random.Random(seed + index + 10_000)
-        game = new_game(rng)
+        game = new_game(rng, discard_over_limit=discard_over_limit)
         while game.phase not in ("terminal", "blocked") and game.turn < max_turns:
             game.step(choose_action(game, policy_rng), rng)
             game.assert_valid()
@@ -153,19 +160,23 @@ def simulate(games, seed, max_turns=2000):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="四人璀璨宝石模拟器（公开预留、十枚硬上限）")
+    parser = argparse.ArgumentParser(description="四人璀璨宝石模拟器（公开预留、超过十枚须退回）")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=8765, type=int)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--simulate", type=int, metavar="GAMES")
+    parser.add_argument("--token-rule", choices=["discard", "hard-cap"], default="discard",
+                        help="discard: 超过 10 枚须退回（默认，官方规则）；hard-cap: 旧规则，禁止超过 10 枚")
     args = parser.parse_args()
+    discard_over_limit = args.token_rule == "discard"
     if args.simulate is not None:
         if args.simulate <= 0:
             parser.error("--simulate 必须大于零")
-        print(json.dumps(simulate(args.simulate, args.seed or 0), ensure_ascii=False, indent=2))
+        print(json.dumps(simulate(args.simulate, args.seed or 0, discard_over_limit=discard_over_limit),
+                         ensure_ascii=False, indent=2))
         return
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(Session(args.seed)))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(Session(args.seed, discard_over_limit)))
     url = f"http://{args.host}:{server.server_port}"
     print(f"璀璨宝石模拟器：{url}  (Ctrl+C 退出)", flush=True)
     if not args.no_browser:
