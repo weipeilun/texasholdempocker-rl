@@ -1,0 +1,719 @@
+:root {
+  color-scheme: dark;
+  --bg: #0d171e;
+  --panel: #15232d;
+  --line: #2c3c46;
+  --muted: #96aab5;
+  --text: #e9f0f1;
+  --accent: #caab6c;
+  --white: #e9e6d9;
+  --blue: #76b0e3;
+  --green: #60ba91;
+  --red: #e68c85;
+  --black: #89919e;
+  --gold: #e5bd63;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background:
+    radial-gradient(ellipse at 45% 0, #1e3439 0, transparent 65%), var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  background: #21343e;
+  color: var(--text);
+  border: 1px solid #3b4c55;
+  border-radius: 7px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border 0.15s;
+}
+button:hover:enabled {
+  background: #304b56;
+  border-color: #849a9f;
+}
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.primary {
+  background: #c4a264;
+  color: #182025;
+  border-color: #d8bc86;
+  font-weight: 700;
+}
+.primary:hover:enabled {
+  background: #e2c78f;
+}
+input,
+select {
+  padding: 8px 10px;
+  background: #10212b;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+input {
+  width: 112px;
+}
+header {
+  max-width: 1600px;
+  margin: auto;
+  padding: 24px 32px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.brand-gem {
+  font-size: 43px;
+  color: var(--accent);
+}
+h1 {
+  font-size: 25px;
+  letter-spacing: 4px;
+  margin: 0 0 4px;
+}
+.brand p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.header-tools {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.pill {
+  border: 1px solid #65777d;
+  border-radius: 20px;
+  padding: 6px 13px;
+  color: #dac18d;
+}
+main {
+  max-width: 1600px;
+  padding: 20px 32px;
+  margin: auto;
+}
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.control-group {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.control-group label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.status {
+  margin: 17px 0;
+  padding: 12px 16px;
+  background: #193d3b;
+  border: 1px solid #35665d;
+  border-radius: 8px;
+  color: #b9e7d2;
+}
+.status.final {
+  background: #493b21;
+  border-color: #ac8c4b;
+  color: #f4d995;
+}
+#error {
+  border: 1px solid #db7777;
+  background: #4b242b;
+  color: #ffd1d1;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 22px;
+}
+.board,
+.decision,
+.activity,
+.players-section {
+  background: #14232be6;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+h2 {
+  font-size: 15px;
+  letter-spacing: 1px;
+  margin: 0;
+}
+.section-heading > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.nobles {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 9px;
+  margin-bottom: 22px;
+}
+.noble {
+  border: 1px solid #66563e;
+  border-radius: 8px;
+  padding: 10px;
+  background: linear-gradient(145deg, #40372b, #232a2c);
+  font-size: 11px;
+}
+.noble-top {
+  display: flex;
+  justify-content: space-between;
+  color: #cdbb96;
+  margin-bottom: 9px;
+}
+.noble-top strong {
+  color: #efd399;
+}
+.requirements {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.req,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.req {
+  font-size: 12px;
+  font-weight: 600;
+}
+.dot {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  background: var(--gem);
+  border: 1px solid #ffffff55;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.market-row {
+  display: grid;
+  grid-template-columns: 64px repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+.deck {
+  border-radius: 8px;
+  border: 1px solid #43525b;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: repeating-linear-gradient(
+    45deg,
+    #23363c,
+    #23363c 4px,
+    #203038 4px,
+    #203038 9px
+  );
+  color: #c5aa76;
+  gap: 8px;
+}
+.deck strong {
+  font-size: 22px;
+}
+.deck small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.card {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--gem) 15%, #22333b),
+    #17262f
+  );
+  border: 1px solid color-mix(in srgb, var(--gem) 38%, #263640);
+  border-top: 3px solid var(--gem);
+  border-radius: 8px;
+  padding: 10px;
+  min-width: 0;
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.points {
+  font-size: 25px;
+  color: #f0deba;
+  line-height: 1;
+}
+.points small {
+  font-size: 10px;
+  color: #b9b2a3;
+  margin-left: 3px;
+}
+.bonus {
+  font-size: 11px;
+  color: var(--gem);
+}
+.card-id {
+  color: #82969f;
+  font-size: 10px;
+  margin-bottom: 10px;
+}
+.costs {
+  display: flex;
+  gap: 9px;
+  min-height: 20px;
+  flex-wrap: wrap;
+}
+.card-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 12px;
+}
+.card-actions button {
+  font-size: 11px;
+  padding: 5px 7px;
+  flex: 1;
+}
+.empty-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 154px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.bank-section {
+  margin-top: 23px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.bank {
+  display: flex;
+  justify-content: space-around;
+  gap: 8px;
+}
+.bank-item {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.bank-token {
+  background: color-mix(in srgb, var(--gem) 24%, #22303b);
+  border: 2px solid var(--gem);
+  border-radius: 50%;
+  height: 54px;
+  width: 54px;
+  font-size: 20px;
+  color: var(--gem);
+  padding: 0;
+  box-shadow: inset 0 0 0 4px #15232c80;
+}
+.bank-token.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  background: color-mix(in srgb, var(--gem) 60%, #24303b);
+  color: white;
+}
+.take-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 18px;
+}
+.take-controls > span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.decision {
+  margin-bottom: 16px;
+  min-height: 185px;
+}
+.decision p {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.decision h3 {
+  font-size: 15px;
+  margin: 5px 0 12px;
+  color: #e4ce9f;
+}
+.payment-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 12px;
+  margin: 7px 0;
+}
+.payment-list {
+  max-height: 300px;
+  overflow: auto;
+}
+.activity {
+  min-height: 260px;
+}
+.activity ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 370px;
+  overflow: auto;
+}
+.activity li {
+  font-size: 11px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  color: #bdccd0;
+  line-height: 1.5;
+}
+.activity li small {
+  color: #718c98;
+  margin-right: 8px;
+}
+.players-section {
+  margin-top: 22px;
+}
+.players {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.player {
+  padding: 14px;
+  background: #122029;
+  border: 1px solid #30414a;
+  border-radius: 8px;
+  min-width: 0;
+}
+.player.active {
+  border-color: #d0b375;
+  box-shadow: inset 0 0 0 1px #c5ab6622;
+}
+.player-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.player h3 {
+  font-size: 15px;
+  margin: 0;
+}
+.score {
+  color: #dec28a;
+  font-size: 24px;
+}
+.player-section-label {
+  font-size: 10px;
+  color: #8ca0ac;
+  margin: 12px 0 7px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.chip {
+  font-size: 12px;
+}
+.reserved {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reserved .card {
+  padding: 8px;
+}
+.reserved .card-top {
+  margin-bottom: 6px;
+}
+.reserved .points {
+  font-size: 17px;
+}
+.reserved .card-id {
+  display: none;
+}
+.reserved .card-actions {
+  margin-top: 5px;
+}
+.reserved .costs {
+  gap: 8px;
+}
+.reserved .costs .req {
+  font-size: 11px;
+}
+.empty {
+  font-size: 11px;
+  color: #667e8a;
+  margin: 5px 0;
+}
+.owned-list {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.owned-item {
+  font-size: 10px;
+  border: 1px solid #3c505c;
+  border-radius: 4px;
+  padding: 4px;
+  color: var(--gem);
+}
+details summary {
+  cursor: pointer;
+  color: #9caeb7;
+  font-size: 11px;
+}
+footer {
+  display: flex;
+  justify-content: space-between;
+  margin: 24px 0 8px;
+  color: #667f8d;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+dialog {
+  max-width: 640px;
+  max-height: 85vh;
+  background: #172b34;
+  color: var(--text);
+  border: 1px solid #647d85;
+  border-radius: 12px;
+  padding: 25px;
+}
+dialog::backdrop {
+  background: #000a;
+}
+dialog li {
+  margin: 10px 0;
+  line-height: 1.7;
+  font-size: 13px;
+}
+dialog button {
+  float: right;
+}
+:focus-visible {
+  outline: 2px solid #dfc185;
+  outline-offset: 3px;
+}
+@media (min-width: 1450px) {
+  .card {
+    padding: 14px;
+  }
+  .card-top {
+    margin-bottom: 20px;
+  }
+  .points {
+    font-size: 30px;
+  }
+}
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 275px;
+  }
+  main,
+  header {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .market-row {
+    grid-template-columns: 48px repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .card {
+    padding: 8px;
+  }
+  .card-actions {
+    flex-direction: column;
+  }
+  .nobles {
+    gap: 6px;
+  }
+  .noble {
+    padding: 7px;
+  }
+  .players {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 800px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  aside {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .decision {
+    margin-bottom: 0;
+  }
+  .activity ol {
+    max-height: 240px;
+  }
+  .control-group {
+    flex-wrap: wrap;
+  }
+  .toolbar {
+    gap: 10px;
+  }
+  .nobles {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .noble {
+    font-size: 10px;
+  }
+  .noble .req {
+    font-size: 10px;
+  }
+  .section-heading > span {
+    max-width: 60%;
+    text-align: right;
+  }
+}
+@media (max-width: 520px) {
+  main,
+  header {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .board,
+  .players-section {
+    padding: 10px;
+  }
+  h1 {
+    font-size: 20px;
+  }
+  .brand-gem {
+    font-size: 30px;
+  }
+  .header-tools {
+    gap: 7px;
+  }
+  .pill {
+    font-size: 11px;
+    padding: 5px;
+  }
+  .market-row {
+    grid-template-columns: 32px repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .card {
+    padding: 5px;
+  }
+  .card-top {
+    margin-bottom: 7px;
+  }
+  .points {
+    font-size: 21px;
+  }
+  .bonus {
+    font-size: 10px;
+  }
+  .costs {
+    gap: 4px;
+  }
+  .req {
+    font-size: 10px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+  }
+  .card-id {
+    font-size: 8px;
+  }
+  .card-actions button {
+    font-size: 10px;
+    padding: 5px 2px;
+  }
+  .nobles {
+    gap: 4px;
+  }
+  .noble {
+    padding: 5px;
+  }
+  .noble-top {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .requirements {
+    gap: 4px;
+  }
+  .bank-token {
+    height: 41px;
+    width: 41px;
+  }
+  .take-controls {
+    flex-wrap: wrap;
+  }
+  .take-controls > span {
+    flex-basis: 100%;
+  }
+  .players {
+    gap: 7px;
+  }
+  .player {
+    padding: 10px;
+  }
+  aside {
+    grid-template-columns: 1fr;
+  }
+  .header-tools button {
+    font-size: 11px;
+    padding: 7px;
+  }
+  .section-heading > span {
+    font-size: 10px;
+  }
+  footer {
+    font-size: 8px;
+  }
+  .control-group button,
+  .control-group select {
+    font-size: 12px;
+  }
+  .bank-section .section-heading {
+    align-items: flex-start;
+  }
+}

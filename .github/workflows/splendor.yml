@@ -1,0 +1,21 @@
+name: Splendor simulator
+
+on:
+  push:
+    paths: ['splendor/**', '.github/workflows/splendor.yml']
+  pull_request:
+    paths: ['splendor/**', '.github/workflows/splendor.yml']
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s splendor/tests -v
+      - run: python -m splendor --simulate 100 --seed 0
