@@ -69,7 +69,7 @@ async function post(path, data = {}) {
   }
 }
 function syncControls() {
-  const ended = !view || ["terminal", "blocked"].includes(view.state.phase);
+  const ended = !view || view.state.phase === "terminal";
   for (const id of ["new", "undo", "step", "import", "export"])
     $(id).disabled =
       busy ||
@@ -153,8 +153,8 @@ function renderBank() {
 function renderDecision() {
   const s = view.state,
     box = $("decision");
-  if (s.phase === "terminal" || s.phase === "blocked") {
-    box.innerHTML = `<h3>${s.phase === "blocked" ? "玩家 " + (s.current_player + 1) + " 无合法动作 · 僵局停止" : "胜者：" + s.winners.map((i) => "玩家 " + (i + 1)).join("、")}</h3><p>共 ${s.turn} 次玩家行动。${s.phase === "blocked" ? "无跳过操作，本局不判胜负。" : ""}可导出对局复盘，或用相同种子重新开始。</p>`;
+  if (s.phase === "terminal") {
+    box.innerHTML = `<h3>${s.end_reason === "draw" ? "四人连续跳过 · 平局" : "胜者：" + s.winners.map((i) => "玩家 " + (i + 1)).join("、")}</h3><p>共 ${s.turn} 手（含 ${s.passes || 0} 次无合法动作的跳过）。可导出对局复盘，或用相同种子重新开始。</p>`;
     return;
   }
   if (s.phase === "discard") {
@@ -205,15 +205,12 @@ function renderDecision() {
 function render() {
   const s = view.state,
     current = s.current_player;
-  if (s.phase === "terminal" || s.phase === "blocked") stop();
+  if (s.phase === "terminal") stop();
   $("round").textContent = `第 ${Math.floor(s.turn / 4) + 1} 轮 · ${s.turn} 手`;
-  $("status").classList.toggle(
-    "final",
-    s.phase === "blocked" || s.phase === "terminal",
-  );
+  $("status").classList.toggle("final", s.phase === "terminal");
   $("status").textContent =
-    s.phase === "blocked"
-      ? `模拟停止：玩家 ${current + 1} 无合法动作，不允许跳过，本局未结算。`
+    s.phase === "terminal" && s.end_reason === "draw"
+      ? `对局结束：四位玩家连续无合法动作，平局。`
       : s.phase === "terminal"
         ? `对局结束：${s.winners.map((i) => "玩家 " + (i + 1)).join("、")} 获胜。`
         : `轮到玩家 ${current + 1}${s.phase === "noble" ? "选择贵族" : s.phase === "discard" ? "退回筹码" : "行动"} · 当前持币 ${s.players[current].tokens.reduce((a, b) => a + b, 0)}/10`;

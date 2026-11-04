@@ -145,15 +145,16 @@ def make_handler(session):
 
 
 def simulate(games, seed, max_turns=2000, discard_over_limit=True):
-    stats = {"score": 0, "blocked": 0, "truncated": 0, "wins": [0.] * 4, "turns": 0}
+    stats = {"score": 0, "draw": 0, "truncated": 0, "passes": 0, "wins": [0.] * 4, "turns": 0}
     for index in range(games):
         rng, policy_rng = random.Random(seed + index), random.Random(seed + index + 10_000)
         game = new_game(rng, discard_over_limit=discard_over_limit)
-        while game.phase not in ("terminal", "blocked") and game.turn < max_turns:
+        while game.phase != "terminal" and game.turn < max_turns:
             game.step(choose_action(game, policy_rng), rng)
             game.assert_valid()
         stats[game.end_reason or "truncated"] += 1
         stats["turns"] += game.turn
+        stats["passes"] += game.passes
         if game.phase == "terminal":
             stats["wins"] = [v + reward for v, reward in zip(stats["wins"], game.rewards())]
     return stats

@@ -1,3 +1,13 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+# training outputs (kept on the training machine)
+build/
+data/
+models/
+logs/
+experiments/
+experiments_smoke/
+backup_*/
+# compiled C extension (python setup_mcts_core.py build_ext --inplace)
+rl/_mcts_core*.so
