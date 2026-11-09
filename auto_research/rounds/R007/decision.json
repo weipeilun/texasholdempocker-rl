@@ -1,0 +1,13 @@
+{
+ "verdict": "supported",
+ "goal_status": "reached",
+ "decided_at": "2026-11-08T19:20:00+08:00",
+ "needs_human": false,
+ "reason": "12.9 h、200 个 iteration（对手模型 prior、considered 8、带教 w 0.25）。部署搜索 512 次，没用过的发牌（seed 5e9）：it80 vs 3×lookahead 0.5637（0.531–0.597，800 局）、vs heuristic 0.7825、alt1 / alt2 0.5975 / 0.62 —— 2026-11-07 17:10 达标；it200 vs 3×lookahead 0.6975（0.664–0.731）、vs heuristic 0.8925、alt1 / alt2 0.7125 / 0.7325、对 it80 0.7188。训练中 vs lookahead 在 it134 之后 0.51–0.625，held-out value_ce 0.991 → 0.928。",
+ "best_checkpoint": "experiments/auto_r007/checkpoints/weights_iteration_00200.pth（= models/splendor_final/weights.pth，md5 7d2fa257…）＋部署搜索（512 次、considered 8、opponent_policy prior）",
+ "next": {
+  "name": "R008_continue_r007",
+  "hypothesis": "同设置继续训练（从 R007 latest，lr 2e-5 缓慢衰减）还能变强：部署搜索下最后的检查点对 R007 latest ≥ 0.55，vs 3×lookahead 提高 ≥ 0.03。",
+  "sketch": "config/splendor_auto_r008.yml：同 R007，init R007 latest，lr 2e-5（10000 步 ×0.75，20000 步 ×0.5），300 个 iteration，预算 18 h。"
+ }
+}

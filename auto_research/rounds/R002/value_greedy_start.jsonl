@@ -1,0 +1,1 @@
+{"ckpt": "experiments/auto_r001/checkpoints/latest.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.2, "win_rate": 0.2, "seconds": 49}

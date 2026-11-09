@@ -1,0 +1,25 @@
+{
+ "status": "running",
+ "phase": "watch",
+ "current_round": "R009",
+ "goal_status": "reached",
+ "updated": "2026-11-09T08:03:02+08:00",
+ "best_model": {
+  "path": "models/splendor_final/weights.pth",
+  "source": "experiments/auto_r008/checkpoints/weights_iteration_00190.pth",
+  "md5": "c8a06fb9ed55243a23e0a4d242e5e295",
+  "search": "部署搜索：models/splendor_final/config.yml + --sims 512（considered 8、opponent_policy prior）",
+  "note": "确认发牌（seed 5e9，512 次）：vs 3×lookahead 0.84（0.815–0.865，800 局）、vs heuristic 0.96、alt1 / alt2 0.84 / 0.7925、对 R008 it90 0.6042（192 局）。之前的版本在 models/splendor_final/r008_it90/（0.7562 / 0.9275 / 0.7675 / 0.79）、r007_it200/、it80/。"
+ },
+ "round_start_model": {
+  "round": "R008",
+  "path": "experiments/auto_r007/checkpoints/latest.pth",
+  "note": "R007 latest（第 200 个 iteration）"
+ },
+ "strongest_head_to_head": {
+  "path": "experiments/auto_r005/checkpoints/latest.pth",
+  "copy": "/tmp/r006/r005_final.pth",
+  "note": "R005 latest：对 R004 0.5625，R004 对 R003 0.552"
+ },
+ "goal_reached_at": "2026-11-07T17:10:00+08:00"
+}

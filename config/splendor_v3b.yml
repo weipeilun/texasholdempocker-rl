@@ -1,0 +1,138 @@
+# 已过时：旧流水线（v3）的续训配置，新代码不再支持其中的 model_*_path / train_data_path 等参数。新实验见 config/splendor_v4.yml，续训用 --resume experiments/<实验名>
+# 续训 v3（2026-11-04 13:45）：从 v3 第 39 轮的模型与优化器状态继续（models/splendor_v3_0.pth，第 39 轮评测胜率 0.677 晋升为 best），
+# 回放池用同一个数据文件装满（historical_data_mode: fill，不再训练这些数据），新随机种子，学习率不再预热，checkpoint 改名 splendor_v3b_*。
+# 其余与 config/splendor_default.yml 相同（含对局进程单线程分组 + 共享内存传输、GPU 双 batch 排队）。
+# 璀璨宝石 AlphaGoZero 训练默认参数（train_splendor.py）
+log_level: INFO
+seed: 20261105
+
+# ---------------------------------------------------------------------------- workflow（24 线程 CPU + RTX PRO 6000）
+# 对局进程数；0 = 在训练进程内单线程对局（调试 / 无 GPU）。推理进程 1 个独占 CPU 0，对局进程用其余 CPU。
+# 判断依据见日志：game_worker 行的 "process CPU"（接近 100% 说明该进程的 GIL 已用满）与 "mean prediction round trip"，
+# predict_batch_process 行的 "mean batch" 与 "GPU wait"（GPU 是否成为瓶颈）
+num_game_process: 22
+# 每个对局进程在一个线程里同时下 num_game_groups_per_process x num_games_per_group 局（rl/splendor_mcts.py 的搜索是生成器）：
+# 一组对局都走到需要网络估值时，把整组请求写进共享内存、发一条消息给推理进程；等结果的同时推进另一组。
+# 没有线程间的 GIL 争抢，也没有逐个请求的管道收发
+num_game_groups_per_process: 2
+num_games_per_group: 12
+# 推理进程数：多个进程共用一块 GPU 会互相抢占、慢很多（实测 1 个进程是 4 个进程的 8 倍），保持 1
+num_predict_process: 1
+# 推理进程的 batch 上限（按整组请求累加，实际最多再多出一组）。GPU 空闲时收到第一组后最多再等
+# predict_batch_wait_seconds 凑 batch；GPU 忙时（流水线）把计算期间到达的各组凑成下一个 batch
+predict_batch_size: 512
+predict_batch_wait_seconds: 0.002
+# GPU 上最多同时排队的 batch 数（1 = 上一个 batch 算完、取完结果才发下一个；最大 2）。GPU 在算 batch k 时，
+# 收到的请求凑够 predict_early_launch_rows 就立即把 batch k+1 排到它后面，GPU 不用等推理进程取结果、回消息
+predict_max_in_flight: 2
+predict_early_launch_rows: 128
+# CPU 绑定（仅 Linux，null = 不绑定）。i7-13700KF：逻辑 CPU 0-15 是 8 个性能核（0/1、2/3… 为同一物理核的两个超线程），
+# 16-23 是能效核。推理进程独占性能核 0（它的超线程兄弟 1 空出来），对局进程用其余 CPU
+predict_process_cpu_affinity: '0'
+game_process_cpu_affinity: '2-23'
+stats_log_interval: 60
+
+# ---------------------------------------------------------------------------- loop
+# 每个 iteration = 自对弈 -> 训练 -> （每 eval_model_per_iteration 次）新模型对战最佳模型。手动停止即可
+num_iterations: 1000
+# 每次 run_games 都要新建 20+ 个进程（导入 torch、初始化 CUDA，约 10s），iteration 要足够大来摊薄这部分开销
+num_self_play_games_per_iteration: 1024
+eval_model_per_iteration: 5
+# 评估局数，须为 6 的倍数（6 种座位安排，相邻两局同种子互补座位）。胜率估计的标准差约 0.5/sqrt(局数)：192 局约 0.036
+eval_task_num_games: 192
+eval_seed: 1000000000
+# 新模型占两个座位，势均力敌时胜率 0.5。自对弈始终用最新模型（AlphaZero），best 只是记录评估中胜出的版本
+update_model_win_rate_thres: 0.55
+# blocked（无合法动作）/ truncated（超过 max_game_turns）的对局：value 目标为"无人获胜"；设为 True 则不进训练数据
+skip_unfinished_games: False
+max_game_turns: 400
+# 持币上限规则：True = 官方规则，超过 10 枚须逐枚退回；False = 旧规则，禁止超过 10 枚（卡死率高得多）
+discard_over_limit: True
+
+# ---------------------------------------------------------------------------- 训练数据（防止价值网络背答案）
+# 同一局的各个局面高度相关、共享同一个终局结果。全部入池时价值网络会记住"这一局谁赢"（训练集 value MSE 0.02、
+# 新数据上 0.26，比恒定预测 0.19 还差），所以每局只随机取 num_samples_per_game 个局面（只从全量搜索的局面里取）
+num_samples_per_game: 5
+# 每条样本平均被训练的次数：每个 iteration 训练 新样本数 * train_sample_reuse / batch_size 步（小数部分累计到下一轮）。
+# 之前是 batch 512 / 每 64 条一步 = 8 次。日志里 held-out 与 replay buffer 两组 value 指标接近时，说明没有过拟合，可以适当调高
+train_sample_reuse: 1.2
+# 回放池中样本少于此值不训练（约 2 个 iteration 的数据）
+first_train_data_step: 10240
+# 自对弈数据（每局 num_samples_per_game 条）追加写入此文件；train_with_historical_data=True 时启动先用它训练。
+# 规则、编码或动作空间变化后换文件名，不同版本的数据不混用（读取时也会跳过尺寸不符的样本）
+train_data_path: data/splendor_v3_selfplay.txt
+train_with_historical_data: True
+# train = 先用历史数据训练（新模型）；fill = 只装进回放池、不训练（续训：模型已经在这些数据上训练过）
+historical_data_mode: fill
+log_step_num: 100
+
+# ---------------------------------------------------------------------------- MCTS
+# Gumbel AlphaZero（Danihelka et al. 2022，实现对照 DeepMind mctx），算法见 rl/splendor_mcts.py。
+# 自对弈用 playout cap randomization（KataGo）：每步以 mcts_full_search_prob 的概率做全量搜索并记录为训练样本，
+# 其余步做快速搜索、不记录。每局约 125 步，0.06 -> 平均约 7.5 个全量搜索局面（再从中取 num_samples_per_game 个），
+# 平均每步约 0.06*128 + 0.94*16 ≈ 23 次模拟（之前每步 64 次），同样的算力多下约 3 倍的对局
+mcts_full_search_prob: 0.06
+num_mcts_simulation_per_step: 128          # 全量搜索
+# 根节点 Sequential Halving 的候选动作数 m，实际取 min(m, 合法动作数)；每步合法动作中位数约 26
+mcts_max_num_considered_actions: 32
+mcts_fast_num_simulation: 16               # 快速搜索
+mcts_fast_max_num_considered_actions: 8
+# 评估：每步都是全量搜索、贪心（Gumbel 噪声为 0）
+eval_num_mcts_simulation_per_step: 64
+eval_mcts_max_num_considered_actions: 32
+# 自对弈时的 Gumbel 噪声尺度；评估时固定为 0
+mcts_gumbel_scale: 1.0
+# σ(q) = (mcts_maxvisit_init + max N) * mcts_value_scale * q̂，mctx 默认 0.1 / 50
+mcts_value_scale: 0.1
+mcts_maxvisit_init: 50.0
+# 是否把补全后的 Q 在节点内按合法动作 min-max 缩放到 [0, 1]
+mcts_rescale_values: True
+# AlphaGo 叶节点估值 V(s_L) = (1 - λ) * v_θ(s_L) + λ * z_L。0 = AlphaGo Zero（只用价值网络，不 rollout）
+mcts_rollout_lambda: 0.0
+mcts_rollout_policy: 'heuristic'  # choices: 'heuristic', 'random'（splendor/bots.py）
+mcts_max_search_depth: 64
+# 每次网络评估前随机置换可互换的槽位（市场牌 / 贵族 / 预留牌），AlphaGo Zero 的随机对称变换。
+# 现在的网络结构对这些置换严格不变（见 rl/splendor_model.py），开启没有作用，只多花时间
+mcts_random_symmetry: False
+
+# ---------------------------------------------------------------------------- model
+model_param_dict:
+    device: 'auto'   # auto: cuda > mps > cpu
+    # 每个实体（市场牌、预留牌、贵族）是一个 token（各字段 embedding 之和），其余字段各一个 token：290 个字段 -> 102 个 token。
+    # 同组槽位共享位置 embedding，加上指针式动作头，网络对槽位置换严格等变：同一局面换个摆放顺序不会被当成新局面
+    embedding_dim: 256
+    transformer_head_dim: 64   # embedding_dim 须能被它整除
+    num_layers: 6
+    dropout: 0.1
+    # embedding（字段 + 位置之和）初始化的总幅度，内容与位置各占一半方差。
+    # auto = 一个 pre-norm 子层写入残差流的幅度 sqrt(1/18)≈0.236；null = PyTorch 默认 N(0, 1)
+    embedding_init_rms: auto
+    dim_feedforward: 1024
+    # 'high' = float32 矩阵乘法走 TF32 张量核心；null = 不设置
+    float32_matmul_precision: high
+    # batch 不小于此值时推理用 bfloat16 自动混合精度（小 batch 受 kernel 启动开销限制，bf16 反而更慢）；null = 不用
+    inference_bf16_min_batch: 64
+    # 推理进程用 CUDA Graphs 预先录制这些 batch 大小的前向（实际 batch 向上补齐到最近一档）；最大一档应不小于 predict_batch_size
+    inference_cuda_graph_batch_sizes: [8, 16, 24, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576]
+    batch_size: 256
+    # AdamW：线性 warmup 后保持恒定学习率；权重衰减（解耦）只作用于矩阵和 embedding，不作用于 bias / LayerNorm
+    learning_rate: 0.0002
+    lr_warmup_steps: 1
+    weight_decay: 0.1
+    adam_betas: [0.9, 0.99]
+    grad_clip_norm: 1.0
+    # 价值头：N_PLAYERS + 1 类（各座位获胜 / 无人获胜）的 softmax 交叉熵；权重同 MuZero 的 0.25
+    value_loss_weight: 0.25
+    # 训练样本随机置换槽位。网络已对置换严格不变，开启没有作用
+    train_symmetry_augmentation: False
+    # 回放池约为最近 20 个 iteration 的数据（每个 iteration 约 1024 局 x 5 = 5120 条）
+    transition_buffer_len: 100000
+    save_train_data: True
+    num_inference_per_step: 2000   # show prediction result per steps
+    num_data_print_per_inference: 3
+
+# ---------------------------------------------------------------------------- checkpoints（%d = 参数搜索的 loop 序号）
+model_init_checkpoint_path: models/splendor_v3_0.pth
+model_save_checkpoint_path_format: models/splendor_v3b_%d.pth
+model_best_checkpoint_path_format: models/splendor_v3b_%d_best.pth
+model_eval_snapshot_path_format: models/splendor_v3b_%d_eval.pth

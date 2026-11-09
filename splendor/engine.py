@@ -9,6 +9,11 @@ Token limit (Game.discard_over_limit):
 Use apply(action, rng) for a sampled transition, or apply(action) to stop at a
 chance node and enumerate chance_outcomes()/resolve_chance(card_id). Search
 branches must supply independent RNGs; cloning a state cannot reveal a deck order.
+
+No legal action (RULES_VERSION 2): a player who cannot act when his turn comes passes (forced, not a
+choice: there is no pass action; the turn counter advances). Four consecutive passes mean nobody can
+ever act again: the game ends in a draw (end_reason "draw", all four players share the win). Version 1
+stopped the game in a "blocked" phase without a result.
 """
 
 from __future__ import annotations
@@ -19,6 +24,9 @@ import random
 from dataclasses import asdict, dataclass, field
 from itertools import combinations, product
 from pathlib import Path
+
+# bump when a rule changes what a state, a legal action or a result is (data and checkpoints record it)
+RULES_VERSION = 2
 
 COLORS = ("white", "blue", "green", "red", "black")
 TOKEN_NAMES = COLORS + ("gold",)
@@ -53,6 +61,7 @@ def _load_cards():
 
 
 CARDS = _load_cards()
+CARD_POINTS = {card_id: card.points for card_id, card in CARDS.items()}
 # Five adjacent pairs and five adjacent triples on the W-B-G-R-K color cycle.
 NOBLES = {
     f"N{i + 1}": Noble(f"N{i + 1}", tuple(values))
@@ -92,11 +101,14 @@ class Player:
 
     @property
     def bonuses(self):
-        return [sum(CARDS[c].bonus == color for c in self.purchased) for color in range(5)]
+        bonuses = [0] * 5
+        for c in self.purchased:
+            bonuses[CARDS[c].bonus] += 1
+        return bonuses
 
     @property
     def points(self):
-        return sum(CARDS[c].points for c in self.purchased) + 3 * len(self.nobles)
+        return sum([CARD_POINTS[c] for c in self.purchased]) + 3 * len(self.nobles)
 
 
 @dataclass
@@ -113,6 +125,7 @@ class Game:
     end_reason: str | None = None
     winners: list[int] = field(default_factory=list)
     discard_over_limit: bool = True
+    passes: int = 0     # forced passes so far (statistics only; not part of the Markov state)
 
     def clone(self):
         """Independent copy (explicit field copy; several times faster than copy.deepcopy)."""
@@ -122,7 +135,7 @@ class Game:
             remaining=[pool[:] for pool in self.remaining], nobles=self.nobles[:],
             current_player=self.current_player, turn=self.turn, phase=self.phase,
             pending_refill=self.pending_refill, end_reason=self.end_reason,
-            winners=self.winners[:], discard_over_limit=self.discard_over_limit)
+            winners=self.winners[:], discard_over_limit=self.discard_over_limit, passes=self.passes)
 
     def key(self):
         """Canonical Markov key for transpositions; no turn history or RNG state."""
@@ -159,7 +172,7 @@ class Game:
 
     def legal_actions(self, all_payments=True):
         """all_payments=False lists only the least-gold payment of each purchase (cheaper; used by RL)."""
-        if self.phase in ("chance", "terminal", "blocked"):
+        if self.phase in ("chance", "terminal"):
             return []
         if self.phase == "noble":
             return [Action("noble", noble_id=n) for n in self.eligible_nobles()]
@@ -197,12 +210,42 @@ class Game:
         """payments(card_id)[0] without enumerating the others; None if unaffordable."""
         p = self.players[self.current_player]
         bonuses = p.bonuses if bonuses is None else bonuses
-        cost = [max(0, c - b) for c, b in zip(CARDS[card_id].cost, bonuses)]
-        colored = [min(c, t) for c, t in zip(cost, p.tokens)]
-        gold = sum(cost) - sum(colored)
-        if gold > p.tokens[5]:
+        tokens = p.tokens
+        # hot path of the search (every purchasable card of every expanded state): plain loop, no temporaries
+        colored = [0, 0, 0, 0, 0]
+        gold = 0
+        for i, c in enumerate(CARDS[card_id].cost):
+            c -= bonuses[i]
+            if c > 0:
+                t = tokens[i]
+                if c > t:
+                    colored[i] = t
+                    gold += c - t
+                else:
+                    colored[i] = c
+        if gold > tokens[5]:
             return None
-        return tuple(colored) + (gold,)
+        colored.append(gold)
+        return tuple(colored)
+
+    def _has_legal_action(self):
+        """bool(self.legal_actions(all_payments=False)) in the action phase, stopping at the first action found."""
+        p = self.players[self.current_player]
+        held = sum(p.tokens)
+
+        def fits(extra):
+            return self.discard_over_limit or held + extra <= 10
+
+        count = min(3, sum(1 for c in range(5) if self.bank[c] > 0))
+        if count and fits(count):
+            return True
+        if fits(2) and any(self.bank[c] >= 4 for c in range(5)):
+            return True
+        market_ids = [c for row in self.market for c in row if c is not None]
+        if market_ids and len(p.reserved) < 3 and fits(int(self.bank[5] > 0)):
+            return True
+        bonuses = p.bonuses
+        return any(self.least_gold_payment(c, bonuses) is not None for c in market_ids + p.reserved)
 
     def chance_outcomes(self):
         if self.phase != "chance":
@@ -310,12 +353,22 @@ class Game:
                             if (p.points, -len(p.purchased)) == best]
             self.phase = "terminal"
         else:
+            self._next_player()
+
+    def _next_player(self):
+        """Hand the turn to the next player who can act. A player without a legal action passes (the turn
+        counter advances); after four consecutive passes nobody can act any more (nothing changes while
+        everybody passes) and the game is a draw."""
+        for _ in range(4):
             self.current_player = (self.current_player + 1) % 4
             self.phase = "action"
-            if not self.legal_actions(all_payments=False):
-                # No invented pass or winner. Preserve the blocked state.
-                self.phase = "blocked"
-                self.end_reason = "blocked"
+            if self._has_legal_action():
+                return
+            self.passes += 1
+            self.turn += 1
+        self.end_reason = "draw"
+        self.winners = [0, 1, 2, 3]
+        self.phase = "terminal"
 
     def rewards(self):
         """Four-player terminal utility, shared wins split; no alternating negation."""
@@ -325,7 +378,7 @@ class Game:
 
     def assert_valid(self):
         assert len(self.players) == 4 and 0 <= self.current_player < 4
-        assert self.phase in ("action", "chance", "noble", "discard", "terminal", "blocked")
+        assert self.phase in ("action", "chance", "noble", "discard", "terminal")
         assert self.phase != "discard" or self.discard_over_limit
         assert len(self.bank) == 6 and all(v >= 0 for v in self.bank)
         for i, p in enumerate(self.players):
@@ -362,7 +415,7 @@ class Game:
             "nobles": self.nobles[:], "current_player": self.current_player,
             "turn": self.turn, "phase": self.phase, "pending_refill": self.pending_refill,
             "end_reason": self.end_reason, "winners": self.winners[:],
-            "discard_over_limit": self.discard_over_limit,
+            "discard_over_limit": self.discard_over_limit, "passes": self.passes,
         }
 
 

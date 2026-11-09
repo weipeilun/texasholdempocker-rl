@@ -1,0 +1,53 @@
+{
+ "note": "held-out opponents lookahead_alt1 / lookahead_alt2 (splendor/bots.py: weights \u00d7 exp(U(-0.25, 0.25)), seeds 8 / 10); 400 games each, deals 4e9 + i (ladder) \u2014 seed choice among 1-10 by strength only (altsearch: 200 games vs 3\u00d7lookahead, deals 4.1e9 + i)",
+ "altsearch_spread0.25": {
+  "1": 0.19,
+  "2": 0.19,
+  "3": 0.22,
+  "4": 0.22,
+  "5": 0.22,
+  "6": 0.175,
+  "7": 0.185,
+  "8": 0.245,
+  "9": 0.19,
+  "10": 0.25
+ },
+ "ladder": {
+  "lookahead_alt1_vs_3lookahead": {
+   "win_share": 0.2225,
+   "games": 400,
+   "mean_turns": 99.5425,
+   "sec": 24.18400549888611
+  },
+  "lookahead_alt2_vs_3lookahead": {
+   "win_share": 0.2575,
+   "games": 400,
+   "mean_turns": 100.92,
+   "sec": 22.87048864364624
+  },
+  "lookahead_alt1_vs_3heuristic": {
+   "win_share": 0.7225,
+   "games": 400,
+   "mean_turns": 97.1775,
+   "sec": 12.281527042388916
+  },
+  "lookahead_alt2_vs_3heuristic": {
+   "win_share": 0.7825,
+   "games": 400,
+   "mean_turns": 95.87,
+   "sec": 11.88987922668457
+  },
+  "lookahead_vs_3lookahead_alt1": {
+   "win_share": 0.26,
+   "games": 400,
+   "mean_turns": 100.4825,
+   "sec": 24.36152744293213
+  },
+  "lookahead_vs_3lookahead_alt2": {
+   "win_share": 0.275,
+   "games": 400,
+   "mean_turns": 103.09,
+   "sec": 20.37785768508911
+  }
+ }
+}

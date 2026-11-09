@@ -1,0 +1,1551 @@
+{
+ "updated": "2026-11-09T07:32:25+08:00",
+ "iterations": 300,
+ "running": false,
+ "elapsed_hours": 5.726070432222222,
+ "train_step_num": 20346,
+ "lr": 1e-05,
+ "games_per_second": 10.103558533230615,
+ "avg_turns": 96.147265625,
+ "replay_buffer": 150000,
+ "policy_loss": 1.2627258858259987,
+ "value_loss": 0.8495940832530751,
+ "end_reasons_last5": {
+  "score": 5120
+ },
+ "held_out": {
+  "value_ce": {
+   "first5": 0.9356327865532545,
+   "last5": 0.8232289579071266
+  },
+  "value_mse": {
+   "first5": 0.12883950955541085,
+   "last5": 0.11455276693608103
+  },
+  "value_mse_constant": {
+   "first5": 0.1871529698371887,
+   "last5": 0.18688881397247314
+  },
+  "winner_acc": {
+   "first5": 0.5813390402893744,
+   "last5": 0.6347372841853512
+  },
+  "policy_ce": {
+   "first5": 1.2969870371642416,
+   "last5": 1.2308191671658992
+  },
+  "target_entropy": {
+   "first5": 1.1254647367063524,
+   "last5": 1.066402543778103
+  }
+ },
+ "held_out_target": {
+  "value_ce": {
+   "first5": 0.9222774663146855,
+   "last5": 0.8286760871963026
+  },
+  "value_mse": {
+   "first5": 0.03232778492712344,
+   "last5": 0.028496724156212006
+  },
+  "value_mse_constant": {
+   "first5": 0.09236317127943039,
+   "last5": 0.10052406042814255
+  }
+ },
+ "eval": [
+  {
+   "round": 1,
+   "iteration": 4,
+   "win_rate": 0.5260416666666666,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 2,
+   "iteration": 9,
+   "win_rate": 0.5416666666666666,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 3,
+   "iteration": 14,
+   "win_rate": 0.5572916666666666,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 4,
+   "iteration": 19,
+   "win_rate": 0.4895833333333333,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 5,
+   "iteration": 24,
+   "win_rate": 0.4791666666666667,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 6,
+   "iteration": 29,
+   "win_rate": 0.515625,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 7,
+   "iteration": 34,
+   "win_rate": 0.5625,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 8,
+   "iteration": 39,
+   "win_rate": 0.5052083333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 9,
+   "iteration": 44,
+   "win_rate": 0.515625,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 10,
+   "iteration": 49,
+   "win_rate": 0.53125,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 11,
+   "iteration": 54,
+   "win_rate": 0.4947916666666667,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 12,
+   "iteration": 59,
+   "win_rate": 0.5364583333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 13,
+   "iteration": 64,
+   "win_rate": 0.5,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 14,
+   "iteration": 69,
+   "win_rate": 0.546875,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 15,
+   "iteration": 74,
+   "win_rate": 0.4895833333333333,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 16,
+   "iteration": 79,
+   "win_rate": 0.5572916666666666,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 17,
+   "iteration": 84,
+   "win_rate": 0.53125,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 18,
+   "iteration": 89,
+   "win_rate": 0.5052083333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 19,
+   "iteration": 94,
+   "win_rate": 0.5989583333333334,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 20,
+   "iteration": 99,
+   "win_rate": 0.515625,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 21,
+   "iteration": 104,
+   "win_rate": 0.5,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 22,
+   "iteration": 109,
+   "win_rate": 0.5625,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 24,
+   "iteration": 119,
+   "win_rate": 0.4635416666666667,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 25,
+   "iteration": 124,
+   "win_rate": 0.5104166666666666,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 26,
+   "iteration": 129,
+   "win_rate": 0.5625,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 27,
+   "iteration": 134,
+   "win_rate": 0.5104166666666666,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 28,
+   "iteration": 139,
+   "win_rate": 0.4895833333333333,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 29,
+   "iteration": 144,
+   "win_rate": 0.5208333333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 30,
+   "iteration": 149,
+   "win_rate": 0.5520833333333334,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 31,
+   "iteration": 154,
+   "win_rate": 0.4739583333333333,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 32,
+   "iteration": 159,
+   "win_rate": 0.5208333333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 33,
+   "iteration": 164,
+   "win_rate": 0.5,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 34,
+   "iteration": 169,
+   "win_rate": 0.5052083333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 35,
+   "iteration": 174,
+   "win_rate": 0.5,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 36,
+   "iteration": 179,
+   "win_rate": 0.515625,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 37,
+   "iteration": 184,
+   "win_rate": 0.484375,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 38,
+   "iteration": 189,
+   "win_rate": 0.5104166666666666,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 39,
+   "iteration": 194,
+   "win_rate": 0.5572916666666666,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 40,
+   "iteration": 199,
+   "win_rate": 0.46875,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 41,
+   "iteration": 204,
+   "win_rate": 0.4583333333333333,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 42,
+   "iteration": 209,
+   "win_rate": 0.5364583333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 43,
+   "iteration": 214,
+   "win_rate": 0.5520833333333334,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 44,
+   "iteration": 219,
+   "win_rate": 0.5364583333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 45,
+   "iteration": 224,
+   "win_rate": 0.515625,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 46,
+   "iteration": 229,
+   "win_rate": 0.5729166666666666,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 47,
+   "iteration": 234,
+   "win_rate": 0.5,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 48,
+   "iteration": 239,
+   "win_rate": 0.5208333333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 49,
+   "iteration": 244,
+   "win_rate": 0.5,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 50,
+   "iteration": 249,
+   "win_rate": 0.578125,
+   "completion": 1.0,
+   "promoted": 1.0
+  },
+  {
+   "round": 51,
+   "iteration": 254,
+   "win_rate": 0.5052083333333334,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 52,
+   "iteration": 259,
+   "win_rate": 0.46875,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 53,
+   "iteration": 264,
+   "win_rate": 0.4583333333333333,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 54,
+   "iteration": 269,
+   "win_rate": 0.421875,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 55,
+   "iteration": 274,
+   "win_rate": 0.484375,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 56,
+   "iteration": 279,
+   "win_rate": 0.4322916666666667,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 57,
+   "iteration": 284,
+   "win_rate": 0.4479166666666667,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 58,
+   "iteration": 289,
+   "win_rate": 0.453125,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 59,
+   "iteration": 294,
+   "win_rate": 0.515625,
+   "completion": 1.0,
+   "promoted": 0.0
+  },
+  {
+   "round": 60,
+   "iteration": 299,
+   "win_rate": 0.421875,
+   "completion": 1.0,
+   "promoted": 0.0
+  }
+ ],
+ "promotions": 11.0,
+ "bench": {
+  "bot:heuristic": [
+   {
+    "round": 1,
+    "iteration": 4,
+    "train_step_num": 335,
+    "win_share": 0.8645833333333334,
+    "win_rate": 0.8645833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.47289156626506
+   },
+   {
+    "round": 2,
+    "iteration": 9,
+    "train_step_num": 674,
+    "win_share": 0.7708333333333334,
+    "win_rate": 0.7708333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.074324324324323
+   },
+   {
+    "round": 3,
+    "iteration": 14,
+    "train_step_num": 1012,
+    "win_share": 0.8541666666666666,
+    "win_rate": 0.8541666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.39329268292683
+   },
+   {
+    "round": 4,
+    "iteration": 19,
+    "train_step_num": 1350,
+    "win_share": 0.8125,
+    "win_rate": 0.8125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.112179487179485
+   },
+   {
+    "round": 5,
+    "iteration": 24,
+    "train_step_num": 1688,
+    "win_share": 0.7916666666666666,
+    "win_rate": 0.7916666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.789473684210527
+   },
+   {
+    "round": 6,
+    "iteration": 29,
+    "train_step_num": 2026,
+    "win_share": 0.8229166666666666,
+    "win_rate": 0.8229166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.04113924050633
+   },
+   {
+    "round": 7,
+    "iteration": 34,
+    "train_step_num": 2364,
+    "win_share": 0.84375,
+    "win_rate": 0.84375,
+    "games": 96,
+    "mean_rounds_when_winning": 23.08641975308642
+   },
+   {
+    "round": 8,
+    "iteration": 39,
+    "train_step_num": 2702,
+    "win_share": 0.8125,
+    "win_rate": 0.8125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.05128205128205
+   },
+   {
+    "round": 9,
+    "iteration": 44,
+    "train_step_num": 3042,
+    "win_share": 0.8229166666666666,
+    "win_rate": 0.8229166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.189873417721518
+   },
+   {
+    "round": 10,
+    "iteration": 49,
+    "train_step_num": 3381,
+    "win_share": 0.8229166666666666,
+    "win_rate": 0.8229166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.79113924050633
+   },
+   {
+    "round": 11,
+    "iteration": 54,
+    "train_step_num": 3720,
+    "win_share": 0.84375,
+    "win_rate": 0.84375,
+    "games": 96,
+    "mean_rounds_when_winning": 22.805555555555557
+   },
+   {
+    "round": 12,
+    "iteration": 59,
+    "train_step_num": 4058,
+    "win_share": 0.875,
+    "win_rate": 0.875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.06845238095238
+   },
+   {
+    "round": 13,
+    "iteration": 64,
+    "train_step_num": 4396,
+    "win_share": 0.8333333333333334,
+    "win_rate": 0.8333333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.925
+   },
+   {
+    "round": 14,
+    "iteration": 69,
+    "train_step_num": 4734,
+    "win_share": 0.8645833333333334,
+    "win_rate": 0.8645833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.759036144578314
+   },
+   {
+    "round": 15,
+    "iteration": 74,
+    "train_step_num": 5073,
+    "win_share": 0.875,
+    "win_rate": 0.875,
+    "games": 96,
+    "mean_rounds_when_winning": 22.776785714285715
+   },
+   {
+    "round": 16,
+    "iteration": 79,
+    "train_step_num": 5412,
+    "win_share": 0.8645833333333334,
+    "win_rate": 0.8645833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.680722891566266
+   },
+   {
+    "round": 17,
+    "iteration": 84,
+    "train_step_num": 5749,
+    "win_share": 0.8541666666666666,
+    "win_rate": 0.8541666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.76219512195122
+   },
+   {
+    "round": 18,
+    "iteration": 89,
+    "train_step_num": 6088,
+    "win_share": 0.8125,
+    "win_rate": 0.8125,
+    "games": 96,
+    "mean_rounds_when_winning": 22.583333333333332
+   },
+   {
+    "round": 19,
+    "iteration": 94,
+    "train_step_num": 6427,
+    "win_share": 0.8854166666666666,
+    "win_rate": 0.8854166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.70294117647059
+   },
+   {
+    "round": 20,
+    "iteration": 99,
+    "train_step_num": 6765,
+    "win_share": 0.8645833333333334,
+    "win_rate": 0.8645833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.503012048192772
+   },
+   {
+    "round": 21,
+    "iteration": 104,
+    "train_step_num": 7103,
+    "win_share": 0.8958333333333334,
+    "win_rate": 0.8958333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.502906976744185
+   },
+   {
+    "round": 22,
+    "iteration": 109,
+    "train_step_num": 7442,
+    "win_share": 0.8333333333333334,
+    "win_rate": 0.8333333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.196875
+   },
+   {
+    "round": 24,
+    "iteration": 119,
+    "train_step_num": 8117,
+    "win_share": 0.8541666666666666,
+    "win_rate": 0.8541666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.304878048780488
+   },
+   {
+    "round": 25,
+    "iteration": 124,
+    "train_step_num": 8457,
+    "win_share": 0.90625,
+    "win_rate": 0.90625,
+    "games": 96,
+    "mean_rounds_when_winning": 22.364942528735632
+   },
+   {
+    "round": 26,
+    "iteration": 129,
+    "train_step_num": 8795,
+    "win_share": 0.875,
+    "win_rate": 0.875,
+    "games": 96,
+    "mean_rounds_when_winning": 22.154761904761905
+   },
+   {
+    "round": 27,
+    "iteration": 134,
+    "train_step_num": 9134,
+    "win_share": 0.8958333333333334,
+    "win_rate": 0.8958333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.444767441860463
+   },
+   {
+    "round": 28,
+    "iteration": 139,
+    "train_step_num": 9474,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.448863636363637
+   },
+   {
+    "round": 29,
+    "iteration": 144,
+    "train_step_num": 9811,
+    "win_share": 0.8854166666666666,
+    "win_rate": 0.8854166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.33529411764706
+   },
+   {
+    "round": 30,
+    "iteration": 149,
+    "train_step_num": 10151,
+    "win_share": 0.8958333333333334,
+    "win_rate": 0.8958333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.287790697674417
+   },
+   {
+    "round": 31,
+    "iteration": 154,
+    "train_step_num": 10490,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.008522727272727
+   },
+   {
+    "round": 32,
+    "iteration": 159,
+    "train_step_num": 10829,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.321022727272727
+   },
+   {
+    "round": 33,
+    "iteration": 164,
+    "train_step_num": 11169,
+    "win_share": 0.90625,
+    "win_rate": 0.90625,
+    "games": 96,
+    "mean_rounds_when_winning": 22.158045977011493
+   },
+   {
+    "round": 34,
+    "iteration": 169,
+    "train_step_num": 11508,
+    "win_share": 0.8958333333333334,
+    "win_rate": 0.8958333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.212209302325583
+   },
+   {
+    "round": 35,
+    "iteration": 174,
+    "train_step_num": 11848,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.1875
+   },
+   {
+    "round": 36,
+    "iteration": 179,
+    "train_step_num": 12186,
+    "win_share": 0.8333333333333334,
+    "win_rate": 0.8333333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.146875
+   },
+   {
+    "round": 37,
+    "iteration": 184,
+    "train_step_num": 12525,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 22.139204545454547
+   },
+   {
+    "round": 38,
+    "iteration": 189,
+    "train_step_num": 12864,
+    "win_share": 0.9270833333333334,
+    "win_rate": 0.9270833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 21.96067415730337
+   },
+   {
+    "round": 39,
+    "iteration": 194,
+    "train_step_num": 13204,
+    "win_share": 0.90625,
+    "win_rate": 0.90625,
+    "games": 96,
+    "mean_rounds_when_winning": 22.011494252873565
+   },
+   {
+    "round": 40,
+    "iteration": 199,
+    "train_step_num": 13544,
+    "win_share": 0.9583333333333334,
+    "win_rate": 0.9583333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 22.027173913043477
+   },
+   {
+    "round": 41,
+    "iteration": 204,
+    "train_step_num": 13884,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 21.80965909090909
+   },
+   {
+    "round": 42,
+    "iteration": 209,
+    "train_step_num": 14223,
+    "win_share": 0.90625,
+    "win_rate": 0.90625,
+    "games": 96,
+    "mean_rounds_when_winning": 21.913793103448278
+   },
+   {
+    "round": 43,
+    "iteration": 214,
+    "train_step_num": 14562,
+    "win_share": 0.9270833333333334,
+    "win_rate": 0.9270833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 21.85112359550562
+   },
+   {
+    "round": 44,
+    "iteration": 219,
+    "train_step_num": 14902,
+    "win_share": 0.9375,
+    "win_rate": 0.9375,
+    "games": 96,
+    "mean_rounds_when_winning": 22.158333333333335
+   },
+   {
+    "round": 45,
+    "iteration": 224,
+    "train_step_num": 15242,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 21.74715909090909
+   },
+   {
+    "round": 46,
+    "iteration": 229,
+    "train_step_num": 15584,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 21.943181818181817
+   },
+   {
+    "round": 47,
+    "iteration": 234,
+    "train_step_num": 15923,
+    "win_share": 0.9166666666666666,
+    "win_rate": 0.9166666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 21.647727272727273
+   },
+   {
+    "round": 48,
+    "iteration": 239,
+    "train_step_num": 16262,
+    "win_share": 0.9375,
+    "win_rate": 0.9375,
+    "games": 96,
+    "mean_rounds_when_winning": 21.927777777777777
+   },
+   {
+    "round": 49,
+    "iteration": 244,
+    "train_step_num": 16603,
+    "win_share": 0.8958333333333334,
+    "win_rate": 0.8958333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 21.665697674418606
+   },
+   {
+    "round": 50,
+    "iteration": 249,
+    "train_step_num": 16943,
+    "win_share": 0.9375,
+    "win_rate": 0.9375,
+    "games": 96,
+    "mean_rounds_when_winning": 21.891666666666666
+   },
+   {
+    "round": 51,
+    "iteration": 254,
+    "train_step_num": 17282,
+    "win_share": 0.9375,
+    "win_rate": 0.9375,
+    "games": 96,
+    "mean_rounds_when_winning": 21.705555555555556
+   },
+   {
+    "round": 52,
+    "iteration": 259,
+    "train_step_num": 17623,
+    "win_share": 0.96875,
+    "win_rate": 0.96875,
+    "games": 96,
+    "mean_rounds_when_winning": 21.731182795698924
+   },
+   {
+    "round": 53,
+    "iteration": 264,
+    "train_step_num": 17962,
+    "win_share": 0.9375,
+    "win_rate": 0.9375,
+    "games": 96,
+    "mean_rounds_when_winning": 21.622222222222224
+   },
+   {
+    "round": 54,
+    "iteration": 269,
+    "train_step_num": 18302,
+    "win_share": 0.9270833333333334,
+    "win_rate": 0.9270833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 21.985955056179776
+   },
+   {
+    "round": 55,
+    "iteration": 274,
+    "train_step_num": 18643,
+    "win_share": 0.9791666666666666,
+    "win_rate": 0.9791666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 21.784574468085108
+   },
+   {
+    "round": 56,
+    "iteration": 279,
+    "train_step_num": 18984,
+    "win_share": 0.9375,
+    "win_rate": 0.9375,
+    "games": 96,
+    "mean_rounds_when_winning": 21.966666666666665
+   },
+   {
+    "round": 57,
+    "iteration": 284,
+    "train_step_num": 19323,
+    "win_share": 0.9375,
+    "win_rate": 0.9375,
+    "games": 96,
+    "mean_rounds_when_winning": 21.92222222222222
+   },
+   {
+    "round": 58,
+    "iteration": 289,
+    "train_step_num": 19665,
+    "win_share": 0.96875,
+    "win_rate": 0.96875,
+    "games": 96,
+    "mean_rounds_when_winning": 21.728494623655912
+   },
+   {
+    "round": 59,
+    "iteration": 294,
+    "train_step_num": 20006,
+    "win_share": 0.96875,
+    "win_rate": 0.96875,
+    "games": 96,
+    "mean_rounds_when_winning": 21.666666666666668
+   },
+   {
+    "round": 60,
+    "iteration": 299,
+    "train_step_num": 20346,
+    "win_share": 0.9479166666666666,
+    "win_rate": 0.9479166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 21.664835164835164
+   }
+  ],
+  "bot:lookahead": [
+   {
+    "round": 1,
+    "iteration": 4,
+    "train_step_num": 335,
+    "win_share": 0.59375,
+    "win_rate": 0.59375,
+    "games": 96,
+    "mean_rounds_when_winning": 24.026315789473685
+   },
+   {
+    "round": 2,
+    "iteration": 9,
+    "train_step_num": 674,
+    "win_share": 0.5625,
+    "win_rate": 0.5625,
+    "games": 96,
+    "mean_rounds_when_winning": 23.805555555555557
+   },
+   {
+    "round": 3,
+    "iteration": 14,
+    "train_step_num": 1012,
+    "win_share": 0.7083333333333334,
+    "win_rate": 0.7083333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 24.058823529411764
+   },
+   {
+    "round": 4,
+    "iteration": 19,
+    "train_step_num": 1350,
+    "win_share": 0.5729166666666666,
+    "win_rate": 0.5729166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 24.29090909090909
+   },
+   {
+    "round": 5,
+    "iteration": 24,
+    "train_step_num": 1688,
+    "win_share": 0.6875,
+    "win_rate": 0.6875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.924242424242426
+   },
+   {
+    "round": 6,
+    "iteration": 29,
+    "train_step_num": 2026,
+    "win_share": 0.6041666666666666,
+    "win_rate": 0.6041666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.663793103448278
+   },
+   {
+    "round": 7,
+    "iteration": 34,
+    "train_step_num": 2364,
+    "win_share": 0.5416666666666666,
+    "win_rate": 0.5416666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.89903846153846
+   },
+   {
+    "round": 8,
+    "iteration": 39,
+    "train_step_num": 2702,
+    "win_share": 0.6875,
+    "win_rate": 0.6875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.875
+   },
+   {
+    "round": 9,
+    "iteration": 44,
+    "train_step_num": 3042,
+    "win_share": 0.7083333333333334,
+    "win_rate": 0.7083333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.669117647058822
+   },
+   {
+    "round": 10,
+    "iteration": 49,
+    "train_step_num": 3381,
+    "win_share": 0.6875,
+    "win_rate": 0.6875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.685606060606062
+   },
+   {
+    "round": 11,
+    "iteration": 54,
+    "train_step_num": 3720,
+    "win_share": 0.75,
+    "win_rate": 0.75,
+    "games": 96,
+    "mean_rounds_when_winning": 23.618055555555557
+   },
+   {
+    "round": 12,
+    "iteration": 59,
+    "train_step_num": 4058,
+    "win_share": 0.71875,
+    "win_rate": 0.71875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.97463768115942
+   },
+   {
+    "round": 13,
+    "iteration": 64,
+    "train_step_num": 4396,
+    "win_share": 0.71875,
+    "win_rate": 0.71875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.615942028985508
+   },
+   {
+    "round": 14,
+    "iteration": 69,
+    "train_step_num": 4734,
+    "win_share": 0.7083333333333334,
+    "win_rate": 0.7083333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.441176470588236
+   },
+   {
+    "round": 15,
+    "iteration": 74,
+    "train_step_num": 5073,
+    "win_share": 0.75,
+    "win_rate": 0.75,
+    "games": 96,
+    "mean_rounds_when_winning": 23.46527777777778
+   },
+   {
+    "round": 16,
+    "iteration": 79,
+    "train_step_num": 5412,
+    "win_share": 0.75,
+    "win_rate": 0.75,
+    "games": 96,
+    "mean_rounds_when_winning": 23.59027777777778
+   },
+   {
+    "round": 17,
+    "iteration": 84,
+    "train_step_num": 5749,
+    "win_share": 0.6875,
+    "win_rate": 0.6875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.62121212121212
+   },
+   {
+    "round": 18,
+    "iteration": 89,
+    "train_step_num": 6088,
+    "win_share": 0.6979166666666666,
+    "win_rate": 0.6979166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.529850746268657
+   },
+   {
+    "round": 19,
+    "iteration": 94,
+    "train_step_num": 6427,
+    "win_share": 0.6770833333333334,
+    "win_rate": 0.6770833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.342307692307692
+   },
+   {
+    "round": 20,
+    "iteration": 99,
+    "train_step_num": 6765,
+    "win_share": 0.6875,
+    "win_rate": 0.6875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.74621212121212
+   },
+   {
+    "round": 21,
+    "iteration": 104,
+    "train_step_num": 7103,
+    "win_share": 0.7291666666666666,
+    "win_rate": 0.7291666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.353571428571428
+   },
+   {
+    "round": 22,
+    "iteration": 109,
+    "train_step_num": 7442,
+    "win_share": 0.7604166666666666,
+    "win_rate": 0.7604166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.28082191780822
+   },
+   {
+    "round": 24,
+    "iteration": 119,
+    "train_step_num": 8117,
+    "win_share": 0.7083333333333334,
+    "win_rate": 0.7083333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.30514705882353
+   },
+   {
+    "round": 25,
+    "iteration": 124,
+    "train_step_num": 8457,
+    "win_share": 0.75,
+    "win_rate": 0.75,
+    "games": 96,
+    "mean_rounds_when_winning": 23.52777777777778
+   },
+   {
+    "round": 26,
+    "iteration": 129,
+    "train_step_num": 8795,
+    "win_share": 0.71875,
+    "win_rate": 0.71875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.583333333333332
+   },
+   {
+    "round": 27,
+    "iteration": 134,
+    "train_step_num": 9134,
+    "win_share": 0.78125,
+    "win_rate": 0.78125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.71
+   },
+   {
+    "round": 28,
+    "iteration": 139,
+    "train_step_num": 9474,
+    "win_share": 0.8229166666666666,
+    "win_rate": 0.8229166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.77848101265823
+   },
+   {
+    "round": 29,
+    "iteration": 144,
+    "train_step_num": 9811,
+    "win_share": 0.7083333333333334,
+    "win_rate": 0.7083333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.466911764705884
+   },
+   {
+    "round": 30,
+    "iteration": 149,
+    "train_step_num": 10151,
+    "win_share": 0.7708333333333334,
+    "win_rate": 0.7708333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.64189189189189
+   },
+   {
+    "round": 31,
+    "iteration": 154,
+    "train_step_num": 10490,
+    "win_share": 0.8333333333333334,
+    "win_rate": 0.8333333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.746875
+   },
+   {
+    "round": 32,
+    "iteration": 159,
+    "train_step_num": 10829,
+    "win_share": 0.75,
+    "win_rate": 0.75,
+    "games": 96,
+    "mean_rounds_when_winning": 23.73263888888889
+   },
+   {
+    "round": 33,
+    "iteration": 164,
+    "train_step_num": 11169,
+    "win_share": 0.7604166666666666,
+    "win_rate": 0.7604166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.763698630136986
+   },
+   {
+    "round": 34,
+    "iteration": 169,
+    "train_step_num": 11508,
+    "win_share": 0.7604166666666666,
+    "win_rate": 0.7604166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.852739726027398
+   },
+   {
+    "round": 35,
+    "iteration": 174,
+    "train_step_num": 11848,
+    "win_share": 0.8333333333333334,
+    "win_rate": 0.8333333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.603125
+   },
+   {
+    "round": 36,
+    "iteration": 179,
+    "train_step_num": 12186,
+    "win_share": 0.78125,
+    "win_rate": 0.78125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.916666666666668
+   },
+   {
+    "round": 37,
+    "iteration": 184,
+    "train_step_num": 12525,
+    "win_share": 0.7291666666666666,
+    "win_rate": 0.7291666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.982142857142858
+   },
+   {
+    "round": 38,
+    "iteration": 189,
+    "train_step_num": 12864,
+    "win_share": 0.8229166666666666,
+    "win_rate": 0.8229166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.873417721518987
+   },
+   {
+    "round": 39,
+    "iteration": 194,
+    "train_step_num": 13204,
+    "win_share": 0.78125,
+    "win_rate": 0.78125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.593333333333334
+   },
+   {
+    "round": 40,
+    "iteration": 199,
+    "train_step_num": 13544,
+    "win_share": 0.75,
+    "win_rate": 0.75,
+    "games": 96,
+    "mean_rounds_when_winning": 23.694444444444443
+   },
+   {
+    "round": 41,
+    "iteration": 204,
+    "train_step_num": 13884,
+    "win_share": 0.71875,
+    "win_rate": 0.71875,
+    "games": 96,
+    "mean_rounds_when_winning": 23.909420289855074
+   },
+   {
+    "round": 42,
+    "iteration": 209,
+    "train_step_num": 14223,
+    "win_share": 0.7395833333333334,
+    "win_rate": 0.7395833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.83450704225352
+   },
+   {
+    "round": 43,
+    "iteration": 214,
+    "train_step_num": 14562,
+    "win_share": 0.7395833333333334,
+    "win_rate": 0.7395833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.658450704225352
+   },
+   {
+    "round": 44,
+    "iteration": 219,
+    "train_step_num": 14902,
+    "win_share": 0.78125,
+    "win_rate": 0.78125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.846666666666668
+   },
+   {
+    "round": 45,
+    "iteration": 224,
+    "train_step_num": 15242,
+    "win_share": 0.8125,
+    "win_rate": 0.8125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.40705128205128
+   },
+   {
+    "round": 46,
+    "iteration": 229,
+    "train_step_num": 15584,
+    "win_share": 0.7916666666666666,
+    "win_rate": 0.7916666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.49671052631579
+   },
+   {
+    "round": 47,
+    "iteration": 234,
+    "train_step_num": 15923,
+    "win_share": 0.75,
+    "win_rate": 0.75,
+    "games": 96,
+    "mean_rounds_when_winning": 23.29861111111111
+   },
+   {
+    "round": 48,
+    "iteration": 239,
+    "train_step_num": 16262,
+    "win_share": 0.8125,
+    "win_rate": 0.8125,
+    "games": 96,
+    "mean_rounds_when_winning": 23.30448717948718
+   },
+   {
+    "round": 49,
+    "iteration": 244,
+    "train_step_num": 16603,
+    "win_share": 0.8020833333333334,
+    "win_rate": 0.8020833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.386363636363637
+   },
+   {
+    "round": 50,
+    "iteration": 249,
+    "train_step_num": 16943,
+    "win_share": 0.7395833333333334,
+    "win_rate": 0.7395833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.161971830985916
+   },
+   {
+    "round": 51,
+    "iteration": 254,
+    "train_step_num": 17282,
+    "win_share": 0.8020833333333334,
+    "win_rate": 0.8020833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.266233766233768
+   },
+   {
+    "round": 52,
+    "iteration": 259,
+    "train_step_num": 17623,
+    "win_share": 0.84375,
+    "win_rate": 0.84375,
+    "games": 96,
+    "mean_rounds_when_winning": 23.246913580246915
+   },
+   {
+    "round": 53,
+    "iteration": 264,
+    "train_step_num": 17962,
+    "win_share": 0.7708333333333334,
+    "win_rate": 0.7708333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.39189189189189
+   },
+   {
+    "round": 54,
+    "iteration": 269,
+    "train_step_num": 18302,
+    "win_share": 0.8333333333333334,
+    "win_rate": 0.8333333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.309375
+   },
+   {
+    "round": 55,
+    "iteration": 274,
+    "train_step_num": 18643,
+    "win_share": 0.7604166666666666,
+    "win_rate": 0.7604166666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.256849315068493
+   },
+   {
+    "round": 56,
+    "iteration": 279,
+    "train_step_num": 18984,
+    "win_share": 0.8645833333333334,
+    "win_rate": 0.8645833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.32831325301205
+   },
+   {
+    "round": 57,
+    "iteration": 284,
+    "train_step_num": 19323,
+    "win_share": 0.8333333333333334,
+    "win_rate": 0.8333333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.3125
+   },
+   {
+    "round": 58,
+    "iteration": 289,
+    "train_step_num": 19665,
+    "win_share": 0.7916666666666666,
+    "win_rate": 0.7916666666666666,
+    "games": 96,
+    "mean_rounds_when_winning": 23.736842105263158
+   },
+   {
+    "round": 59,
+    "iteration": 294,
+    "train_step_num": 20006,
+    "win_share": 0.7708333333333334,
+    "win_rate": 0.7708333333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.179054054054053
+   },
+   {
+    "round": 60,
+    "iteration": 299,
+    "train_step_num": 20346,
+    "win_share": 0.8020833333333334,
+    "win_rate": 0.8020833333333334,
+    "games": 96,
+    "mean_rounds_when_winning": 23.373376623376622
+   }
+  ]
+ },
+ "bench_last3": {
+  "bot:heuristic": 0.9618055555555555,
+  "bot:lookahead": 0.7881944444444445
+ },
+ "bench_best": {
+  "bot:heuristic": 0.9791666666666666,
+  "bot:lookahead": 0.8645833333333334
+ },
+ "end": "finished",
+ "target_reached": true,
+ "recent_errors": []
+}

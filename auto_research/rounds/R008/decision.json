@@ -1,0 +1,13 @@
+{
+ "verdict": "supported",
+ "goal_status": "reached",
+ "decided_at": "2026-11-09T08:05:00+08:00",
+ "needs_human": false,
+ "reason": "同 R007 设置续训 300 个 iteration（约 11.2 h，中途机器重启后精确续训）。部署搜索 512 次、确认发牌：vs 3×lookahead R007 it200 0.6975 → it90 0.7562 → it190 0.84（0.815–0.865），it190 vs heuristic 0.96、alt1 / alt2 0.84 / 0.7925；直接对局 it90 对 R007 it200 0.5903（288 局）、it190 对 it90 0.6042。it190 之后平台：it249 / it280 vs lookahead 0.8263 / 0.8563、对 it190 0.5521 / 0.5573（区间含 0.5）；it249 之后训练中评估不再晋升。held-out value_ce 0.936 → 0.823 仍在降。",
+ "best_checkpoint": "experiments/auto_r008/checkpoints/weights_iteration_00190.pth（= models/splendor_final/weights.pth，md5 c8a06fb9…）＋部署搜索（512 次、considered 8、opponent_policy prior）",
+ "next": {
+  "name": "R009_teacher_0p1",
+  "hypothesis": "带教权重 0.25 → 0.1 后策略目标更多来自搜索本身，能越过 R008 末段的平台：R009 检查点对 R008 it280 ≥ 0.55，vs 3×lookahead 与 alt1 / alt2 不低于起点 0.03 以上。",
+  "sketch": "config/splendor_auto_r009.yml：同 R008，policy_teacher_weight 0.1，init R008 it280，200 个 iteration，预算 8 h，seed 20261115。"
+ }
+}

@@ -1,0 +1,2 @@
+{"ckpt": "experiments/splendor_v4_20261104/checkpoints/latest.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.05, "win_rate": 0.05, "seconds": 160}
+{"ckpt": "experiments/splendor_v4_20261104/checkpoints/latest.pth", "mode": "value", "opponent": "heuristic", "games": 200, "win_share": 0.155, "win_rate": 0.155, "seconds": 165}

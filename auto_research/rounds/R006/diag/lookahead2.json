@@ -1,0 +1,23 @@
+{
+ "opp_model_heuristic_vs_3lookahead": {
+  "agent": "lookahead2(opp_model=heuristic,K=1)",
+  "opponents": "lookahead",
+  "games": 400,
+  "win_share": 0.25,
+  "sec": 104
+ },
+ "opp_model_lookahead_vs_3lookahead": {
+  "agent": "lookahead2(opp_model=lookahead,K=1)",
+  "opponents": "lookahead",
+  "games": 400,
+  "win_share": 0.39,
+  "sec": 171
+ },
+ "opp_model_heuristic_vs_3heuristic": {
+  "agent": "lookahead2(opp_model=heuristic,K=1)",
+  "opponents": "heuristic",
+  "games": 400,
+  "win_share": 0.89,
+  "sec": 117
+ }
+}

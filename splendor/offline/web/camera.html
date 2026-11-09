@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>摄像头推流 · 璀璨宝石线下对局</title>
+  <link rel="stylesheet" href="/static/offline.css" />
+</head>
+<body>
+  <header>
+    <h1><span>◆</span> 摄像头推流</h1>
+    <nav><a href="/">控制台</a><a href="/screen" target="_blank">大屏幕</a></nav>
+  </header>
+  <main>
+    <div id="secure" class="alert error hidden">
+      当前页面不是安全上下文，浏览器不允许打开摄像头。请用 <code>http://localhost:端口</code> 打开（例如 <code>ssh -L 8766:localhost:8766 服务器</code>），
+      或用 <code>--certfile/--keyfile</code> 以 HTTPS 启动服务。
+    </div>
+    <section class="panel">
+      <h2>摄像头 <small>放在牌桌正上方，画面里要能看全公共区和四位玩家的区域</small></h2>
+      <div class="row" style="margin-bottom:10px">
+        <select id="device" style="min-width:260px"></select>
+        <select id="resolution">
+          <option value="3840x2160">3840×2160</option>
+          <option value="2560x1440">2560×1440</option>
+          <option value="1920x1080" selected>1920×1080</option>
+          <option value="1280x720">1280×720</option>
+        </select>
+        <label class="muted small">每 <input id="interval" type="number" min="1" max="30" value="2" style="width:60px" /> 秒上传一帧</label>
+        <button id="start" class="primary">开始推流</button>
+        <button id="stop" disabled>停止</button>
+      </div>
+      <video id="video" class="preview" autoplay playsinline muted></video>
+      <div class="status-line" id="status">未开始</div>
+    </section>
+    <section class="panel">
+      <h2>摆放建议</h2>
+      <ul class="small">
+        <li>摄像头垂直向下、画面横向，整张桌子占满画面；光线均匀，避免反光和阴影。</li>
+        <li>公共区：一排贵族，三行发展卡（默认从上到下 3、2、1 级），银行筹码按颜色分开摆。</li>
+        <li>每位玩家：筹码按颜色分开、不要叠得太高；发展卡按颜色错开叠放，能数出张数；预留牌正面朝上。</li>
+        <li>手和身体做完动作后离开画面，识别结果更稳定。</li>
+      </ul>
+    </section>
+  </main>
+  <script src="/static/common.js"></script>
+  <script>
+    "use strict";
+    let stream = null, timer = null, sending = false, sent = 0;
+    if (!window.isSecureContext) $("secure").classList.remove("hidden");
+    async function listDevices() {
+      try {
+        const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+        $("device").innerHTML = devices.map((d, i) => `<option value="${d.deviceId}">${esc(d.label || "摄像头 " + (i + 1))}</option>`).join("")
+          || `<option value="">（没有找到摄像头；先点“开始推流”授权）</option>`;
+      } catch (e) {
+        $("status").textContent = "无法列出摄像头：" + e.message;
+      }
+    }
+    async function start() {
+      const [w, h] = $("resolution").value.split("x").map(Number);
+      const video = { width: { ideal: w }, height: { ideal: h } };
+      if ($("device").value) video.deviceId = { exact: $("device").value };
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+      } catch (e) {
+        $("status").textContent = "打开摄像头失败：" + e.message;
+        return;
+      }
+      $("video").srcObject = stream;
+      await listDevices();
+      $("start").disabled = true;
+      $("stop").disabled = false;
+      const every = Math.max(1, +$("interval").value || 2) * 1000;
+      timer = setInterval(upload, every);
+    }
+    function stop() {
+      clearInterval(timer);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+      $("start").disabled = false;
+      $("stop").disabled = true;
+      $("status").textContent = "已停止";
+    }
+    async function upload() {
+      const v = $("video");
+      if (sending || !v.videoWidth) return;
+      sending = true;
+      const canvas = document.createElement("canvas");
+      canvas.width = v.videoWidth;
+      canvas.height = v.videoHeight;
+      canvas.getContext("2d").drawImage(v, 0, 0);
+      const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.9));
+      try {
+        const r = await fetch("/api/frame?source=" + encodeURIComponent("浏览器摄像头"), {
+          method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob,
+        });
+        if (r.status === 401) location.href = "/login";
+        if (!r.ok) throw new Error((await r.json()).error || "HTTP " + r.status);
+        sent++;
+        $("status").textContent = `推流中：${v.videoWidth}×${v.videoHeight}，已上传 ${sent} 帧，最近 ${timeText(Date.now() / 1000)}（${Math.round(blob.size / 1024)} KB）`;
+      } catch (e) {
+        $("status").textContent = "上传失败：" + e.message;
+      } finally {
+        sending = false;
+      }
+    }
+    $("start").onclick = start;
+    $("stop").onclick = stop;
+    if (navigator.mediaDevices) listDevices();
+  </script>
+</body>
+</html>

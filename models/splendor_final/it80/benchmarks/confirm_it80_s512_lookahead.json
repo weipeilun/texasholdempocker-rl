@@ -1,0 +1,22 @@
+{
+ "model": "/tmp/r007/r007_it80.pth",
+ "config": "/data/playground/texasholdempocker-rl/config/splendor_auto_r007.yml",
+ "sims": 512,
+ "time": "2026-11-07T16:13:31",
+ "bots": {
+  "bot:lookahead": {
+   "win_share": 0.56375,
+   "win_rate": 0.56375,
+   "games": 800,
+   "completion": 1.0,
+   "mean_points": 13.925,
+   "mean_rounds_when_winning": 24.672949002217294,
+   "deals": 200,
+   "win_share_ci95": [
+    0.5307977734641748,
+    0.5967022265358252
+   ]
+  }
+ },
+ "anchors": {}
+}

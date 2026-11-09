@@ -1,0 +1,13 @@
+{
+ "candidate": "r008_it190",
+ "final": "r008_it190",
+ "members": {
+  "lookahead": {
+   "score": 0.9444444444444444,
+   "ci95": [
+    0.8980140662158893,
+    0.9908748226729995
+   ],
+   "games": 90,
+   "final_score_same_deals": 0.9444444444444444,
+   "regression": 

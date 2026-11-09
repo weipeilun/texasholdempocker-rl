@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>大屏幕 · 机器人指令</title>
+  <link rel="stylesheet" href="/static/offline.css" />
+</head>
+<body class="screen">
+  <main id="main"><div class="waiting">正在连接…</div></main>
+  <script src="/static/common.js"></script>
+  <script>
+    "use strict";
+    let shownVersion = -1;
+    function render(view) {
+      const g = view.game;
+      let html = "";
+      if (!g) {
+        html = `<div class="waiting">还没有对局</div>`;
+      } else if (g.phase === "setup") {
+        html = `<div class="waiting">请摆好开局：三行各 4 张发展卡、5 位贵族、银行筹码</div><div class="sub">识别完成后由操作员确认开局</div>`;
+      } else if (g.phase === "terminal") {
+        const end = [...g.history].reverse().find((h) => h.kind === "end");
+        html = `<div class="who">对局结束</div><div class="waiting">${esc(end ? end.text : "")}</div>`;
+      } else {
+        const ins = g.instruction;
+        const cur = g.current;
+        if (ins) {
+          html = `<div class="who">机器人 ${esc(ins.name)} 的行动 —— 请代理执行</div>`;
+          if (ins.steps && ins.steps.length) html += `<ol class="steps">${ins.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>`;
+          if (ins.refill) html += `<div class="refill">${ins.steps && ins.steps.length ? "然后：" : ""}${esc(ins.refill)}</div>`;
+          if (ins.notes && ins.notes.length) html += `<div class="notes">${ins.notes.map(esc).join("<br>")}</div>`;
+        } else if (g.thinking) {
+          html = `<div class="who">${esc(g.names[cur])} 正在思考…</div>`;
+        } else {
+          html = `<div class="who">轮到 ${esc(g.names[cur])}</div>`;
+          html += `<div class="waiting">${esc(g.hints[0] || "")}</div>`;
+          if (g.hints.length > 1) html += `<div class="sub">${g.hints.slice(1, 4).map(esc).join("<br>")}</div>`;
+        }
+        const serious = (g.alerts || []).filter((a) => a.level === "error");
+        if (serious.length) html += `<div class="bigalert">${alertsHTML(serious)}</div>`;
+      }
+      $("main").innerHTML = html;
+    }
+    async function poll() {
+      try {
+        const view = await api("/api/state");
+        const v = view.game ? view.game.version : -2;
+        if (v !== shownVersion) {
+          shownVersion = v;
+          render(view);
+        }
+      } catch (e) {
+        $("main").innerHTML = `<div class="bigalert">连接失败：${esc(e.message)}</div>`;
+        shownVersion = -1;
+      }
+      setTimeout(poll, 1000);
+    }
+    poll();
+  </script>
+</body>
+</html>

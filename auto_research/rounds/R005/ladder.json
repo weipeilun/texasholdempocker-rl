@@ -1,0 +1,14 @@
+{
+ "lookahead_vs_3heuristic": {
+  "win_share": 0.7975,
+  "games": 400,
+  "mean_turns": 96.335,
+  "sec": 12.331805229187012
+ },
+ "heuristic_vs_3lookahead": {
+  "win_share": 0.115,
+  "games": 400,
+  "mean_turns": 98.3975,
+  "sec": 21.675695180892944
+ }
+}

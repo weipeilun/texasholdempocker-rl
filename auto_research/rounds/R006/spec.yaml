@@ -1,0 +1,11 @@
+name: R006_policy_teacher_lookahead
+kind: train
+hypothesis: 对 lookahead 的平台（各轮 0.26–0.30）来自策略先验在整类动作上的塌缩。可走时"同色拿 2 个"的先验质量只有 0.3%，lookahead 选"预留 3 级牌"时模型先验只有 0.6%。Gumbel 改进策略 π' 的 σ(q) 项（c_scale 0.1、不缩放）太小，抬不起这些动作。把 lookahead 的动作以 w = 0.25 混进记录的策略目标（kickstarting），从 R005 latest 出发，9 小时内：独立基准中最后的检查点 vs 3×lookahead >= 0.35、vs 3×heuristic >= 0.55，对 R005 latest >= 0.55，且 style_stats 中同色拿 2 / 预留 3 级牌的使用率明显上升。
+question: 先验塌缩是不是瓶颈；带教会不会把模型变成 lookahead 的复制品（对 lookahead 回到 0.25）。下一步是降低 / 撤掉带教，还是加大 c_scale 让搜索自己能抬起动作。
+config: config/splendor_auto_r006.yml
+experiment_dir: experiments/auto_r006
+init_from: experiments/auto_r005/checkpoints/latest.pth
+budget_hours: 9
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

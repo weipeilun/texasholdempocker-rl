@@ -1,0 +1,11 @@
+name: R001_lr_decay_stronger_search
+kind: train
+hypothesis: v4 后期停滞来自恒定学习率 2e-4 的噪声地板与偏弱的自对弈搜索。从 v4 最新权重出发，学习率分段线性衰减（100 步预热到 2e-4，4000 步降到 5e-5，10000 步降到 2e-5），自对弈全量搜索比例 0.06 -> 0.15、模拟次数 128 -> 256、快速搜索 16 -> 24（每局样本 5 -> 12），9 小时内：训练中基准对 3 个 lookahead 的胜率份额（最后 3 次的均值）比第 1 次基准高至少 0.05，且独立基准中本轮最好检查点对 v4 起点（锚点，各占两座）的胜率 >= 0.55。
+question: 学习率衰减与更强的搜索能否让训练越过 v4 的平台；若不能，停滞更可能来自哪里（策略目标质量、价值学习、网络容量），决定 M2 的方向。
+config: config/splendor_auto_r001.yml
+experiment_dir: experiments/auto_r001
+init_from: experiments/splendor_v4_20261104/checkpoints/latest.pth
+budget_hours: 9
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

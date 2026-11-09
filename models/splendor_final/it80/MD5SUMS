@@ -1,0 +1,8 @@
+71995a0660fb29f14df2f36e096390e0  weights.pth
+6bd5f43451129f8486afbb28cea4b7ab  config.yml
+7441a1f05fe7d185eb8fdb33d42560ad  play_agent.py
+09d18630e0df6f8d42b3f13cde3aa083  README.md
+7db67e918d5bf8dc21fc1ad5c4dc05e6  benchmarks/benchmark_watch2_it80.json
+2757e0c904c4a77719481c88d1dd02cc  benchmarks/confirm_it80_s512_lookahead.json
+841e9a92ad2239948f1a305614bc04d9  benchmarks/confirm_it80_s512_others.json
+4cdda1e95853d5e11487c9476312516c  benchmarks/it80_c8_s512.json

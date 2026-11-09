@@ -1,0 +1,20 @@
+{
+ "model": "/tmp/r008/r008_it90.pth",
+ "config": "/data/playground/texasholdempocker-rl/config/splendor_auto_r008.yml",
+ "sims": 512,
+ "time": "2026-11-08T23:32:48",
+ "anchors": {
+  "R007": {
+   "win_rate": 0.6197916666666666,
+   "completion": 1.0,
+   "counts": {
+    "score": 192
+   },
+   "deals": 96,
+   "win_rate_ci95": [
+    0.5521177550384884,
+    0.6874655782948449
+   ]
+  }
+ }
+}

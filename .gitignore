@@ -1,3 +1,14 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# local artifacts: training data, checkpoints, logs, builds, code backups (weights are listed in MD5SUMS files)
+backup_*/
+build/
+data/
+experiments/
+logs/
+rl/*.so
+*.pth
+auto_research/rounds/*/*.log
+auto_research/*.bak_*

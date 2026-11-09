@@ -1,0 +1,35 @@
+{
+ "model": "/tmp/r005/diag/m50.pth",
+ "config": "/tmp/r005/diag/c8.yml",
+ "sims": 64,
+ "time": "2026-11-07T03:26:54",
+ "bots": {
+  "bot:heuristic": {
+   "win_share": 0.48,
+   "win_rate": 0.48,
+   "games": 400,
+   "completion": 1.0,
+   "mean_points": 13.2125,
+   "mean_rounds_when_winning": 24.912760416666668,
+   "deals": 100,
+   "win_share_ci95": [
+    0.42530272844874695,
+    0.534697271551253
+   ]
+  },
+  "bot:lookahead": {
+   "win_share": 0.2925,
+   "win_rate": 0.2925,
+   "games": 400,
+   "completion": 1.0,
+   "mean_points": 11.4125,
+   "mean_rounds_when_winning": 25.585470085470085,
+   "deals": 100,
+   "win_share_ci95": [
+    0.2468011493635239,
+    0.33819885063647603
+   ]
+  }
+ },
+ "anchors": {}
+}

@@ -1,0 +1,13 @@
+name: R008_continue_r007
+kind: train
+hypothesis: R007 的设置（对手模型 prior、considered 8、带教 w 0.25）还没到平台：训练中基准 vs 3×lookahead 从第 80 个 iteration 的约 0.43 升到第 154–199 个 iteration 均值 0.57（128 次模拟，96 局），held-out value_ce 0.98 → 0.93。从 R007 latest 继续训练、学习率 2e-5 缓慢衰减，部署搜索（512 次、considered 8、prior）下最后的检查点比 R007 latest 更强：对 R007 latest ≥ 0.55，vs 3×lookahead 提高 ≥ 0.03。
+question: 同一设置继续训练还能涨多少；多久到平台。
+config: config/splendor_auto_r008.yml
+experiment_dir: experiments/auto_r008
+init_from: experiments/auto_r007/checkpoints/latest.pth
+budget_hours: 18
+target:
+  opponent: bot:lookahead
+  win_share: 0.5
+# 2026-11-09 01:30：服务器重启后从 experiments/auto_r008/checkpoints/latest.pth 精确续训（第 115 个 iteration 起）
+resume: experiments/auto_r008

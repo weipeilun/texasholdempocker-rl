@@ -1,0 +1,6 @@
+7d2fa2570b508d90346c7028d812742d  weights.pth
+3d99969a65d0868915cd8cb887286364  config.yml
+fb34b0af414a821d90dd11b3cb649b9b  play_agent.py
+5ad6d67f33380acdd199ac0623c082c9  README.md
+413273fe9ec7e644aa1114cb1e09c076  benchmarks/confirm_it200_s512_lookahead.json
+a19995cdd69b13afdf8c3b2d292fda80  benchmarks/confirm_it200_s512_others.json

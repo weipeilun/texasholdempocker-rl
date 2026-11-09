@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>视觉模型设置 · 璀璨宝石线下对局</title>
+  <link rel="stylesheet" href="/static/offline.css" />
+</head>
+<body>
+  <header>
+    <h1><span>◆</span> 视觉模型设置</h1>
+    <nav><a href="/">控制台</a><a href="/camera" target="_blank">摄像头</a><span class="user" id="user"></span><button onclick="logout()">退出</button></nav>
+  </header>
+  <main>
+    <div id="msg" class="alert hidden"></div>
+    <section class="panel">
+      <h2>接入 <small>OpenAI 或兼容 OpenAI 接口的中转服务（Chat Completions + 图片输入）。设置保存在服务器上，仅本账号使用</small></h2>
+      <div class="form-grid">
+        <label for="base_url">API 地址</label>
+        <input id="base_url" type="url" placeholder="https://api.openai.com/v1" />
+        <label for="api_key">API Key</label>
+        <div class="row">
+          <input id="api_key" type="password" style="flex:1" autocomplete="off" placeholder="留空 = 保持已保存的 Key" />
+          <span id="key_hint" class="muted small"></span>
+          <label class="small"><input id="clear_api_key" type="checkbox" /> 清除已保存的 Key</label>
+        </div>
+        <label for="model">模型</label>
+        <div class="row">
+          <select id="model_select" style="min-width:220px"></select>
+          <input id="model" type="text" placeholder="或直接填写模型名" style="flex:1" />
+          <button id="load_models">从接口读取模型列表</button>
+        </div>
+        <label>连接测试</label>
+        <div class="row"><button id="test">保存并测试连接</button><span id="test_result" class="muted small"></span></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>识别参数</h2>
+      <div class="form-grid">
+        <label for="interval">识别间隔（秒）</label><input id="interval" type="number" min="2" max="120" />
+        <label for="image_max_side">图片长边（像素）</label><input id="image_max_side" type="number" min="512" max="4096" />
+        <label for="jpeg_quality">JPEG 质量</label><input id="jpeg_quality" type="number" min="50" max="100" />
+        <label for="detail">图片细节</label><select id="detail"><option value="high">high</option><option value="auto">auto</option><option value="low">low</option></select>
+        <label for="timeout">超时（秒）</label><input id="timeout" type="number" min="10" max="300" />
+        <label for="hint_expected">附带上一次确认的局面</label><label class="small"><input id="hint_expected" type="checkbox" /> 帮助模型对照（以照片为准）</label>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>桌面布局 <small>告诉视觉模型每位玩家坐在画面的哪里（按行动顺序）</small></h2>
+      <div class="form-grid">
+        <label for="layout0">玩家1</label><input id="layout0" type="text" />
+        <label for="layout1">玩家2</label><input id="layout1" type="text" />
+        <label for="layout2">玩家3</label><input id="layout2" type="text" />
+        <label for="layout3">玩家4</label><input id="layout3" type="text" />
+        <label for="market_rows">发展卡行</label><input id="market_rows" type="text" />
+        <label for="slot_order">每行顺序</label><input id="slot_order" type="text" />
+        <label for="extra_prompt">补充说明</label><textarea id="extra_prompt" placeholder="例如：桌面是深色布，黑色筹码容易和桌面混淆"></textarea>
+      </div>
+      <div class="row" style="margin-top:12px"><button id="save" class="primary">保存设置</button></div>
+    </section>
+    <section class="panel">
+      <h2>试识别 <small>用最新的摄像头画面调用一次视觉模型（不影响对局）</small></h2>
+      <div class="row"><button id="try">试识别当前画面</button><span id="try_status" class="muted small"></span></div>
+      <pre id="try_result" class="hidden"></pre>
+    </section>
+    <section class="panel">
+      <h2>修改密码</h2>
+      <div class="row">
+        <input id="old_pw" type="password" placeholder="原密码" />
+        <input id="new_pw" type="password" placeholder="新密码（至少 8 位）" />
+        <button id="change_pw">修改</button>
+      </div>
+    </section>
+  </main>
+  <script src="/static/common.js"></script>
+  <script>
+    "use strict";
+    const FIELDS = ["base_url", "interval", "image_max_side", "jpeg_quality", "detail", "timeout", "market_rows", "slot_order", "extra_prompt"];
+    function message(text, ok) {
+      const m = $("msg");
+      m.className = "alert " + (ok ? "warn" : "error");
+      m.textContent = text;
+      m.classList.remove("hidden");
+      setTimeout(() => m.classList.add("hidden"), 6000);
+    }
+    function fillModels(list, current) {
+      const all = [...new Set([...(list || []), ...CARDS.models, current].filter(Boolean))];
+      $("model_select").innerHTML = all.map((m) => `<option value="${esc(m)}"${m === current ? " selected" : ""}>${esc(m)}</option>`).join("");
+      $("model").value = current || "";
+    }
+    function load(s) {
+      for (const k of FIELDS) $(k).value = s[k] === null || s[k] === undefined ? "" : s[k];
+      $("hint_expected").checked = !!s.hint_expected;
+      for (let i = 0; i < 4; i++) $("layout" + i).value = (s.layout || [])[i] || "";
+      $("key_hint").textContent = s.api_key_set ? "已保存：" + s.api_key_hint : "未设置";
+      $("api_key").value = "";
+      $("clear_api_key").checked = false;
+      fillModels([], s.model);
+    }
+    function collect() {
+      const out = {};
+      for (const k of FIELDS) out[k] = $(k).value;
+      for (const k of ["interval", "image_max_side", "jpeg_quality", "timeout"]) out[k] = +out[k];
+      out.hint_expected = $("hint_expected").checked;
+      out.layout = [0, 1, 2, 3].map((i) => $("layout" + i).value);
+      out.model = $("model").value.trim() || $("model_select").value;
+      if ($("api_key").value) out.api_key = $("api_key").value.trim();
+      if ($("clear_api_key").checked) out.clear_api_key = true;
+      return out;
+    }
+    async function save() {
+      const s = await api("/api/settings", collect());
+      load(s);
+      return s;
+    }
+    (async () => {
+      await loadCards();
+      const me = await api("/api/me");
+      $("user").textContent = me.user;
+      load(await api("/api/settings"));
+      $("model_select").onchange = () => ($("model").value = $("model_select").value);
+      $("save").onclick = async () => {
+        try { await save(); message("已保存", true); } catch (e) { message(e.message); }
+      };
+      $("load_models").onclick = async () => {
+        try {
+          await save();
+          const r = await api("/api/models");
+          fillModels(r.models, $("model").value);
+          message(`读取到 ${r.models.length} 个模型`, true);
+        } catch (e) { message("读取模型列表失败：" + e.message); }
+      };
+      $("test").onclick = async () => {
+        $("test_result").textContent = "测试中…";
+        try {
+          await save();
+          const r = await api("/api/models");
+          const model = $("model").value;
+          const has = r.models.includes(model);
+          $("test_result").textContent = `连接成功，接口提供 ${r.models.length} 个模型；` + (has ? `包含 ${model}` : `列表里没有 ${model}（中转服务可能仍支持，请用“试识别”确认）`);
+        } catch (e) { $("test_result").textContent = "连接失败：" + e.message; }
+      };
+      $("try").onclick = async () => {
+        $("try_status").textContent = "识别中（可能需要几十秒）…";
+        try {
+          await save();
+          const r = await api("/api/vision/test", {});
+          $("try_status").textContent = `完成：${r.meta.model}，${r.meta.latency} 秒，图片 ${r.meta.image_size ? r.meta.image_size.join("×") : ""}`;
+          $("try_result").textContent = "整理后的结果：\n" + JSON.stringify(r.summary, null, 1) + "\n\n模型原始输出：\n" + JSON.stringify(r.raw, null, 1);
+          $("try_result").classList.remove("hidden");
+        } catch (e) { $("try_status").textContent = "失败：" + e.message; }
+      };
+      $("change_pw").onclick = async () => {
+        try { await api("/api/password", { old: $("old_pw").value, new: $("new_pw").value }); message("密码已修改", true); }
+        catch (e) { message(e.message); }
+      };
+    })();
+  </script>
+</body>
+</html>

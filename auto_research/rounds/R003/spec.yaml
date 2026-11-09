@@ -1,0 +1,11 @@
+name: R003_td_lambda_value_targets
+kind: train
+hypothesis: 价值网络学到了"整体上谁领先"（全局 R² 稳定），但没有学到兄弟局面之间的排序——同一轮相邻检查点的价值一步贪心在 0.055–0.20 之间跳动（R001 四个检查点均值 0.13，R002 0.12），因为终局胜负作为目标噪声太大。把价值目标换成 TD(λ) 回报（λ 0.95，用之后各步的搜索价值自举，最后一步用真实结果）、学习率 5e-5 起继续衰减、终局全量搜索推后到 13 分之后，从 R002 latest 出发 9 小时内：最后 3 个存档检查点的价值一步贪心（vs 3×lookahead，400 局）均值 >= 0.20，训练中基准对 3×lookahead 最后 3 次均值比第 1 次高 >= 0.05，且独立基准中最后的检查点对 R002 latest（锚点）>= 0.55。
+question: 低方差的价值目标能否让价值的局部排序稳定并提高、转化为搜索强度；若不能，下一步是给价值加直接的排序监督（搜索中子节点的 Q 作为子局面的价值目标）、加辅助目标，还是加大网络。
+config: config/splendor_auto_r003.yml
+experiment_dir: experiments/auto_r003
+init_from: experiments/auto_r002/checkpoints/latest.pth
+budget_hours: 9
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

@@ -1,9 +1,10 @@
 import random
 import unittest
 from collections import Counter
+from unittest import mock
 
 from splendor.bots import choose_action
-from splendor.engine import Action, CARDS, NOBLES, new_game
+from splendor.engine import Action, CARDS, Game, NOBLES, new_game
 from splendor.server import Session
 
 
@@ -275,11 +276,11 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(g.winners, [0, 1])
         self.assertEqual(g.rewards(), [.5, .5, 0, 0])
 
-    def test_no_pass_action_and_blocked_player_stops_without_scoring(self):
+    def test_player_without_legal_action_passes(self):
         # Legacy hard cap: with the discard rule this player could still take tokens.
         g = new_game(self.rng, discard_over_limit=False)
         self.assertNotIn(Action("pass"), g.legal_actions())
-        # Player 2 has 10 blue/green/black tokens, three costly reserves and
+        # Player 2 has 10 blue/black tokens, three costly reserves and
         # cannot buy any of the exposed high-cost cards. Player 1 still acts.
         set_tokens(g, 1, [0, 4, 0, 0, 6, 0])
         for card_id in ("white-L3-01", "blue-L3-01", "red-L3-01"):
@@ -290,16 +291,46 @@ class RulesTest(unittest.TestCase):
                 if card_id:
                     move_card(g, card_id, g.players[3].purchased)
         g.step(Action("take", colors=(0, 2, 3)), self.rng)
-        self.assertEqual(g.phase, "blocked")
-        self.assertEqual(g.current_player, 1)
-        self.assertEqual(g.end_reason, "blocked")
-        self.assertEqual(g.legal_actions(), [])
-        self.assertEqual(g.winners, [])
+        # Player 2 is skipped (a forced pass counts as a turn); player 3 can still take tokens.
+        self.assertEqual((g.phase, g.current_player, g.turn, g.passes), ("action", 2, 2, 1))
+        self.assertEqual(g.end_reason, None)
+        self.assertNotIn(Action("pass"), g.legal_actions())
         with self.assertRaises(ValueError):
             g.step(Action("pass"), self.rng)
         with self.assertRaises(ValueError):
             g.rewards()
         g.assert_valid()
+
+    def test_passes_skip_until_someone_can_act(self):
+        g = self.game
+        able = {3}
+        with mock.patch.object(Game, "_has_legal_action", lambda game: game.current_player in able):
+            g.step(Action("take", colors=(0, 1, 2)), self.rng)
+        self.assertEqual((g.phase, g.current_player, g.turn, g.passes), ("action", 3, 3, 2))
+
+    def test_only_the_last_actor_can_act_is_three_passes_not_a_draw(self):
+        g = self.game
+        with mock.patch.object(Game, "_has_legal_action", lambda game: game.current_player == 0):
+            g.step(Action("take", colors=(0, 1, 2)), self.rng)
+        self.assertEqual((g.phase, g.current_player, g.turn, g.passes), ("action", 0, 4, 3))
+
+    def test_four_consecutive_passes_end_in_a_draw(self):
+        g = self.game
+        with mock.patch.object(Game, "_has_legal_action", lambda game: False):
+            g.step(Action("take", colors=(0, 1, 2)), self.rng)
+        self.assertEqual((g.phase, g.end_reason, g.turn, g.passes), ("terminal", "draw", 5, 4))
+        self.assertEqual(g.winners, [0, 1, 2, 3])
+        self.assertEqual(g.rewards(), [.25, .25, .25, .25])
+        self.assertEqual(g.legal_actions(), [])
+        g.assert_valid()
+
+    def test_clone_keeps_pass_count_and_key_ignores_it(self):
+        g = self.game
+        g.passes = 3
+        c = g.clone()
+        self.assertEqual(c.passes, 3)
+        c.passes = 0
+        self.assertEqual(c.key(), g.key())
 
     def test_seed_replay_including_random_draws_and_undo(self):
         session = Session(101)
@@ -327,15 +358,15 @@ class RulesTest(unittest.TestCase):
             game = new_game(rng, discard_over_limit=seed < 30)
             policy = "random" if seed % 2 else "heuristic"
             for _ in range(1200):
-                if game.phase in ("terminal", "blocked"):
+                if game.phase == "terminal":
                     break
                 game.step(choose_action(game, policy_rng, policy), rng)
                 game.assert_valid()
-            self.assertIn(game.phase, ("terminal", "blocked"), f"seed {seed}, {policy}")
-            if game.phase == "terminal":
-                self.assertAlmostEqual(sum(game.rewards()), 1)
-            else:
-                self.assertEqual(game.winners, [])
+            self.assertEqual(game.phase, "terminal", f"seed {seed}, {policy}")
+            self.assertIn(game.end_reason, ("score", "draw"))
+            self.assertAlmostEqual(sum(game.rewards()), 1)
+            if game.end_reason == "draw":
+                self.assertEqual(game.winners, [0, 1, 2, 3])
 
 
 
@@ -415,18 +446,17 @@ class DiscardRuleTest(unittest.TestCase):
         self.assertEqual((g.phase, g.current_player, g.turn), ("terminal", 0, 1))
         g.assert_valid()
 
-    def test_discard_rule_blocks_far_less_than_hard_cap(self):
-        blocked = {True: 0, False: 0}
-        for rule in blocked:
+    def test_discard_rule_needs_far_fewer_passes_than_hard_cap(self):
+        games_with_passes = {True: 0, False: 0}
+        for rule in games_with_passes:
             for seed in range(60):
                 rng, policy_rng = random.Random(seed), random.Random(seed + 1)
                 game = new_game(rng, discard_over_limit=rule)
-                while game.phase not in ("terminal", "blocked") and game.turn < 600:
+                while game.phase != "terminal" and game.turn < 600:
                     game.step(choose_action(game, policy_rng, "random"), rng)
-                blocked[rule] += game.phase == "blocked"
-        # Random play: about 55% blocked with the hard cap, about 13% with the discard rule.
-        self.assertLess(blocked[True] * 3, blocked[False])
-        # What is left needs an empty colour bank, three reserves and no affordable card.
+                games_with_passes[rule] += game.passes > 0
+        # A pass needs an empty colour bank, three reserves (or an empty market) and no affordable card.
+        self.assertLess(games_with_passes[True] * 3, games_with_passes[False])
 
 
 if __name__ == "__main__":

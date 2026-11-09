@@ -1,0 +1,12 @@
+{
+ "round": "R008",
+ "launched_at": "2026-11-08T18:25:36+08:00",
+ "pid": 9753,
+ "pgid": 9753,
+ "command": "/home/weipeilun/.conda/envs/py310/bin/python train_splendor.py --mode single --default-config config/splendor_auto_r008.yml",
+ "cwd": "/data/playground/texasholdempocker-rl",
+ "experiment_dir": "experiments/auto_r008",
+ "git_head": "fced18d",
+ "git_dirty_files": 47,
+ "budget_hours": 18
+}

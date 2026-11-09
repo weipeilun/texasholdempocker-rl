@@ -1,0 +1,13 @@
+{
+ "verdict": "inconclusive",
+ "goal_status": "open",
+ "decided_at": "2026-11-07T10:25:00+08:00",
+ "needs_human": false,
+ "reason": "6.03 h、107 个 iteration（带教 w 0.25）。旧标准独立基准：vs 3×lookahead 0.275 → 0.3175，vs 3×heuristic 0.4875 → 0.5575，对 R005 0.531。部署搜索（256 次、considered 8、对手走先验 argmax）：0.43 / 0.665。按 spec（旧标准）不满足 supported（lookahead 0.35、对 R005 0.55），也不满足 refuted。诊断：搜索的价值取决于对手模型（lookahead2：准确 0.39 / 不准 0.25）；带教后的先验是好的对手模型（prior 0.3875，准确上限 0.4025）。",
+ "best_checkpoint": "experiments/auto_r006/checkpoints/latest.pth（iteration 107）＋部署搜索（eval 256 次模拟、considered 8、opponent_policy prior）：vs 3×lookahead 0.43、vs 3×heuristic 0.665",
+ "next": {
+  "name": "R007_opponent_model_search",
+  "hypothesis": "自对弈的搜索也用对手模型（prior）、considered 8 后，网络在部署搜索下 vs 3×lookahead ≥ 0.50、vs heuristic ≥ 0.70、对 R006 latest ≥ 0.55。",
+  "sketch": "mcts_opponent_policy / eval_mcts_opponent_policy: prior；mcts_max_num_considered_actions 32 → 8；训练中的评估 128 次模拟；带教 w 0.25；从 R006 latest 起步。"
+ }
+}

@@ -1,0 +1,13 @@
+{
+ "verdict": "inconclusive",
+ "goal_status": "open",
+ "decided_at": "2026-11-06T21:30:00+08:00",
+ "needs_human": false,
+ "reason": "5.85 h、105 个 iteration。独立基准 vs 3×lookahead（同一批 400 局）0.21（R002 latest）→ 0.26（第 50 个 iteration）→ 0.275（第 70 个）→ 0.2575（第 100 个），第 50 个之后持平；第 100 个对 R002 latest 直接对局 0.615（0.51–0.72），判据 (c) 达到。价值一步贪心均值 0.116 < 0.20，判据 (a) 未达；训练中基准最后 3 次 0.226 < 第 1 次 0.312 + 0.05，判据 (b) 未达。held-out 对 TD 目标 MSE 0.0319→0.0302、对真实结果 0.1477→0.1455。评估时的搜索设置（value_scale、模拟次数、启发式叶节点）都在 ±0.04 内。自对弈强度与对机器人强度分化，转 R004（对手多样化）。",
+ "best_checkpoint": "experiments/auto_r003/checkpoints/latest.pth（iteration 104）",
+ "next": {
+  "name": "R004_diverse_opponents",
+  "hypothesis": "有机器人的自对弈对局 15% → 50%、每局 1–2 个机器人座位后，独立基准 vs 3×lookahead ≥ 0.35（R003 latest 起点 0.295）、vs 3×heuristic ≥ 0.45，且对 R003 latest 的直接对局 ≥ 0.45（自对弈强度不崩）。",
+  "sketch": "从 R003 latest 起步、新优化器、回放池从空开始；lr 3e-5 → 1.8e-5 → 1.2e-5；其余同 R003。"
+ }
+}

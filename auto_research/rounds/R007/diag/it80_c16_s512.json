@@ -1,0 +1,22 @@
+{
+ "model": "/tmp/r007/r007_it80.pth",
+ "config": "/tmp/r007/diag/r007_c16.yml",
+ "sims": 512,
+ "time": "2026-11-07T16:01:41",
+ "bots": {
+  "bot:lookahead": {
+   "win_share": 0.52,
+   "win_rate": 0.52,
+   "games": 400,
+   "completion": 1.0,
+   "mean_points": 13.6775,
+   "mean_rounds_when_winning": 24.510817307692307,
+   "deals": 100,
+   "win_share_ci95": [
+    0.4704193993622913,
+    0.5695806006377087
+   ]
+  }
+ },
+ "anchors": {}
+}

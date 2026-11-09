@@ -1,0 +1,14 @@
+{
+ "verdict": "inconclusive",
+ "goal_status": "open",
+ "decided_at": "2026-11-06T12:20:00+08:00",
+ "needs_human": false,
+ "reason": "学习率衰减按计划生效（lr 实测与 lr_factor 一致），自对弈搜索加强到 0.15×256；3.06 h 内 held-out 价值 MSE 0.1665→0.1657、赢家命中 0.432→0.439，基准 vs 3×lookahead 0.146→0.198（起点 0.205，持平），vs 3×heuristic 0.354→0.392。诊断显示价值网络无法给一步之后的局面排序（价值一步贪心 0.05 < 只用策略 0.16），搜索加深无收益；瓶颈在价值与 Q 缩放放大的目标噪声，不在学习率或搜索预算。提前停止，转 R002。补充：R001 latest 的价值一步贪心 0.20（v4 0.05），学习率衰减改善了价值的局部排序能力，但未转化为搜索强度；判定由 refuted 改为 inconclusive。",
+ "best_checkpoint": "experiments/auto_r001/checkpoints/latest.pth（iteration 58；best.pth 为第 34 个 iteration）",
+ "next": {
+  "name": "R002_honest_search_targets_and_value",
+  "hypothesis": "关掉 Q 的最小最大缩放、价值损失权重 1.0、终局（≥11 分）每步全量搜索、15% 自对弈对局加入规则机器人后，价值开始能给兄弟局面排序（价值一步贪心对 lookahead +0.05），基准对 lookahead 最近 3 次均值比第 1 次 +0.05。",
+  "sketch": "从 R001 latest 权重起步（价值排序能力更好）、新优化器、回放池从空开始；学习率 1e-4，6000 步 4e-5，12000 步 2e-5；评估也关掉缩放，基准与价值一步贪心在启动前按新设置重测起点。"
+ },
+ "correction": "2026-11-06 15:30：补充中\"学习率衰减把价值一步贪心从 0.05 提到 0.20\"是检查点噪声（R001 第 30/40/50/58 个 iteration 0.12/0.055/0.16/0.20），作废；判定不变。"
+}

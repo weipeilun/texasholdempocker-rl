@@ -4,6 +4,12 @@
 
 新增四人璀璨宝石规则引擎与中文图形界面，在仓库根目录运行 `python -m splendor` 即可启动，无需安装第三方依赖。采用公开预留、超过十枚筹码须退回（官方规则）、达到 15 分立即结算、无跳过操作的规则。使用方法、规则与搜索接口见 [splendor/README.md](splendor/README.md)。
 
+训练（Gumbel AlphaZero）：`python train_splendor.py --mode single --default-config config/<配置>.yml`，续训
+`python train_splendor.py --resume experiments/<实验名>`。学习率是训练步数的函数（`model_param_dict.lr_schedule`），续训时跟随配置。
+强度基准：`python benchmark_splendor.py --config experiments/<实验名>/config.yml --model <checkpoint>`（对规则机器人
+`splendor/bots.py` 的 random / heuristic / lookahead 与固定锚点模型）。自动实验循环的账本与控制脚本在 `auto_research/`，
+记录页 <https://notebook.infimory.ai/splendor-auto.html>。
+
 ## 序言
 先说一下这个项目的存在原因：
 1. 人的生命有限，对自己不感兴趣的事，是绝无必要，也不应浪费生命的。

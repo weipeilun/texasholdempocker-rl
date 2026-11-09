@@ -1,0 +1,11 @@
+name: R004_diverse_opponents
+kind: train
+hypothesis: R003 在自对弈分布里继续变强（对 R002 latest 0.615），但对规则机器人的独立基准从第 50 个 iteration 起停在 0.26–0.275——训练对手几乎都是"四个相似的我"。有机器人的自对弈对局从 15% 提到 50%、每局 1 或 2 个机器人座位（lookahead / heuristic）之后，从 R003 latest 出发 9 小时内：独立基准中最后的检查点 vs 3×lookahead >= 0.35（起点 R003 latest 0.295）、vs 3×heuristic >= 0.45，且对 R003 latest 的直接对局 >= 0.45。
+question: 对手多样化能否让对机器人的强度越过平台、同时不丢自对弈强度；若不能，下一步是让搜索正确建模对手（机器人座位按机器人走），还是换更强的改进算子（启发式叶节点、更大的 value_scale），或者加大网络。
+config: config/splendor_auto_r004.yml
+experiment_dir: experiments/auto_r004
+init_from: experiments/auto_r003/checkpoints/latest.pth
+budget_hours: 9
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

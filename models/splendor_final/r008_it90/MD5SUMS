@@ -1,0 +1,7 @@
+3c2599dea37a829a39e7177446d6c34e  weights.pth
+fdfd085537f9c2f79d5d2bad74d46968  config.yml
+05a5dd53c35e513be9e869be430fc709  play_agent.py
+09323a1942220a3eeab0461c104e1096  README.md
+1509ed4104ad02645bc3885f0fae71e9  benchmarks/benchmark_watch1_it90.json
+c83a24e1a74ddd2321c0cad494c4d6cb  benchmarks/benchmark_watch1_it90_others.json
+15544c3063d948e3e300c4d1650a7ec7  benchmarks/benchmark_watch1_it90_vsR007_more.json

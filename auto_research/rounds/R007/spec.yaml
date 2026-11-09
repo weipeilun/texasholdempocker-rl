@@ -1,0 +1,11 @@
+name: R007_opponent_model_search
+kind: train
+hypothesis: 4 人局里多看一层自己的回合，只有在对手模型准确时才有用（lookahead2 诊断）。R006 的先验经过带教，已经是不错的对手模型：评估时用 opponent_policy prior、considered 8、256 次模拟，vs 3×lookahead 达到 0.3875（max_n 0.335）。在自对弈的全量与快速搜索里也用 prior，搜索目标从此包含自己下一回合的信息。从 R006 latest 出发，9 小时内，用部署搜索（256 次模拟、considered 8、prior）测：最后的检查点 vs 3×lookahead >= 0.50、vs 3×heuristic >= 0.70，对 R006 latest >= 0.55（R006 latest 部署搜索基线 0.43 / 0.665）。
+question: 训练时也用对手模型，能否让策略本身继续变强，而不只是靠评估时的搜索；还差多少到 0.50；对手模型（先验）是否需要单独的头。
+config: config/splendor_auto_r007.yml
+experiment_dir: experiments/auto_r007
+init_from: experiments/auto_r006/checkpoints/latest.pth
+budget_hours: 9
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

@@ -1,0 +1,13 @@
+{
+ "verdict": "refuted",
+ "goal_status": "open",
+ "decided_at": "2026-11-06T15:35:00+08:00",
+ "needs_human": false,
+ "reason": "3.05 h、51 个 iteration：关缩放让策略目标变软（目标熵 1.2→0.96），策略变强（策略一步贪心 0.145→0.18–0.26；对 R001 latest 直接对局 0.604；独立基准 vs 3×lookahead 0.145→0.205，vs heuristic 0.415），但价值没有改善：价值一步贪心在相邻检查点之间 0.06–0.19 跳动（R001 也是 0.055–0.20），均值 0.12 不高于起点所在 R001 的 0.13；held-out 价值 MSE 0.1448→0.1421 在 iteration 间波动之内；训练中基准 vs lookahead 0.198→0.233（+0.035 < 0.05）；对 v4 latest 0.458 < 0.55；评估 1 / 64 / 256 次模拟 0.21 / 0.21 / 0.24，搜索仍无收益。R001 补充中价值排序改善的结论是检查点噪声，作废。",
+ "best_checkpoint": "experiments/auto_r002/checkpoints/latest.pth（iteration 50；对 R001 latest 0.604，对 v4 latest 0.458）",
+ "next": {
+  "name": "R003_td_lambda_value_targets",
+  "hypothesis": "价值目标换成 TD(λ) 回报（λ 0.95，之后各步搜索价值自举）、学习率 5e-5 起继续衰减、终局全量搜索推后到 13 分，价值一步贪心的多检查点均值 ≥ 0.20、训练中基准 +0.05、对 R002 latest ≥ 0.55。",
+  "sketch": "从 R002 latest 权重起步、新优化器、回放池从空开始；held-out 价值指标对真实结果计算，另记对 TD 目标的 held_out_target；价值一步贪心改为 400 局、多检查点。"
+ }
+}

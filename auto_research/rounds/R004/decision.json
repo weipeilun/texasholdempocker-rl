@@ -1,0 +1,13 @@
+{
+ "verdict": "refuted",
+ "goal_status": "open",
+ "decided_at": "2026-11-07T00:40:00+08:00",
+ "needs_human": false,
+ "reason": "3.1 h、66 个 iteration（50% 的自对弈对局有 1–2 个机器人座位）。独立基准（同一批 400 局）vs 3×lookahead：起点 R003 latest 0.295 → 第 50 个 iteration 0.2875 → 约第 59 个 0.2825 → latest 0.2525（< 0.31，refuted 判据）；vs 3×heuristic 0.405 → 0.4625 / 0.455 / 0.4525（+0.05）；对 R003 latest 0.49（第 50 个）→ 0.552（latest），一般强度没有丢。训练中基准 vs heuristic 0.43 → 0.55–0.59，vs lookahead 无趋势。对手多样化让模型学会对付较弱的贪心对手，没有学会对付 lookahead。",
+ "best_checkpoint": "experiments/auto_r004/checkpoints/latest.pth（iteration 65；对 R003 latest 0.552、vs heuristic 0.4525）",
+ "next": {
+  "name": "R005_derived_observation_fields",
+  "hypothesis": "观测加入 lookahead 评估所用的派生量（每张牌买方 / 最近对手还差几颗宝石，每个贵族我 / 最近对手还差几张）后，vs 3×lookahead ≥ 0.35、vs heuristic ≥ 0.50、对 R004 latest ≥ 0.55。",
+  "sketch": "观测版本 2（348 个字段）；R004 latest 转换为同函数权重（新字段嵌入为 0）起步；lr 5e-5；其余同 R004。"
+ }
+}

@@ -1,0 +1,11 @@
+name: R009_teacher_0p1
+kind: train
+hypothesis: 模型已远强于带教老师 lookahead（部署搜索 vs 3×lookahead 0.84，持平 0.25），老师一致率 0.468 → 0.450，R008 在 it190 之后进入平台（it249 之后不再晋升）。带教权重 0.25 → 0.1 后策略目标更多来自搜索本身，能越过平台：部署搜索下 R009 的检查点对 R008 it280 ≥ 0.55，vs 3×lookahead 与 alt1 / alt2 不低于起点 0.03 以上。
+question: 带教是不是 R008 末段平台的原因；先验作为对手模型时，降低带教会不会让对 lookahead 的强度下降。
+config: config/splendor_auto_r009.yml
+experiment_dir: experiments/auto_r009
+init_from: experiments/auto_r008/checkpoints/weights_iteration_00280.pth
+budget_hours: 8
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

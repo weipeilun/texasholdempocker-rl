@@ -1,0 +1,15 @@
+# 历史版本池（auto_research/benchmark_pool.py）。只追加，不改名、不删除：成员的发牌种子由它在列表里的位置决定，
+# 不同候选对同一成员用同一批发牌（配对比较）。kind: model（冻结的权重副本，auto_research/pool/）或 bot（规则机器人）。
+# final: 当前最终模型（models/splendor_final/weights.pth 的同一份权重）；替换最终模型时把新模型加入池并改这里。
+final: r008_it190
+reference: lookahead          # 等级分的零点（外部、固定、最早的成员）
+members:
+  - {name: lookahead, kind: bot, policy: lookahead, note: "一般玩家代理；规则机器人，最早的版本"}
+  - {name: lookahead_alt1, kind: bot, policy: lookahead_alt1, note: "权重扰动的 lookahead（seed 8），从不当老师、不进自对弈"}
+  - {name: lookahead_alt2, kind: bot, policy: lookahead_alt2, note: "权重扰动的 lookahead（seed 10）"}
+  - {name: heuristic, kind: bot, policy: heuristic, note: "弱规则机器人"}
+  - {name: r007_it80, kind: model, path: auto_research/pool/r007_it80.pth, added: 2026-11-07, note: "首次达标"}
+  - {name: r007_it200, kind: model, path: auto_research/pool/r007_it200.pth, added: 2026-11-08}
+  - {name: r008_it90, kind: model, path: auto_research/pool/r008_it90.pth, added: 2026-11-09}
+  - {name: r008_it190, kind: model, path: auto_research/pool/r008_it190.pth, added: 2026-11-09, note: "当前最终模型"}
+  - {name: r008_it280, kind: model, path: auto_research/pool/r008_it280.pth, added: 2026-11-09, note: "R009 起点"}

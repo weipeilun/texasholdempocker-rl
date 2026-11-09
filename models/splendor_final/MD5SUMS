@@ -1,0 +1,6 @@
+c8a06fb9ed55243a23e0a4d242e5e295  weights.pth
+103bc5871170085daac5b0e0affde39d  config.yml
+6776b5b88bca8f8887d6c5e6b95cbe7d  play_agent.py
+9256b8ed89191c13358fee37e0f8f64c  README.md
+cd574792d6e2fb9190377b43810ab0e6  benchmarks/benchmark_watch2_it190.json
+fdd66b776c814c773c4e8fbd854d9ef9  benchmarks/benchmark_watch2_it190_others.json

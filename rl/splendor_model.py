@@ -8,14 +8,28 @@ Same design as rl/models.TransformerAlphaGoZeroModel + rl/AlphaGoZero.AlphaGoZer
       final LayerNorm; the embedding is initialised at the scale of one sublayer's residual write;
     * learnable "starter" tokens in front of the sequence carry the heads:
       starter 0 -> action probability logits, starter 1 -> value;
-    * Adam + CyclicLR, SimpleMemory replay buffer, optional text dump of train data.
+    * SimpleMemory replay buffer, optional text dump of train data.
 
-Differences: the value head outputs one value per seat (relative to the acting player,
-4-player game), and the policy loss masks illegal actions before the softmax.
+Differences:
+    * value head: softmax over N_PLAYERS + 1 outcomes, "seat k (relative to the acting player) wins" and
+      "nobody wins", trained with cross-entropy against the win shares (a draw: 0.25 each). The value of a
+      seat is its predicted win share, a calibrated probability in [0, 1]. Every game ended by the rules has
+      a winner or a draw, so the "nobody wins" class gets no target mass any more (kept so that checkpoints
+      stay loadable); positions of truncated games carry value weight 0 and train the policy only;
+    * the policy loss masks illegal actions before the softmax;
+    * AdamW (decoupled weight decay, none on biases / LayerNorm), gradient clipping. The learning rate is a
+      pure function of the experiment's train step (lr_factor: linear warmup times an optional decay
+      schedule), written into the optimizer before every step: it is never restored from a checkpoint, so a
+      resumed run always follows the schedule of its config;
+    * every training sample is transformed by a random symmetry of the encoding (slot permutations,
+      splendor.rl_env.SYMMETRY_GROUPS);
+    * nn.TransformerEncoder deep-copies one layer num_layers times, so all layers would start with identical
+      weights; every layer is re-initialised independently after construction.
 """
 
 import logging
 import math
+import os
 from threading import Lock
 
 import numpy as np
@@ -25,9 +39,11 @@ from torch import nn
 from tools.memories.simple_memory import SimpleMemory
 from utils.torch_utils import PRE_NORM_FFN_WRITE_RMS, resolve_embedding_init_rms
 from splendor.rl_env import (FIELD_GROUPS, VOCAB_SIZES, ATTRS, OWNERS, SLOTS, FIELD_ATTR_IDX, FIELD_OWNER_IDX,
-                             FIELD_SLOT_IDX, N_ACTIONS, N_OBSERVATION, N_PLAYERS)
+                             FIELD_SLOT_IDX, N_ACTIONS, N_OBSERVATION, N_PLAYERS, SYMMETRY_GROUPS, DERIVED_FIELD_GROUPS)
 
 ILLEGAL_LOGIT = -1e4
+# pinned staging buffer sets per model: up to PREDICTION_RING - 1 predictions in flight (predict_batch_async)
+PREDICTION_RING = 3
 
 
 def resolve_device(device):
@@ -40,24 +56,75 @@ def resolve_device(device):
     return device
 
 
-class SplendorEnvEmbedding(nn.Module):
-    """token embedding + factorised field position embedding, summed.
+def _entity_of_field():
+    """field -> entity index (one per interchangeable slot of SYMMETRY_GROUPS) or -1 for a stand-alone field"""
+    entity = [-1] * N_OBSERVATION
+    for g, (obs_pos, _) in enumerate(SYMMETRY_GROUPS):
+        for j in range(len(obs_pos)):
+            for f in obs_pos[j]:
+                entity[f] = (g, j)
+    return entity
 
-    * field_embedding: one shared table; each field's integer value is offset by its vocab
-      group's start, so fields of the same group (e.g. card_id of all 24 card slots) share rows
-      and different groups never collide. Rows [0, num_starters) are the starter tokens.
-    * position (= field identity, the fields have no meaningful order):
-          E_attr[what the field measures] + E_owner[global/market/player k] + E_slot[which entity]
-      see splendor.rl_env.FIELD_LAYOUT. Starter tokens get no position: their rows are unique.
-    * no sqrt(d) scaling. The summed embedding is the first write into the pre-norm residual
-      stream; it is initialised with total RMS `init_rms` (default: the RMS one FFN sublayer writes
-      at init, utils.torch_utils.PRE_NORM_FFN_WRITE_RMS), split evenly between content and
-      position: field table std = init_rms/sqrt(2), each of the 3 position tables std = init_rms/sqrt(6).
+
+def build_token_layout():
+    """Group the observation fields into tokens.
+
+    Every slot of SYMMETRY_GROUPS (a market card, a reserved card, a noble) is ONE token: the scaled sum of its
+    fields' value embeddings, whose position embedding is the same for every slot of the group (owner +
+    entity type, no slot index). All other fields are one token each with position attr + owner + slot.
+    Returns dict:
+        field_token [N_OBSERVATION]  token of each field
+        token_scale [T]              1 / sqrt(number of fields of the token)
+        token_attr / token_owner / token_slot [T]  position embedding indices
+        entity_tokens [g] -> [n_slots] token index of each slot of SYMMETRY_GROUPS[g]
+    """
+    entity = _entity_of_field()
+    attrs = list(ATTRS) + ['card_entity', 'noble_entity']
+    tokens, field_token, entity_tokens = dict(), [], [[None] * len(obs_pos) for obs_pos, _ in SYMMETRY_GROUPS]
+    token_attr, token_owner, token_slot, token_fields = [], [], [], []
+    for f, (attr, owner, slot) in enumerate(zip(FIELD_GROUPS, (OWNERS[i] for i in FIELD_OWNER_IDX), (SLOTS[i] for i in FIELD_SLOT_IDX))):
+        key = ('entity',) + entity[f] if entity[f] != -1 else ('field', f)
+        if key not in tokens:
+            tokens[key] = len(tokens)
+            if entity[f] != -1:
+                g, j = entity[f]
+                entity_tokens[g][j] = tokens[key]
+                token_attr.append(attrs.index('noble_entity' if attr.startswith('noble_req') else 'card_entity'))
+                token_slot.append(SLOTS.index('none'))
+            else:
+                token_attr.append(attrs.index(attr))
+                token_slot.append(SLOTS.index(slot))
+            token_owner.append(OWNERS.index(owner))
+            token_fields.append(0)
+        field_token.append(tokens[key])
+        token_fields[tokens[key]] += 1
+    return dict(field_token=field_token, token_scale=[1. / math.sqrt(n) for n in token_fields],
+                token_attr=token_attr, token_owner=token_owner, token_slot=token_slot,
+                entity_tokens=entity_tokens, num_attrs=len(attrs))
+
+
+class SplendorEnvEmbedding(nn.Module):
+    """token embedding + factorised position embedding, summed.
+
+    * field_embedding: one shared table; each field's integer value is offset by its vocab group's start,
+      so fields of the same group share rows and different groups never collide. Rows [0, num_starters)
+      are the starter tokens.
+    * tokens (build_token_layout): an entity (card slot, reserved slot, noble slot) is one token, the sum of
+      its fields' embeddings / sqrt(#fields); every other field is a token of its own. 290 fields -> 102 tokens.
+    * position = E_attr + E_owner + E_slot of the token. Interchangeable slots share their position (no
+      slot index), so the network treats the slots of a group as a set: it is exactly invariant to
+      permuting them (with the pointer action heads of SplendorTransformerModel, exactly equivariant).
+    * no sqrt(d) scaling. The summed embedding is the first write into the pre-norm residual stream; it is
+      initialised with total RMS `init_rms` (default: the RMS one FFN sublayer writes at init,
+      utils.torch_utils.PRE_NORM_FFN_WRITE_RMS), split evenly between content and position.
     """
 
     def __init__(self, embedding_dim, num_starters, init_rms=PRE_NORM_FFN_WRITE_RMS):
         super().__init__()
         self.num_starters = num_starters
+        layout = build_token_layout()
+        self.layout = layout
+        self.num_tokens = len(layout['token_attr'])
 
         group_offsets = dict()
         current = num_starters
@@ -67,11 +134,16 @@ class SplendorEnvEmbedding(nn.Module):
         self.register_buffer('field_start_idx_array', torch.tensor([group_offsets[g] for g in FIELD_GROUPS], dtype=torch.int64))
         self.register_buffer('starter_idx_array', torch.arange(0, num_starters, dtype=torch.int64))
         self.field_embedding = nn.Embedding(num_embeddings=current, embedding_dim=embedding_dim)
+        # [T, F] fields -> tokens: token = sum of its fields / sqrt(#fields) (a fixed matrix, deterministic)
+        pool = torch.zeros(self.num_tokens, N_OBSERVATION)
+        for f, t in enumerate(layout['field_token']):
+            pool[t, f] = layout['token_scale'][t]
+        self.register_buffer('field_to_token', pool)
 
-        self.register_buffer('field_attr_idx', torch.tensor(FIELD_ATTR_IDX, dtype=torch.int64))
-        self.register_buffer('field_owner_idx', torch.tensor(FIELD_OWNER_IDX, dtype=torch.int64))
-        self.register_buffer('field_slot_idx', torch.tensor(FIELD_SLOT_IDX, dtype=torch.int64))
-        self.attr_embedding = nn.Embedding(num_embeddings=len(ATTRS), embedding_dim=embedding_dim)
+        self.register_buffer('token_attr_idx', torch.tensor(layout['token_attr'], dtype=torch.int64))
+        self.register_buffer('token_owner_idx', torch.tensor(layout['token_owner'], dtype=torch.int64))
+        self.register_buffer('token_slot_idx', torch.tensor(layout['token_slot'], dtype=torch.int64))
+        self.attr_embedding = nn.Embedding(num_embeddings=layout['num_attrs'], embedding_dim=embedding_dim)
         self.owner_embedding = nn.Embedding(num_embeddings=len(OWNERS), embedding_dim=embedding_dim)
         self.slot_embedding = nn.Embedding(num_embeddings=len(SLOTS), embedding_dim=embedding_dim)
 
@@ -81,47 +153,199 @@ class SplendorEnvEmbedding(nn.Module):
                 nn.init.normal_(embedding.weight, mean=0., std=init_rms / math.sqrt(6.))
 
     def position_embedding(self):
-        """[num_starters + N_OBSERVATION, embedding_dim]; zeros for the starter tokens."""
-        field_position = (self.attr_embedding(self.field_attr_idx)
-                          + self.owner_embedding(self.field_owner_idx)
-                          + self.slot_embedding(self.field_slot_idx))
-        starter_position = field_position.new_zeros((self.num_starters, field_position.shape[1]))
-        return torch.cat((starter_position, field_position), dim=0)
+        """[num_starters + num_tokens, embedding_dim]; zeros for the starter tokens."""
+        token_position = (self.attr_embedding(self.token_attr_idx)
+                          + self.owner_embedding(self.token_owner_idx)
+                          + self.slot_embedding(self.token_slot_idx))
+        starter_position = token_position.new_zeros((self.num_starters, token_position.shape[1]))
+        return torch.cat((starter_position, token_position), dim=0)
 
     def forward(self, x):
         batch_size = x.shape[0]
-        item_idx = x.long() + self.field_start_idx_array
-        tokens = torch.cat((self.starter_idx_array.unsqueeze(0).expand(batch_size, -1), item_idx), dim=1)
+        fields = self.field_embedding(x.long() + self.field_start_idx_array)            # [B, F, d]
+        tokens = torch.matmul(self.field_to_token.to(fields.dtype), fields)             # [B, T, d]
+        starters = self.field_embedding(self.starter_idx_array).unsqueeze(0).expand(batch_size, -1, -1)
         # [B, L, d] + [L, d] broadcast
-        return self.field_embedding(tokens) + self.position_embedding()
+        return torch.cat((starters, tokens), dim=1) + self.position_embedding()
 
 
 class SplendorTransformerModel(nn.Module):
+    """Pre-norm transformer over [policy starter, value starter, tokens].
+
+    Action heads: a slot action is scored from its slot's token (pointer head): reserve / buy of a market
+    card from that card's token, buy of reserved card i from the acting player's reserved token i, noble
+    slot j from noble token j. The other actions (take tokens, return a token) come from starter 0.
+    The outcome head (N_PLAYERS + 1 logits) reads starter 1.
+    """
+
     def __init__(self, n_actions=N_ACTIONS, n_players=N_PLAYERS, embedding_dim=256,
                  num_layers=6, transformer_head_dim=64, dropout=0.1, embedding_init_rms='auto', dim_feedforward=2048):
         super().__init__()
         assert embedding_dim % transformer_head_dim == 0, \
             f'embedding_dim({embedding_dim}) must be divisible by transformer_head_dim({transformer_head_dim}).'
         self.embedding_dim = embedding_dim
+        self.num_starters = 2
 
-        self.env_embedding = SplendorEnvEmbedding(embedding_dim, num_starters=2, init_rms=resolve_embedding_init_rms(embedding_init_rms))
+        self.env_embedding = SplendorEnvEmbedding(embedding_dim, num_starters=self.num_starters,
+                                                  init_rms=resolve_embedding_init_rms(embedding_init_rms))
         # pre-norm（x = x + f(LN(x))），最后一层之后再接一个 LayerNorm 供策略头和价值头使用
         encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim,
                                                    nhead=embedding_dim // transformer_head_dim,
                                                    dim_feedforward=dim_feedforward, dropout=dropout,
                                                    batch_first=True, norm_first=True)
-        self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, norm=nn.LayerNorm(embedding_dim))
-        # 预测action的概率分布
-        self.action_prob_dense = nn.Linear(embedding_dim, n_actions, bias=True)
-        # 预测每个座位（相对当前行动玩家）的终局收益
-        self.reward_value_dense = nn.Linear(embedding_dim, n_players, bias=True)
+        self.transform_encoder = nn.TransformerEncoder(encoder_layer, num_layers, norm=nn.LayerNorm(embedding_dim),
+                                                       enable_nested_tensor=False)
+        # TransformerEncoder deep-copies encoder_layer: without this every layer starts with the same weights
+        for layer in self.transform_encoder.layers:
+            reinit_encoder_layer(layer)
+
+        # pointer heads: groups of SYMMETRY_GROUPS with slot actions, one head per kind of slot
+        layout = self.env_embedding.layout
+        pointer_tokens, pointer_actions, head_of_group, self.pointer_kinds = [], [], [], []
+        kinds = dict()
+        for g, (obs_pos, act_pos) in enumerate(SYMMETRY_GROUPS):
+            if act_pos is None:
+                continue
+            kind = (FIELD_GROUPS[obs_pos[0][0]], act_pos.shape[1])   # (first field's attr, actions per slot)
+            if kind not in kinds:
+                kinds[kind] = len(kinds)
+                self.pointer_kinds.append(act_pos.shape[1])
+            for j in range(len(obs_pos)):
+                pointer_tokens.append(self.num_starters + layout['entity_tokens'][g][j])
+                pointer_actions.append(list(act_pos[j]))
+                head_of_group.append(kinds[kind])
+        self.pointer_heads = nn.ModuleList([nn.Linear(embedding_dim, width, bias=True) for width in self.pointer_kinds])
+        slot_actions = sorted(a for actions in pointer_actions for a in actions)
+        global_actions = [a for a in range(n_actions) if a not in set(slot_actions)]
+        self.action_prob_dense = nn.Linear(embedding_dim, len(global_actions), bias=True)
+        # order in which forward() concatenates logits: global actions, then each kind's slots in order
+        produced = list(global_actions)
+        self.pointer_groups = list()   # per kind: (token indices tensor name, number of slots)
+        for k in range(len(self.pointer_kinds)):
+            idx = [i for i, h in enumerate(head_of_group) if h == k]
+            self.register_buffer(f'pointer_tokens_{k}', torch.tensor([pointer_tokens[i] for i in idx], dtype=torch.int64))
+            produced += [a for i in idx for a in pointer_actions[i]]
+        assert sorted(produced) == list(range(n_actions))
+        self.register_buffer('action_order', torch.tensor([produced.index(a) for a in range(n_actions)], dtype=torch.int64))
+        # 终局结果的 logits：座位 k（相对当前行动玩家）获胜 x n_players，以及无人获胜（blocked / truncated）
+        self.reward_value_dense = nn.Linear(embedding_dim, n_players + 1, bias=True)
 
     def forward(self, x):
+        """-> (action logits [B, n_actions], outcome logits [B, n_players + 1])"""
         x = self.env_embedding(x)
         x = self.transform_encoder(x)
-        action_prob_logits = self.action_prob_dense(x[:, 0, :])
-        reward_value = self.reward_value_dense(x[:, 1, :])
-        return action_prob_logits, reward_value
+        parts = [self.action_prob_dense(x[:, 0, :])]
+        for k, head in enumerate(self.pointer_heads):
+            tokens = x[:, getattr(self, f'pointer_tokens_{k}'), :]          # [B, n_slots, d]
+            parts.append(head(tokens).reshape(x.shape[0], -1))             # [B, n_slots * width]
+        action_prob_logits = torch.cat(parts, dim=1)[:, self.action_order]
+        outcome_logits = self.reward_value_dense(x[:, 1, :])
+        return action_prob_logits, outcome_logits
+
+
+def reinit_encoder_layer(layer):
+    """fresh PyTorch default initialisation of one nn.TransformerEncoderLayer (attention: xavier uniform
+    in-projection, zero biases; linears: kaiming uniform; LayerNorms: ones / zeros)"""
+    layer.self_attn._reset_parameters()
+    layer.self_attn.out_proj.reset_parameters()
+    nn.init.zeros_(layer.self_attn.out_proj.bias)   # as MultiheadAttention._reset_parameters does
+    for module in (layer.linear1, layer.linear2, layer.norm1, layer.norm2):
+        module.reset_parameters()
+
+
+def outcome_targets(reward_values):
+    """win shares relative to the acting player [B, n_players] -> outcome distribution [B, n_players + 1]
+    (last entry: nobody wins, the remaining probability mass)"""
+    no_winner = (1. - reward_values.sum(dim=1, keepdim=True)).clamp_min(0.)
+    return torch.cat((reward_values, no_winner), dim=1)
+
+
+class SymmetryAugmenter(nn.Module):
+    """Random slot permutations (splendor.rl_env.SYMMETRY_GROUPS) of a batch, on the batch's device."""
+
+    def __init__(self):
+        super().__init__()
+        self.groups = list()
+        for k, (obs_pos, act_pos) in enumerate(SYMMETRY_GROUPS):
+            self.register_buffer(f'obs_pos_{k}', torch.as_tensor(obs_pos, dtype=torch.int64), persistent=False)
+            if act_pos is not None:
+                self.register_buffer(f'act_pos_{k}', torch.as_tensor(act_pos, dtype=torch.int64), persistent=False)
+            self.groups.append((f'obs_pos_{k}', None if act_pos is None else f'act_pos_{k}'))
+
+    def indices(self, batch_size, device, perms=None):
+        """-> (obs_index [B, N_OBSERVATION], action_index [B, N_ACTIONS]) of one random symmetry per row;
+        perms (tests): one [B, n_slots] permutation tensor per group instead of random ones"""
+        obs_index = torch.arange(N_OBSERVATION, device=device).expand(batch_size, -1).clone()
+        action_index = torch.arange(N_ACTIONS, device=device).expand(batch_size, -1).clone()
+        for k, (obs_name, act_name) in enumerate(self.groups):
+            obs_pos = getattr(self, obs_name)
+            perm = perms[k] if perms is not None else torch.argsort(torch.rand(batch_size, obs_pos.shape[0], device=device), dim=1)
+            obs_index[:, obs_pos.reshape(-1)] = obs_pos[perm].reshape(batch_size, -1)
+            if act_name is not None:
+                act_pos = getattr(self, act_name)
+                action_index[:, act_pos.reshape(-1)] = act_pos[perm].reshape(batch_size, -1)
+        return obs_index, action_index
+
+    def forward(self, observation, action_probs, action_mask):
+        obs_index, action_index = self.indices(observation.shape[0], observation.device)
+        return observation.gather(1, obs_index), action_probs.gather(1, action_index), action_mask.gather(1, action_index)
+
+
+class PendingPrediction:
+    """Handle of a prediction started by SplendorAlphaGoZero.predict_batch_async."""
+
+    def __init__(self, done_event, host_out, n_actions):
+        self.done_event, self.host_out, self.n_actions = done_event, host_out, n_actions
+
+    def ready(self):
+        return self.done_event is None or self.done_event.query()
+
+    def result(self):
+        """-> (action_probs, values) views of a pinned host buffer, reused PREDICTION_RING predictions later"""
+        if self.done_event is not None:
+            self.done_event.synchronize()
+        return self.host_out[:, :self.n_actions], self.host_out[:, self.n_actions:]
+
+
+LR_SCHEDULE_TYPES = ('constant', 'cosine', 'exponential', 'piecewise')
+
+
+def lr_factor(step, warmup_steps=0, schedule=None):
+    """Multiplier of the peak learning rate for train step `step` of the experiment (0 = its first step):
+    linear warmup over warmup_steps, times the decay of `schedule` (a dict; None = constant):
+        {'type': 'constant'}
+        {'type': 'cosine', 'decay_steps': N, 'min_factor': f, 'start_step': s}
+            1 until step s, cosine from 1 down to f over the next N steps, f afterwards
+        {'type': 'exponential', 'half_life_steps': H, 'min_factor': f, 'start_step': s}
+            halves every H steps after step s, never below f
+        {'type': 'piecewise', 'points': [[step, factor], ...]}
+            linear between the points (sorted by step), the first / last factor outside them
+    start_step defaults to warmup_steps, min_factor to 0."""
+    warmup = min(1., (step + 1) / warmup_steps) if warmup_steps and warmup_steps > 0 else 1.
+    if not schedule:
+        return warmup
+    kind = schedule.get('type', 'constant')
+    if kind == 'constant':
+        return warmup
+    if kind in ('cosine', 'exponential'):
+        start = schedule.get('start_step', warmup_steps or 0)
+        floor = float(schedule.get('min_factor', 0.))
+        t = max(0, step - start)
+        if kind == 'cosine':
+            span = max(1, int(schedule['decay_steps']))
+            decay = floor + (1. - floor) * 0.5 * (1. + math.cos(math.pi * min(1., t / span)))
+        else:
+            decay = max(floor, 0.5 ** (t / float(schedule['half_life_steps'])))
+        return warmup * decay
+    if kind == 'piecewise':
+        points = sorted((int(a), float(b)) for a, b in schedule['points'])
+        if step <= points[0][0]:
+            return warmup * points[0][1]
+        for (a, fa), (b, fb) in zip(points, points[1:]):
+            if step <= b:
+                return warmup * (fa + (fb - fa) * (step - a) / max(1, b - a))
+        return warmup * points[-1][1]
+    raise ValueError(f'unknown lr_schedule type {kind!r} (one of {LR_SCHEDULE_TYPES})')
 
 
 class SplendorAlphaGoZero(nn.Module):
@@ -137,16 +361,18 @@ class SplendorAlphaGoZero(nn.Module):
                  embedding_init_rms='auto',
                  dim_feedforward=2048,
                  float32_matmul_precision=None,
+                 inference_bf16_min_batch=None,
+                 inference_cuda_graph_batch_sizes=None,
                  batch_size=64,
-                 base_learning_rate=1e-5,
-                 max_learning_rate=1e-4,
-                 step_size_up=1000,
-                 step_size_down=5000,
-                 l2_weight=0.,
-                 value_loss_weight=1.,
+                 learning_rate=2e-4,
+                 lr_warmup_steps=200,
+                 lr_schedule=None,
+                 weight_decay=0.1,
+                 adam_betas=(0.9, 0.99),
+                 grad_clip_norm=1.,
+                 value_loss_weight=0.25,
+                 train_symmetry_augmentation=True,
                  transition_buffer_len=200000,
-                 save_train_data=False,
-                 default_train_file_path='data/splendor_history.txt',
                  num_inference_per_step=500,
                  num_data_print_per_inference=3,
                  **unused_kwargs):
@@ -159,97 +385,235 @@ class SplendorAlphaGoZero(nn.Module):
         self.n_actions = n_actions
         self.n_players = n_players
         self.device = torch.device(resolve_device(device))
+        # inference (predict_batch) runs in bfloat16 autocast for batches of at least this size; None = never.
+        # bf16 is faster only for larger batches (small batches are bound by kernel launches, not FLOPs)
+        self.inference_bf16_min_batch = inference_bf16_min_batch
+        # batch sizes captured with CUDA graphs by the predict process (enable_cuda_graphs); None = eager only
+        self.inference_cuda_graph_batch_sizes = inference_cuda_graph_batch_sizes
         if float32_matmul_precision is not None:
             # 'high' lets float32 matmuls run on TF32 tensor cores (process-wide setting)
             torch.set_float32_matmul_precision(float32_matmul_precision)
         self.batch_size = batch_size
         self.value_loss_weight = value_loss_weight
-        self.save_train_data = save_train_data
-        self.default_train_file_path = default_train_file_path
         self.num_inference_per_step = num_inference_per_step
         self.num_data_print_per_inference = num_data_print_per_inference
 
         self.model = SplendorTransformerModel(n_actions, n_players, embedding_dim, num_layers, transformer_head_dim,
                                               dropout, embedding_init_rms, dim_feedforward).to(self.device)
-        self.optimizer = torch.optim.Adam(params=self.model.parameters(), lr=max_learning_rate, weight_decay=l2_weight)
-        self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=base_learning_rate, max_lr=max_learning_rate,
-                                                           step_size_up=step_size_up, step_size_down=step_size_down,
-                                                           mode='triangular', cycle_momentum=False)
-        self.reward_value_loss = torch.nn.MSELoss()
+        # decoupled weight decay on matrices and embeddings, none on biases and LayerNorm parameters
+        decay = [p for p in self.model.parameters() if p.dim() >= 2]
+        no_decay = [p for p in self.model.parameters() if p.dim() < 2]
+        self.optimizer = torch.optim.AdamW([{'params': decay, 'weight_decay': weight_decay},
+                                            {'params': no_decay, 'weight_decay': 0.}],
+                                           lr=learning_rate, betas=tuple(adam_betas))
+        self.learning_rate = float(learning_rate)
+        self.lr_warmup_steps = int(lr_warmup_steps or 0)
+        self.lr_schedule = dict(lr_schedule) if lr_schedule else None
+        self.weight_decay = float(weight_decay)
+        self.adam_betas = tuple(float(b) for b in adam_betas)
+        lr_factor(0, self.lr_warmup_steps, self.lr_schedule)      # a bad schedule fails here, not mid-training
+        self.last_lr = None                                         # the learning rate of the last train step
+        self.grad_clip_norm = grad_clip_norm
+        self.augmenter = SymmetryAugmenter().to(self.device) if train_symmetry_augmentation else None
 
         self.memory_lock = Lock()
-        self.memory = SimpleMemory(transition_buffer_len, 4)
-        self.train_file = None
-        if self.save_train_data:
-            self.train_file = open(default_train_file_path, 'a', encoding='UTF-8')
+        # replay buffer of (observation, policy target, legal mask, value target, value weight); the train data
+        # file is written by the training loop (rl/splendor_data.TrainDataWriter)
+        self.memory = SimpleMemory(transition_buffer_len, 5)
         self.train_step_num = 0
 
     def close(self):
-        if self.train_file is not None:
-            self.train_file.flush()
-            self.train_file.close()
-            self.train_file = None
+        pass
+
+    def current_lr(self, step=None):
+        """learning rate of train step `step` (default: the next one) under this model's schedule"""
+        step = self.train_step_num if step is None else step
+        return self.learning_rate * lr_factor(step, self.lr_warmup_steps, self.lr_schedule)
+
+    def apply_optimizer_hyperparams(self):
+        """Write the configured learning rate (of the next step), weight decay and betas into the optimizer's
+        param groups. After optimizer.load_state_dict the Adam moments of the checkpoint are kept but its
+        hyperparameters are not: a resumed run follows its config. -> {name: (old, new)} of what changed"""
+        changed = dict()
+        lr = self.current_lr()
+        for k, group in enumerate(self.optimizer.param_groups):
+            target = {'lr': lr, 'weight_decay': self.weight_decay if k == 0 else 0., 'betas': self.adam_betas}
+            for name, value in target.items():
+                old = tuple(group[name]) if name == 'betas' else group[name]
+                if old != value:
+                    changed[f'group{k}.{name}'] = (old, value)
+                group[name] = value
+        return changed
 
     def forward(self, x):
         return self.model(x)
 
     # ------------------------------------------------------------------ inference
-    @torch.no_grad()
-    def predict_batch(self, observation_list, mask_list):
-        """-> (action_probs[B, n_actions] masked+normalised, values[B, n_players]) as numpy."""
-        self.model.eval()
-        obs = torch.as_tensor(np.asarray(observation_list), dtype=torch.int64, device=self.device)
-        mask = torch.as_tensor(np.asarray(mask_list), dtype=torch.bool, device=self.device)
-        logits, values = self.model(obs)
+    def _use_bf16(self, batch_size):
+        return (self.inference_bf16_min_batch is not None and self.device.type == 'cuda'
+                and batch_size >= self.inference_bf16_min_batch)
+
+    def _infer(self, obs, mask, use_bf16):
+        """obs int64 [B, N_OBSERVATION], mask bool [B, n_actions] on the device -> float32 [B, n_actions + n_players]"""
+        with torch.autocast('cuda', dtype=torch.bfloat16, enabled=use_bf16):
+            logits, outcome_logits = self.model(obs)
         logits = logits.float().masked_fill(~mask, ILLEGAL_LOGIT)
         probs = torch.softmax(logits, dim=1)
-        return probs.cpu().numpy(), values.float().cpu().numpy()
+        values = torch.softmax(outcome_logits.float(), dim=1)[:, :self.n_players]   # predicted win shares
+        return torch.cat((probs, values), dim=1)
+
+    @torch.no_grad()
+    def enable_cuda_graphs(self, batch_sizes=(8, 16, 32, 64, 128, 256)):
+        """Capture the inference forward once per batch size with CUDA Graphs.
+
+        An eager forward launches ~150 small kernels from the CPU, which dominates small-batch latency and
+        slows down further when the CPU is busy; a graph replay is a single launch. predict_batch pads a
+        batch to the next captured size. The captured graphs read the model's weight tensors in place, so
+        weights changed later with load_state_dict / training steps are picked up by the replays.
+        """
+        if self.device.type != 'cuda':
+            return
+        self.model.eval()
+        self._graphs = dict()
+        # one memory pool shared by all graphs (replays never overlap); capture the largest first so the
+        # smaller graphs fit into memory the pool already holds
+        pool = torch.cuda.graph_pool_handle()
+        for batch_size in sorted(set(int(b) for b in batch_sizes), reverse=True):
+            static_obs = torch.zeros((batch_size, self.n_observation), dtype=torch.long, device=self.device)
+            static_mask = torch.ones((batch_size, self.n_actions), dtype=torch.bool, device=self.device)
+            use_bf16 = self._use_bf16(batch_size)
+            stream = torch.cuda.Stream(device=self.device)
+            stream.wait_stream(torch.cuda.current_stream(self.device))
+            with torch.cuda.stream(stream):
+                for _ in range(3):   # warm up allocations and lazy initialisation outside the capture
+                    self._infer(static_obs, static_mask, use_bf16)
+            torch.cuda.current_stream(self.device).wait_stream(stream)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, pool=pool):
+                static_out = self._infer(static_obs, static_mask, use_bf16)
+            self._graphs[batch_size] = (graph, static_obs, static_mask, static_out)
+        torch.cuda.synchronize(self.device)
+        logging.info(f'CUDA graphs captured for inference batch sizes {sorted(self._graphs)}')
+
+    def _staging(self, batch_size):
+        """-> the next (obs uint8, mask bool, out float32) set of pinned host buffers of a small ring.
+
+        Copies from pageable memory may synchronise with the stream, so inputs are staged in pinned memory
+        and every copy is truly asynchronous. Each prediction uses the next set of the ring, so up to
+        PREDICTION_RING - 1 predictions can be in flight while the results of an earlier one are read.
+        """
+        ring = getattr(self, '_staging_ring', None)
+        if ring is None or ring[0][0].shape[0] < batch_size:
+            cap = max([batch_size, 256] + list(getattr(self, '_graphs', None) or ()))
+            ring = self._staging_ring = [(torch.empty((cap, self.n_observation), dtype=torch.uint8, pin_memory=True),
+                                          torch.empty((cap, self.n_actions), dtype=torch.bool, pin_memory=True),
+                                          torch.empty((cap, self.n_actions + self.n_players), dtype=torch.float32, pin_memory=True))
+                                         for _ in range(PREDICTION_RING)]
+            self._staging_next = 0
+        k = self._staging_next
+        self._staging_next = (k + 1) % len(ring)
+        return ring[k]
+
+    @torch.no_grad()
+    def predict_batch_async(self, observation_list, mask_list):
+        """Start a batched prediction and return at once with a PendingPrediction; .result() waits for it.
+
+        On CUDA the inputs are copied, the forward (a CUDA graph replay when one is captured for a batch size
+        >= B, padded) and the device->host copy into a pinned buffer are only queued, so the caller can do CPU
+        work while the GPU computes. Up to PREDICTION_RING - 1 predictions may be pending at a time (they run
+        in order on one stream); a result's arrays are reused PREDICTION_RING predictions later.
+        """
+        self.model.eval()
+        obs_np = np.asarray(observation_list)
+        mask_np = np.asarray(mask_list, dtype=bool)
+        batch_size = len(obs_np)
+        staging = self._staging(batch_size) if self.device.type == 'cuda' else None
+        # small integer types on the host -> device copy, widened on the GPU; one device->host copy for both outputs
+        if staging is not None and obs_np.dtype == np.uint8:
+            obs_host, mask_host = staging[0][:batch_size], staging[1][:batch_size]
+            obs_host.numpy()[:] = obs_np
+            mask_host.numpy()[:] = mask_np
+            obs = obs_host.to(self.device, non_blocking=True)
+            mask = mask_host.to(self.device, non_blocking=True)
+        else:
+            obs = torch.from_numpy(np.ascontiguousarray(obs_np)).to(self.device, non_blocking=True)
+            mask = torch.from_numpy(np.ascontiguousarray(mask_np)).to(self.device, non_blocking=True)
+        graphs = getattr(self, '_graphs', None)
+        graph_size = min((b for b in graphs if b >= batch_size), default=None) if graphs else None
+        if graph_size is not None:
+            graph, static_obs, static_mask, static_out = graphs[graph_size]
+            static_obs[:batch_size].copy_(obs)       # rows past batch_size keep stale inputs; their outputs are unused
+            static_mask[:batch_size].copy_(mask)
+            graph.replay()
+            out = static_out[:batch_size]
+        else:
+            out = self._infer(obs.long(), mask, self._use_bf16(batch_size))
+        if self.device.type != 'cuda':
+            return PendingPrediction(None, out.numpy(), self.n_actions)
+        host = staging[2][:batch_size]
+        host.copy_(out, non_blocking=True)
+        done = torch.cuda.Event()
+        done.record()
+        return PendingPrediction(done, host.numpy(), self.n_actions)
+
+    def predict_batch(self, observation_list, mask_list):
+        """-> (action_probs[B, n_actions] masked+normalised, values[B, n_players]) as numpy."""
+        probs, values = self.predict_batch_async(observation_list, mask_list).result()
+        return probs.copy(), values.copy()   # the pinned buffer is reused by the next call
 
     def predict(self, observation, mask):
         probs, values = self.predict_batch([observation], [mask])
         return probs[0], values[0]
 
     # ------------------------------------------------------------------ training
-    def store_transition(self, observation, action_probs, action_mask, reward_values, save_train_data=True):
-        if self.train_file is not None and save_train_data:
-            observation_str = ','.join(str(int(i)) for i in observation)
-            action_prob_str = ','.join('%.5f' % prob for prob in action_probs)
-            action_mask_str = ','.join('%d' % int(m) for m in action_mask)
-            reward_value_str = ','.join('%.6f' % v for v in reward_values)
-            self.train_file.write(f'{observation_str}\n{action_prob_str}\n{action_mask_str}\n{reward_value_str}\n\n')
+    def store_transition(self, observation, action_probs, action_mask, reward_values, value_weight=1.):
+        """add one sample to the replay buffer (value_weight 0: a position of a truncated game, no value target)"""
         with self.memory_lock:
             self.memory.store([np.asarray(observation, dtype=np.int32), np.asarray(action_probs, dtype=np.float32),
-                               np.asarray(action_mask, dtype=bool), np.asarray(reward_values, dtype=np.float32)])
+                               np.asarray(action_mask, dtype=bool), np.asarray(reward_values, dtype=np.float32),
+                               np.float32(value_weight)])
 
-    def flush_train_data(self):
-        if self.train_file is not None:
-            self.train_file.flush()
-
-    def learn(self, observation_list=None, action_probs_list=None, action_mask_list=None, reward_value_list=None):
+    def learn(self, observation_list=None, action_probs_list=None, action_mask_list=None, reward_value_list=None,
+              value_weight_list=None):
         if observation_list is None:
             with self.memory_lock:
                 _, _, data_batch = self.memory.sample(self.batch_size)
-            observation_list, action_probs_list, action_mask_list, reward_value_list = zip(*data_batch)
+            observation_list, action_probs_list, action_mask_list, reward_value_list, value_weight_list = zip(*data_batch)
+        if value_weight_list is None:
+            value_weight_list = np.ones(len(observation_list), dtype=np.float32)
 
         observation_tensor = torch.as_tensor(np.asarray(observation_list), dtype=torch.int64, device=self.device)
         action_probs_tensor = torch.as_tensor(np.asarray(action_probs_list), dtype=torch.float32, device=self.device)
         action_mask_tensor = torch.as_tensor(np.asarray(action_mask_list), dtype=torch.bool, device=self.device)
         reward_value_tensor = torch.as_tensor(np.asarray(reward_value_list), dtype=torch.float32, device=self.device)
+        value_weight_tensor = torch.as_tensor(np.asarray(value_weight_list), dtype=torch.float32, device=self.device)
+
+        if self.augmenter is not None:
+            observation_tensor, action_probs_tensor, action_mask_tensor = self.augmenter(
+                observation_tensor, action_probs_tensor, action_mask_tensor)
 
         self.model.train()
-        action_prob_logits, reward_value_pred = self.model(observation_tensor)
+        action_prob_logits, outcome_logits = self.model(observation_tensor)
         masked_logits = action_prob_logits.masked_fill(~action_mask_tensor, ILLEGAL_LOGIT)
         log_probs = torch.log_softmax(masked_logits, dim=1)
         action_probs_loss = -(action_probs_tensor * log_probs).sum(dim=1).mean()
-        reward_value_loss = self.reward_value_loss(reward_value_pred, reward_value_tensor)
+        # value cross-entropy over the samples with a result (truncated games: weight 0)
+        value_ce = -(outcome_targets(reward_value_tensor) * torch.log_softmax(outcome_logits, dim=1)).sum(dim=1)
+        reward_value_loss = (value_ce * value_weight_tensor).sum() / value_weight_tensor.sum().clamp_min(1.)
         over_all_loss = action_probs_loss + self.value_loss_weight * reward_value_loss
         if torch.isnan(over_all_loss):
             raise ValueError('loss is nan')
 
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         over_all_loss.backward()
+        if self.grad_clip_norm:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
+        lr = self.current_lr()
+        for group in self.optimizer.param_groups:
+            group['lr'] = lr
         self.optimizer.step()
-        self.scheduler.step()
+        self.last_lr = lr
+        reward_value_pred = torch.softmax(outcome_logits.detach(), dim=1)[:, :self.n_players]
 
         self.train_step_num += 1
         if self.num_inference_per_step > 0 and self.train_step_num % self.num_inference_per_step == 0:
@@ -267,56 +631,214 @@ class SplendorAlphaGoZero(nn.Module):
 
         return action_probs_loss.item(), reward_value_loss.item()
 
+    @torch.no_grad()
+    def evaluate_samples(self, observations, action_probs, action_masks, reward_values, value_weights=None, batch_size=4096):
+        """Loss metrics without training (eval mode, no augmentation).
 
-def save_model(model, path):
-    torch.save({'model': model.state_dict(), 'optimizer': model.optimizer.state_dict()}, path)
-    logging.info(f'model saved to {path}')
+        value_ce: outcome cross-entropy (the training loss); value_mse: mean squared error of the predicted win
+        shares; value_mse_constant: MSE of always predicting the mean win shares of these samples (a model
+        that has learned nothing about the position); winner_acc: the seat with the highest predicted win
+        share is a winner, over games with a single-winner-or-shared result; policy_ce / target_entropy:
+        policy loss and its floor. Value metrics use only samples with value weight 1 (games with a result)."""
+        self.model.eval()
+        weights_all = np.ones(len(observations), dtype=np.float32) if value_weights is None else np.asarray(value_weights, dtype=np.float32)
+        with_value = weights_all > 0
+        n = len(observations)
+        n_value = int(with_value.sum())
+        sums = dict(value_ce=0., value_mse=0., policy_ce=0., target_entropy=0.)
+        correct, decided = 0, 0
+        values_all = np.asarray(reward_values, dtype=np.float32)
+        for i in range(0, n, batch_size):
+            obs = torch.as_tensor(np.asarray(observations[i:i + batch_size]), dtype=torch.int64, device=self.device)
+            target = torch.as_tensor(np.asarray(action_probs[i:i + batch_size]), dtype=torch.float32, device=self.device)
+            mask = torch.as_tensor(np.asarray(action_masks[i:i + batch_size]), dtype=torch.bool, device=self.device)
+            values = torch.as_tensor(values_all[i:i + batch_size], device=self.device)
+            weight = torch.as_tensor(weights_all[i:i + batch_size], device=self.device)
+            logits, outcome_logits = self.model(obs)
+            log_probs = torch.log_softmax(logits.float().masked_fill(~mask, ILLEGAL_LOGIT), dim=1)
+            sums['policy_ce'] += -(target * log_probs).sum().item()
+            sums['target_entropy'] += -(target * torch.log(target.clamp_min(1e-12))).sum().item()
+            outcome_log_probs = torch.log_softmax(outcome_logits.float(), dim=1)
+            sums['value_ce'] += -((outcome_targets(values) * outcome_log_probs).sum(dim=1) * weight).sum().item()
+            pred = outcome_log_probs.exp()[:, :self.n_players]
+            sums['value_mse'] += (((pred - values) ** 2).mean(dim=1) * weight).sum().item()
+            has_winner = (values.max(dim=1).values > 0.26) & (weight > 0)   # a draw (0.25 each) has no winner to hit
+            winner_hit = values.gather(1, pred.argmax(dim=1, keepdim=True)).squeeze(1) > 0
+            correct += (winner_hit & has_winner).sum().item()
+            decided += has_winner.sum().item()
+        metrics = {k: sums[k] / max(n, 1) for k in ('policy_ce', 'target_entropy')}
+        metrics.update({k: sums[k] / max(n_value, 1) for k in ('value_ce', 'value_mse')})
+        valued = values_all[with_value]
+        metrics['value_mse_constant'] = float(((valued - valued.mean(axis=0)) ** 2).mean()) if n_value else 0.
+        metrics['winner_acc'] = correct / max(decided, 1)
+        metrics['num_samples'] = n
+        metrics['num_value_samples'] = n_value
+        return metrics
+
+    def sample_memory(self, n):
+        """n random samples of the replay buffer as (observations, action_probs, masks, values, value weights) arrays"""
+        with self.memory_lock:
+            _, _, data_batch = self.memory.sample(n)
+        return tuple(np.asarray(x) for x in zip(*data_batch))
+
+    def memory_size(self):
+        return self.memory.capacity if self.memory.memory_full else self.memory.current_data_idx
 
 
-def load_model(model, path, load_optimizer=True):
-    """Returns True if loaded. A checkpoint of another architecture / action space is skipped with a warning."""
-    checkpoint = torch.load(path, map_location='cpu')
-    own_state = model.state_dict()
-    mismatched = [k for k, v in checkpoint['model'].items() if k in own_state and own_state[k].shape != v.shape]
+# ---------------------------------------------------------------------------- checkpoints
+# Parameters that decide the network's tensor shapes: a full resume requires them to be identical.
+ARCHITECTURE_KEYS = ('embedding_dim', 'num_layers', 'transformer_head_dim', 'dim_feedforward')
+
+
+def architecture_of(model_param_dict):
+    defaults = {'embedding_dim': 256, 'num_layers': 6, 'transformer_head_dim': 64, 'dim_feedforward': 2048}
+    return {k: model_param_dict.get(k, defaults[k]) for k in ARCHITECTURE_KEYS}
+
+
+def save_checkpoint(path, payload):
+    """torch.save to path + '.tmp', then rename: a checkpoint file is never half written"""
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    tmp = path + '.tmp'
+    torch.save(payload, tmp)
+    os.replace(tmp, path)
+
+
+def load_checkpoint(path):
+    return torch.load(path, map_location='cpu', weights_only=False)
+
+
+def model_state_of(checkpoint):
+    """the network weights of a checkpoint (format 2, or the {'model', 'optimizer'} dicts of earlier versions)"""
+    if isinstance(checkpoint, dict) and 'model' in checkpoint:
+        return checkpoint['model']
+    return checkpoint
+
+
+# buffers of SplendorEnvEmbedding that are a function of the observation layout: the model's own are always right
+_LAYOUT_BUFFERS = ('field_start_idx_array', 'starter_idx_array', 'field_to_token', 'token_attr_idx', 'token_owner_idx',
+                   'token_slot_idx')
+_ENTITY_ATTRS = ['card_entity', 'noble_entity']
+
+
+def _entity_rescale():
+    """vocab group -> factor that keeps an entity token unchanged when the derived fields (embedded as zeros) are
+    added to it: a token is the sum of its fields / sqrt(#fields), and a card has 8 -> 10, a noble 5 -> 7 fields"""
+    from splendor.rl_env import CARD_FIELD_GROUPS, NOBLE_FIELD_GROUPS
+    factors = dict()
+    for groups in (CARD_FIELD_GROUPS, NOBLE_FIELD_GROUPS):
+        n_new = len(groups)
+        n_old = len([g for g in groups if g not in DERIVED_FIELD_GROUPS])
+        for g in groups:
+            if g not in DERIVED_FIELD_GROUPS:
+                factors[g] = math.sqrt(n_new / n_old)
+    return factors
+
+
+def remap_observation_embedding(key, old, new):
+    """Embedding tables of an observation-version-1 checkpoint (no DERIVED_FIELD_GROUPS) -> the current layout,
+    preserving the network's function: every vocab group keeps its learned rows at its new offset, the rows of the
+    derived groups are zero and the rows of the card / noble groups are rescaled (_entity_rescale), so a converted
+    model computes exactly what the version-1 model computed (the derived fields start with no influence and are
+    learned from there). Returns the remapped tensor, or None when `key` is not such a table or the shapes do not
+    fit a version-1 layout."""
+    old_groups = [a for a in ATTRS if a not in DERIVED_FIELD_GROUPS]
+    if key.endswith('env_embedding.field_embedding.weight'):
+        num_starters = new.shape[0] - sum(VOCAB_SIZES[a] for a in ATTRS)
+        if old.dim() != 2 or old.shape[1] != new.shape[1] or \
+                old.shape[0] != num_starters + sum(VOCAB_SIZES[a] for a in old_groups):
+            return None
+        out = torch.zeros_like(new)
+        out[:num_starters] = old[:num_starters]
+        offsets, n = dict(), num_starters
+        for a in ATTRS:
+            offsets[a] = n
+            n += VOCAB_SIZES[a]
+        o, rescale = num_starters, _entity_rescale()
+        for a in old_groups:
+            out[offsets[a]:offsets[a] + VOCAB_SIZES[a]] = old[o:o + VOCAB_SIZES[a]] * rescale.get(a, 1.)
+            o += VOCAB_SIZES[a]
+        return out
+    if key.endswith('env_embedding.attr_embedding.weight'):
+        new_attrs, old_attrs = list(ATTRS) + _ENTITY_ATTRS, old_groups + _ENTITY_ATTRS
+        if old.dim() != 2 or old.shape[1] != new.shape[1] or old.shape[0] != len(old_attrs):
+            return None
+        out = torch.zeros_like(new)   # the derived groups' rows are never used: their fields are entity fields
+        for i, a in enumerate(old_attrs):
+            out[new_attrs.index(a)] = old[i]
+        return out
+    return None
+
+
+def convert_checkpoint_to_current_observation(model, path, out_path):
+    """Write the weights of an observation-version-1 checkpoint as a full current-layout weights file with the same
+    network function (remap_observation_embedding): `model` is a freshly built SplendorAlphaGoZero with the
+    checkpoint's dimensions. The file loads with init_weights_strict and as a benchmark anchor / model."""
+    from splendor.rl_env import version_info
+    report = init_weights_from(model, path, strict=False)
+    if report['missing'] or report['unexpected'] or report['mismatched'] or not report['remapped']:
+        raise ValueError(f'{path} is not an observation-version-1 checkpoint of this network: {report}')
+    torch.save({'model': model_state_of_module(model), 'versions': version_info(), 'converted_from': path}, out_path)
+    return out_path
+
+
+def model_state_of_module(model):
+    return {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+
+
+def init_weights_from(model, path, strict=True):
+    """Initialise only the network weights from a checkpoint (no optimizer, counters or data).
+
+    strict: every tensor of the model must be in the checkpoint with the same shape and the checkpoint must
+    hold nothing else, otherwise ValueError. strict=False loads the matching tensors and keeps the fresh
+    initialisation of the others (all differences are logged)."""
+    from rl.splendor_data import versions_mismatch   # (no import cycle at module load)
+    from splendor.rl_env import version_info
+    checkpoint = load_checkpoint(path)
+    state = dict(model_state_of(checkpoint))
+    own = model.state_dict()
+    # layout buffers are never loaded (they follow the observation layout of this code)
+    for k in [k for k in state if k.split('.')[-1] in _LAYOUT_BUFFERS]:
+        del state[k]
+    own_loadable = [k for k in own if k.split('.')[-1] not in _LAYOUT_BUFFERS]
+    missing = sorted(k for k in own_loadable if k not in state)
+    unexpected = sorted(k for k in state if k not in own)
+    mismatched = sorted(k for k in own_loadable if k in state and tuple(state[k].shape) != tuple(own[k].shape))
+    remapped = []
+    if not strict:   # an observation-version-1 checkpoint: keep its embedding rows (remap_observation_embedding)
+        for k in list(mismatched):
+            out = remap_observation_embedding(k, state[k], own[k])
+            if out is not None:
+                state[k] = out
+                mismatched.remove(k)
+                remapped.append(k)
+    if remapped:
+        logging.warning(f'{path}: embedding tables remapped to the current observation layout, preserving the '
+                        f'network function (rows of {list(DERIVED_FIELD_GROUPS)} zero): {remapped}')
+    problems = []
+    if missing:
+        problems.append(f'{len(missing)} missing (e.g. {missing[:3]})')
+    if unexpected:
+        problems.append(f'{len(unexpected)} unexpected (e.g. {unexpected[:3]})')
     if mismatched:
-        logging.warning(f'{path} does not match the current model ({len(mismatched)} tensors with other shapes, '
-                        f'e.g. {mismatched[:3]}): probably saved before an observation / action-space change. '
-                        f'Not loaded, training starts from a fresh model.')
-        return False
-    model.load_state_dict(checkpoint['model'], strict=False)
-    if load_optimizer and 'optimizer' in checkpoint:
-        try:
-            model.optimizer.load_state_dict(checkpoint['optimizer'])
-        except ValueError as e:
-            logging.warning(f'optimizer state not loaded from {path}: {e}')
-    logging.info(f'model loaded from {path}')
-    return True
-
-
-def splendor_train_data_generator(filename, epoch=1):
-    """Reads the text dump written by SplendorAlphaGoZero.store_transition.
-
-    Samples whose observation / action / value sizes differ from the current
-    splendor.rl_env layout (written before a rule or encoding change) are skipped and counted.
-    """
-    current_epoch = 1
-    while True:
-        num_skipped = 0
-        with open(filename, 'r', encoding='UTF-8') as f:
-            while True:
-                lines = [f.readline() for _ in range(5)]
-                if any(line == '' for line in lines[:4]):
-                    break
-                sample = (np.asarray([int(v) for v in lines[0].rstrip().split(',')], dtype=np.int32),
-                          np.asarray([float(v) for v in lines[1].rstrip().split(',')], dtype=np.float32),
-                          np.asarray([int(v) for v in lines[2].rstrip().split(',')], dtype=bool),
-                          np.asarray([float(v) for v in lines[3].rstrip().split(',')], dtype=np.float32))
-                if (len(sample[0]), len(sample[1]), len(sample[2]), len(sample[3])) != (N_OBSERVATION, N_ACTIONS, N_ACTIONS, N_PLAYERS):
-                    num_skipped += 1
-                    continue
-                yield sample
-        if num_skipped:
-            logging.warning(f'{filename}: skipped {num_skipped} samples written with another observation / action layout')
-        if 0 <= epoch <= current_epoch:
-            break
-        current_epoch += 1
+        problems.append(f'{len(mismatched)} with other shapes (e.g. {mismatched[:3]})')
+    if problems and strict:
+        raise ValueError(f'cannot initialise the weights from {path}: tensors {"; ".join(problems)} '
+                         f'(set init_weights_strict: false to load only the matching tensors)')
+    versions = checkpoint.get('versions') if isinstance(checkpoint, dict) else None
+    if versions is None:
+        logging.warning(f'{path} records no rules / observation / action versions (saved by an older pipeline); '
+                        f'its weights are used as initialisation only')
+    else:
+        mismatch = versions_mismatch({k: v for k, v in versions.items() if k != 'discard_over_limit'},
+                                     {k: v for k, v in version_info().items() if k != 'discard_over_limit'})
+        if mismatch:
+            logging.warning(f'{path} was trained for other versions ({"; ".join(mismatch)}); its weights are used as initialisation only')
+    loadable = {k: v for k, v in state.items() if k in own and k not in mismatched}
+    model.load_state_dict(loadable, strict=False)
+    if problems:
+        logging.warning(f'weights initialised from {path} except: {"; ".join(problems)}')
+    else:
+        logging.info(f'weights initialised from {path} (all {len(own)} tensors)')
+    return {'missing': missing, 'unexpected': unexpected, 'mismatched': mismatched, 'remapped': remapped}

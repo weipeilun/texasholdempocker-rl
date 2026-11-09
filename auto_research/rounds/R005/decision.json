@@ -1,0 +1,13 @@
+{
+ "verdict": "inconclusive",
+ "goal_status": "open",
+ "decided_at": "2026-11-07T04:20:00+08:00",
+ "needs_human": false,
+ "reason": "3.07 h、56 个 iteration（观测版本 2）。独立基准 vs 3×lookahead：R004 末 0.2525 → 第 30 个 0.295 → 第 50 个 0.2825 → latest 0.275；vs 3×heuristic 0.4525 → 0.4625 / 0.47 / 0.4875；对 R004 0.552 / 0.5625。训练中基准均值也是 +0.02–0.05。没到 supported 线，也不满足 refuted 条件。诊断：加深搜索、启发式 rollout 都 ≤ +0.04；模型几乎从不走同色拿 2 个（每局 0.005 次，lookahead 4.24 次），很少预留 3 级牌（0.59 vs 1.99），可走时同色拿 2 个的先验质量 0.3%。平台来自策略先验在整类动作上塌缩，Gumbel 的 σ(q) 太小，抬不起来。",
+ "best_checkpoint": "experiments/auto_r005/checkpoints/latest.pth（iteration 56；对 R004 0.5625、vs heuristic 0.4875、vs lookahead 0.275）",
+ "next": {
+  "name": "R006_policy_teacher_lookahead",
+  "hypothesis": "把 lookahead 的动作以 w = 0.25 混进记录的策略目标（kickstarting）后，先验塌缩的动作类恢复，vs 3×lookahead ≥ 0.35、vs heuristic ≥ 0.55、对 R005 latest ≥ 0.55。",
+  "sketch": "policy_teacher: bot:lookahead、policy_teacher_weight: 0.25（只在模型座位的全量搜索样本上）；从 R005 latest 起步；其余同 R005。"
+ }
+}

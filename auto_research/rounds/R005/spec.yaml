@@ -1,0 +1,11 @@
+name: R005_derived_observation_fields
+kind: train
+hypothesis: 强度停在 0.26–0.30 是因为网络学不到 lookahead 评估所用的量（每张牌买方还差几颗宝石、离贵族还差几张），这些量要从原始的成本 / 折扣 / 宝石字段逐色截断求和才能得到，价值头还看不到合法动作掩码。把它们作为观测字段加入（观测版本 2，每张牌 2 个、每个贵族 2 个），从 R004 latest 转换的同函数权重出发（新字段嵌入从 0 学起）9 小时内：独立基准中最后的检查点 vs 3×lookahead >= 0.35、vs 3×heuristic >= 0.50，且对 R004 latest >= 0.55。
+question: 输入特征是不是瓶颈；若不是，下一步是更大的网络、让搜索按机器人建模机器人座位，还是在自对弈中启用启发式叶节点评估。
+config: config/splendor_auto_r005.yml
+experiment_dir: experiments/auto_r005
+init_from: experiments/auto_r004/checkpoints/latest_obs_v2.pth
+budget_hours: 9
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

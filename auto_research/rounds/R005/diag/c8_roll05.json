@@ -1,0 +1,22 @@
+{
+ "model": "/tmp/r005/diag/m50.pth",
+ "config": "/tmp/r005/diag/c8_roll05.yml",
+ "sims": 64,
+ "time": "2026-11-07T03:45:37",
+ "bots": {
+  "bot:lookahead": {
+   "win_share": 0.32,
+   "win_rate": 0.32,
+   "games": 200,
+   "completion": 1.0,
+   "mean_points": 11.745,
+   "mean_rounds_when_winning": 25.3359375,
+   "deals": 50,
+   "win_share_ci95": [
+    0.25891121215804,
+    0.38108878784196
+   ]
+  }
+ },
+ "anchors": {}
+}

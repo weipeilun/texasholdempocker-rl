@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>登录 · 璀璨宝石线下对局</title>
+  <link rel="stylesheet" href="/static/offline.css" />
+</head>
+<body>
+  <main>
+    <div class="panel login-box">
+      <h2 id="title">登录</h2>
+      <p id="intro" class="muted small"></p>
+      <input id="username" placeholder="用户名" autocomplete="username" />
+      <input id="password" type="password" placeholder="密码（至少 8 位）" autocomplete="current-password" />
+      <div class="row">
+        <button id="login" class="primary">登录</button>
+        <button id="register" class="hidden">创建账号</button>
+      </div>
+      <div id="error" class="alert error hidden" style="margin-top:10px"></div>
+    </div>
+  </main>
+  <script src="/static/common.js"></script>
+  <script>
+    (async () => {
+      const me = await api("/api/me");
+      if (me.user) location.href = "/";
+      if (!me.has_users) {
+        $("title").textContent = "创建管理员账号";
+        $("intro").textContent = "第一次使用：创建的第一个账号是管理员。之后默认不能自助注册。";
+        $("login").classList.add("hidden");
+        $("register").classList.remove("hidden");
+        $("register").classList.add("primary");
+      } else if (me.can_register) {
+        $("register").classList.remove("hidden");
+      }
+      const submit = async (path) => {
+        $("error").classList.add("hidden");
+        try {
+          await api(path, { username: $("username").value.trim(), password: $("password").value });
+          location.href = "/";
+        } catch (e) {
+          $("error").textContent = e.message;
+          $("error").classList.remove("hidden");
+        }
+      };
+      $("login").onclick = () => submit("/api/login");
+      $("register").onclick = () => submit("/api/register");
+      $("password").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") submit(me.has_users ? "/api/login" : "/api/register");
+      });
+    })();
+  </script>
+</body>
+</html>

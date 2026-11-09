@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>璀璨宝石 · 线下对局控制台</title>
+  <link rel="stylesheet" href="/static/offline.css" />
+</head>
+<body>
+  <header>
+    <h1><span>◆</span> 璀璨宝石 · 线下对局</h1>
+    <nav>
+      <a href="/screen" target="_blank">大屏幕指令</a>
+      <a href="/camera" target="_blank">摄像头</a>
+      <a href="/settings">视觉模型设置</a>
+      <span class="user" id="user"></span>
+      <button onclick="logout()">退出</button>
+    </nav>
+  </header>
+  <main>
+    <div id="alerts" class="alerts"></div>
+    <div id="hints" class="hints">正在载入…</div>
+    <div id="instruction" class="instruction hidden" style="margin-top:12px"></div>
+
+    <details id="new-panel" class="panel" style="margin-top:16px">
+      <summary><b>新建对局</b> <span class="muted small">四个座位按行动顺序；机器人座位由人类代理按大屏幕指令执行</span></summary>
+      <div style="margin-top:12px" id="seats"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="new-game" class="primary">新建对局</button>
+        <span class="muted small">新建后先摆好开局（12 张牌、5 位贵族、银行筹码），等识别完成后确认开局。</span>
+      </div>
+    </details>
+
+    <section id="setup-panel" class="panel hidden">
+      <h2>确认开局 <small>识别结果已预填，可逐张修改；空位请手动选择</small></h2>
+      <div class="setup-grid" id="setup-market"></div>
+      <div class="row" id="setup-nobles" style="margin:8px 0"></div>
+      <div class="row">
+        <button id="begin" class="primary">确认开局</button>
+        <button id="refill-setup">用最新识别结果重新填写</button>
+      </div>
+    </section>
+
+    <div class="grid" style="margin-top:16px">
+      <div>
+        <section class="panel">
+          <h2>公共牌桌 <small id="turn-label"></small></h2>
+          <div id="nobles" class="nobles"></div>
+          <div id="market"></div>
+          <h2 style="margin-top:12px">银行</h2>
+          <div id="bank" class="bank"></div>
+        </section>
+        <section class="panel">
+          <h2>四位玩家 <small>预留牌公开；到 15 分立即结束</small></h2>
+          <div id="players" class="players"></div>
+        </section>
+        <section class="panel">
+          <h2>对局记录 <small>玩家动作、牌堆翻牌、贵族、机器人指令</small></h2>
+          <ol id="history" class="history"></ol>
+        </section>
+      </div>
+      <div>
+        <section class="panel">
+          <h2>摄像头与识别 <small id="frame-info"></small></h2>
+          <img id="preview" class="preview" alt="摄像头画面" />
+          <div class="status-line" id="vision-status"></div>
+          <div class="row" style="margin-top:8px">
+            <button id="vision-now">立即识别</button>
+            <button id="vision-toggle">暂停自动识别</button>
+            <button id="use-my-vision" title="对局使用当前登录账号的视觉模型设置">用我的视觉设置</button>
+          </div>
+          <details style="margin-top:8px"><summary class="small">最近一次识别结果</summary><pre id="reading"></pre></details>
+        </section>
+        <section class="panel">
+          <h2>手动操作 <small>识别失败或需要纠正时使用</small></h2>
+          <div id="ambiguous"></div>
+          <div class="row" style="margin-bottom:8px">
+            <select id="legal" style="flex:1;min-width:0"></select>
+            <button id="apply-action">录入动作</button>
+          </div>
+          <div class="row" style="margin-bottom:8px">
+            <select id="reveal" style="flex:1;min-width:0"></select>
+            <button id="apply-reveal">录入翻牌</button>
+          </div>
+          <div class="row">
+            <button id="confirm-robot">确认机器人指令已执行</button>
+            <button id="undo" class="danger">撤销上一步</button>
+          </div>
+          <div class="status-line" id="robot-info"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <script src="/static/common.js"></script>
+  <script src="/static/index.js"></script>
+</body>
+</html>

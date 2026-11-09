@@ -1,0 +1,11 @@
+{"ckpt": "experiments/auto_r002/checkpoints/weights_iteration_00040.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.15, "win_rate": 0.15, "seconds": 204}
+{"ckpt": "experiments/auto_r002/checkpoints/weights_iteration_00040.pth", "mode": "value", "opponent": "heuristic", "games": 200, "win_share": 0.105, "win_rate": 0.105, "seconds": 245}
+{"ckpt": "experiments/auto_r002/checkpoints/weights_iteration_00040.pth", "mode": "policy", "opponent": "lookahead", "games": 200, "win_share": 0.18, "win_rate": 0.18, "seconds": 119}
+{"ckpt": "experiments/auto_r002/checkpoints/weights_iteration_00020.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.06, "win_rate": 0.06, "seconds": 197}
+{"ckpt": "experiments/auto_r001/checkpoints/latest.pth", "mode": "value", "opponent": "heuristic", "games": 200, "win_share": 0.365, "win_rate": 0.365, "seconds": 107}
+{"ckpt": "experiments/auto_r001/checkpoints/latest.pth", "mode": "policy", "opponent": "lookahead", "games": 200, "win_share": 0.145, "win_rate": 0.145, "seconds": 86}
+{"ckpt": "/tmp/r002/r002_latest_snapshot.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.08, "win_rate": 0.08, "seconds": 210}
+{"ckpt": "/tmp/r002/swa_30_40_latest.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.125, "win_rate": 0.125, "seconds": 71}
+{"ckpt": "experiments/auto_r001/checkpoints/weights_iteration_00050.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.16, "win_rate": 0.16, "seconds": 67}
+{"ckpt": "experiments/auto_r001/checkpoints/weights_iteration_00040.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.055, "win_rate": 0.055, "seconds": 70}
+{"ckpt": "experiments/auto_r001/checkpoints/weights_iteration_00030.pth", "mode": "value", "opponent": "lookahead", "games": 200, "win_share": 0.12, "win_rate": 0.12, "seconds": 50}

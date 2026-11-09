@@ -1,0 +1,35 @@
+{
+ "model": "/data/playground/texasholdempocker-rl/experiments/auto_r001/checkpoints/latest.pth",
+ "config": "/data/playground/texasholdempocker-rl/config/splendor_auto_r002.yml",
+ "sims": 64,
+ "time": "2026-11-06T12:18:51",
+ "bots": {
+  "bot:heuristic": {
+   "win_share": 0.41,
+   "win_rate": 0.41,
+   "games": 200,
+   "completion": 1.0,
+   "mean_points": 12.805,
+   "mean_rounds_when_winning": 25.11890243902439,
+   "deals": 50,
+   "win_share_ci95": [
+    0.3403368102941015,
+    0.47966318970589844
+   ]
+  },
+  "bot:lookahead": {
+   "win_share": 0.145,
+   "win_rate": 0.145,
+   "games": 200,
+   "completion": 1.0,
+   "mean_points": 10.55,
+   "mean_rounds_when_winning": 25.879310344827587,
+   "deals": 50,
+   "win_share_ci95": [
+    0.10052933551204793,
+    0.18947066448795205
+   ]
+  }
+ },
+ "anchors": {}
+}

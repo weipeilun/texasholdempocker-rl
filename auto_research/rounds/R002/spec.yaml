@@ -1,0 +1,11 @@
+name: R002_honest_search_targets_and_value
+kind: train
+hypothesis: 价值网络排不对一步之后的局面（只靠价值的一步贪心对 3 个 lookahead 只有 0.05，只靠策略是 0.16），而 Q 的最小最大缩放把这种噪声放大成近似 one-hot 的策略目标。关掉缩放（mcts_rescale_values False，Q 直接用 [0, 1] 胜率份额）、价值损失权重 0.25 -> 1.0、终局（有人 ≥ 11 分）每步全量搜索、15% 自对弈对局里一个座位换成规则机器人之后，从 R001 latest 权重出发 9 小时内：价值一步贪心对 3 个 lookahead 的胜率份额比起点（R001 latest 0.20）高至少 0.05，训练中基准对 3 个 lookahead 的最后 3 次均值比本轮第 1 次高至少 0.05，且独立基准中本轮最好检查点对 v4 latest（锚点）>= 0.55。
+question: 策略目标"去噪"并加强价值学习后，价值是否开始能给兄弟局面排序、强度是否越过 R001 的平台；若价值仍不动，下一步应换价值目标（混合根节点价值 / n 步自举）还是加辅助目标。
+config: config/splendor_auto_r002.yml
+experiment_dir: experiments/auto_r002
+init_from: experiments/auto_r001/checkpoints/latest.pth
+budget_hours: 9
+target:
+  opponent: bot:lookahead
+  win_share: 0.5

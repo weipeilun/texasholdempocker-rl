@@ -1,0 +1,199 @@
+# 自动实验 R007（2026-11-07）：搜索里用"对手模型"。其他玩家按网络先验的 argmax 走、不分支
+# （mcts_opponent_policy: prior），模拟次数都花在自己的回合上；全量搜索只考虑 8 个动作。
+# 理由：R006 诊断。lookahead2 在对手模型准确时 vs 3×lookahead 0.39，不准时 0.25。
+# R006 it90 在 considered 8、256 次模拟下：max_n 0.335 / 0.605，prior 0.3875 / 0.6475（vs lookahead / heuristic）。
+# 其余同 R006（带教 w 0.25、观测版本 2、50% 对局有 1–2 个机器人座位、TD(λ) 0.95）。
+# 起点：R006 latest，新优化器，回放池从空开始。
+# 改动及理由见 auto_research/rounds/R007/plan.md。
+# 输出：experiments/auto_r007/。续训：python train_splendor.py --resume experiments/auto_r007
+# 璀璨宝石 AlphaGoZero 训练默认参数（train_splendor.py）
+log_level: INFO
+# 实验种子。所有随机性都由编号派生（rl/splendor_data.derive_seed）：自对弈第 n 局的种子 = f(seed, n)，
+# 局内每一步搜索的种子 = f(局种子, 步序号)，取哪些局面做样本 = f(局种子)。与哪个进程下这局无关
+seed: 20261113
+
+# ---------------------------------------------------------------------------- 实验目录
+# 每个实验写在自己的目录 experiment_root/experiment_name/ 下：config.yml（本次参数快照）、train_data.txt（训练数据，
+# 带规则 / 观测 / 动作版本号）、checkpoints/latest.pth（完整训练状态）、checkpoints/best.pth、train.log。
+# 新实验拒绝使用已有实验的目录。完整续训：python train_splendor.py --resume experiments/<experiment_name>
+# （用该目录的 config.yml；版本、结构、每个张量的键都必须一致，否则报错）
+experiment_root: experiments
+experiment_name: auto_r007
+# 新实验只用某个 checkpoint 的网络权重初始化（不带优化器、计数、数据、随机状态）。
+# init_weights_strict: True 时张量的键和形状必须完全一致，False 时只载入匹配的张量（差异写进日志）
+# R007：R006 latest（观测版本 2，带教约 107 个 iteration）
+init_weights_path: experiments/auto_r006/checkpoints/latest.pth
+init_weights_strict: True
+# 新实验可选：用另一个实验的训练数据（版本必须一致）预先装满回放池；fill = 只装入，train = 装入并按 train_sample_reuse 训练
+warm_start_data_path: null
+warm_start_data_mode: fill
+# 每多少个 iteration 另存一份权重（checkpoints/weights_iteration_XXXXX.pth）；0 = 不存
+checkpoint_archive_every: 10
+
+# ---------------------------------------------------------------------------- workflow（24 线程 CPU + RTX PRO 6000）
+# 对局进程数；0 = 在训练进程内单线程对局（调试 / 无 GPU）。推理进程 1 个独占 CPU 0，对局进程用其余 CPU。
+# 判断依据见日志：game_worker 行的 "process CPU"（接近 100% 说明该进程的 GIL 已用满）与 "mean prediction round trip"，
+# predict_batch_process 行的 "mean batch" 与 "GPU wait"（GPU 是否成为瓶颈）
+num_game_process: 22
+# 每个对局进程在一个线程里同时下 num_game_groups_per_process x num_games_per_group 局（rl/splendor_mcts.py 的搜索是生成器）：
+# 一组对局都走到需要网络估值时，把整组请求写进共享内存、发一条消息给推理进程；等结果的同时推进另一组。
+# 没有线程间的 GIL 争抢，也没有逐个请求的管道收发
+num_game_groups_per_process: 2
+num_games_per_group: 12
+# 推理进程数：多个进程共用一块 GPU 会互相抢占、慢很多（实测 1 个进程是 4 个进程的 8 倍），保持 1
+num_predict_process: 1
+# 推理进程的 batch 上限（按整组请求累加，实际最多再多出一组）。GPU 空闲时收到第一组后最多再等
+# predict_batch_wait_seconds 凑 batch；GPU 忙时（流水线）把计算期间到达的各组凑成下一个 batch
+predict_batch_size: 512
+predict_batch_wait_seconds: 0.002
+# GPU 上最多同时排队的 batch 数（1 = 上一个 batch 算完、取完结果才发下一个；最大 2）。GPU 在算 batch k 时，
+# 收到的请求凑够 predict_early_launch_rows 就立即把 batch k+1 排到它后面，GPU 不用等推理进程取结果、回消息
+predict_max_in_flight: 2
+predict_early_launch_rows: 128
+# CPU 绑定（仅 Linux，null = 不绑定）。i7-13700KF：逻辑 CPU 0-15 是 8 个性能核（0/1、2/3… 为同一物理核的两个超线程），
+# 16-23 是能效核。推理进程独占性能核 0（它的超线程兄弟 1 空出来），对局进程用其余 CPU
+predict_process_cpu_affinity: '0'
+game_process_cpu_affinity: '2-23'
+stats_log_interval: 60
+
+# ---------------------------------------------------------------------------- loop
+# 对局进程与推理进程在整个实验中常驻，每个 iteration 只把新权重发给推理进程。自对弈不停：上一轮最慢的几局还在下时
+# 下一轮的对局已经开始；一个 iteration = 接下来完成的 num_self_play_games_per_iteration 局 -> 训练 -> 发布新权重，
+# 每 eval_model_per_iteration 个 iteration 发起一次评估（评估对局与自对弈在同一个进程池里同时进行）。手动停止即可
+num_iterations: 200     # 本轮上限（约 9 小时）；auto_research 的 watcher 按时间预算提前结束
+num_self_play_games_per_iteration: 1024
+# 所有对局槽位之外，自对弈任务队列里再多排的局数（保证进程不空等；评估任务排在它们后面，很快开始）
+self_play_queue_margin: 64
+eval_model_per_iteration: 5
+# 评估局数，须为 6 的倍数（6 种座位安排，相邻两局同种子互补座位）。胜率估计的标准差约 0.5/sqrt(局数)：192 局约 0.036
+eval_task_num_games: 192
+eval_seed: 1000000000
+# 新模型占两个座位，势均力敌时胜率 0.5。胜率 = 新模型在全部评估局上的得分 / 局数：按分数结束的局取新模型两个座位的
+# 胜率份额，其余局（四人连续跳过的平局、超过 max_game_turns 的截断局、失败或缺失的局）都按平局 0.5 计入分母。
+# 自对弈始终用最新模型（AlphaZero），best 只是记录评估中胜出的版本
+update_model_win_rate_thres: 0.55
+# 完成率 =（按分数结束 + 四人连续跳过平局）/ 评估局数，低于此值的评估不晋升新模型
+eval_min_completion_rate: 0.9
+# R002：自对弈对局以 self_play_bot_prob 的概率让一个座位（由对局种子决定）换成规则机器人；机器人不产生样本，模型座位按真实胜负学习
+self_play_bot_prob: 0.5   # R004：0.15 -> 0.5
+# R004：有机器人的对局里机器人座位数从这个列表里均匀抽取（null = 只有 1 个，R002 / R003 的抽法）
+self_play_bot_seat_counts: [1, 2]
+self_play_bot_opponents: ['bot:lookahead', 'bot:heuristic']
+# R003：价值目标 = TD(λ) 回报 G_i = (1 - λ) V_{i+1} + λ G_{i+1}（train_splendor.lambda_returns）。V 是之后每一个经过搜索的决策
+# （全量与快速，机器人座位的步跳过）的搜索价值向量：根节点上被选动作的平均回传值（rl/splendor_mcts root_search_value），
+# 最后一步的回报是真实结果。null / 1 = 只用真实结果（R002 及之前）。开局的样本主要由约 20 步之后的搜索价值自举，
+# 目标方差远小于"四人局 100 步后谁赢"。截断局仍不监督价值。held_out 指标仍对真实结果计算（与之前各轮可比），
+# held_out_target 对训练目标计算（与回放池可比）
+value_target_lambda: 0.95
+# 策略带教（train_splendor.play_game_iter）：记录的策略目标 = (1 - w) π' + w e_t，e_t 是 policy_teacher 在该局面的动作。
+# 只在模型座位的全量搜索样本上生效；null / 0 = 关
+policy_teacher: bot:lookahead
+policy_teacher_weight: 0.25
+# 基准：每次评估时，被评估的模型占 1 个座位、另外 3 个座位是规则机器人（splendor/bots.py），同一副发牌下模型轮流坐四个座位。
+# 与 best 的对比是相对的，这里是固定参照：势均力敌时胜率份额 0.25。lookahead 是"一般水平玩家"的代理（对 3 个 heuristic
+# 胜率份额约 0.75-0.8，自己人之间约 25 轮结束），目标：对 3 个 lookahead 的胜率份额 >= 0.50
+bench_opponents: ['bot:lookahead', 'bot:heuristic']
+bench_num_games: 96          # 每个对手的局数（4 的倍数）
+bench_seed: 3000000000       # 每轮用同一批发牌，各轮可直接比较
+bench_every_eval_rounds: 1
+# 超过 max_game_turns 的对局截断：没有结果，这些局面的价值不参与训练（权重 0，策略目标照常训练），
+# 搜索中到达截断局面时用价值网络估值，不当成"四人皆负"
+max_game_turns: 400
+# 持币上限规则：True = 官方规则，超过 10 枚须逐枚退回；False = 旧规则，禁止超过 10 枚
+# 没有合法动作的玩家被迫跳过，四人连续跳过判平局（splendor/engine.py，RULES_VERSION 2）
+discard_over_limit: True
+
+# ---------------------------------------------------------------------------- 训练数据（防止价值网络背答案）
+# 同一局的各个局面高度相关、共享同一个终局结果。全部入池时价值网络会记住"这一局谁赢"（训练集 value MSE 0.02、
+# 新数据上 0.26，比恒定预测 0.19 还差），所以每局只随机取 num_samples_per_game 个局面（只从全量搜索的局面里取）
+num_samples_per_game: 12   # R001：全量搜索变多（约 19 个/局），5 会丢掉一半以上的搜索算力
+# 每条样本平均被训练的次数：每个 iteration 训练 新样本数 * train_sample_reuse / batch_size 步（小数部分累计到下一轮）。
+# 之前是 batch 512 / 每 64 条一步 = 8 次。日志里 held-out 与 replay buffer 两组 value 指标接近时，说明没有过拟合，可以适当调高
+train_sample_reuse: 1.5
+# 回放池中样本少于此值不训练（约 2 个 iteration 的数据）
+first_train_data_step: 10240
+log_step_num: 100
+
+# ---------------------------------------------------------------------------- MCTS
+# Gumbel AlphaZero（Danihelka et al. 2022，实现对照 DeepMind mctx），算法见 rl/splendor_mcts.py。
+# 自对弈用 playout cap randomization（KataGo）：每步以 mcts_full_search_prob 的概率做全量搜索并记录为训练样本，
+# 其余步做快速搜索、不记录。每局约 125 步，0.06 -> 平均约 7.5 个全量搜索局面（再从中取 num_samples_per_game 个），
+# 平均每步约 0.06*128 + 0.94*16 ≈ 23 次模拟（之前每步 64 次），同样的算力多下约 3 倍的对局
+mcts_full_search_prob: 0.15   # R001：0.06 -> 0.15
+# R002：有玩家达到这个分数后每一步都做全量搜索并可被选为样本（null = 关）。终局占决策约 8–12%，是胜负已可预测、
+# 价值可学、战术决定胜负的阶段；v4 的样本里只有约 8% 来自这里，策略在终局与搜索目标的差距最大（KL 0.93）
+mcts_endgame_full_search_points: 13   # R003：11 -> 13。R002 的样本 36% 来自 ≥ 11 分的局面（R001 8%），开局只剩 44%
+num_mcts_simulation_per_step: 256          # 全量搜索；R001：128 -> 256
+# 根节点 Sequential Halving 的候选动作数 m，实际取 min(m, 合法动作数)；每步合法动作中位数约 26
+mcts_max_num_considered_actions: 8   # R007：32 -> 8（配合对手模型，深度花在自己的回合上）
+mcts_fast_num_simulation: 24               # 快速搜索；R001：16 -> 24
+mcts_fast_max_num_considered_actions: 8
+# 评估：每步都是全量搜索、贪心（Gumbel 噪声为 0）
+eval_num_mcts_simulation_per_step: 128   # R007：64 -> 128（训练中的评估与基准；独立基准用 256）
+eval_mcts_max_num_considered_actions: 8   # R007：32 -> 8
+# 搜索里其他玩家怎么走（rl/splendor_mcts.SplendorMCTS opponent_policy）：max_n = 每个节点按自己的价值选（旧行为）；
+# prior = 其他玩家走网络先验的 argmax，不分支（对手模型）；bot:<policy> 只作诊断
+mcts_opponent_policy: prior
+eval_mcts_opponent_policy: prior
+# 自对弈时的 Gumbel 噪声尺度；评估时固定为 0
+mcts_gumbel_scale: 1.0
+# σ(q) = (mcts_maxvisit_init + max N) * mcts_value_scale * q̂，mctx 默认 0.1 / 50
+mcts_value_scale: 0.1
+mcts_maxvisit_init: 50.0
+# 是否把补全后的 Q 在节点内按合法动作 min-max 缩放到 [0, 1]
+mcts_rescale_values: False   # R002：True -> False。我们的 Q 是 [0, 1] 的胜率份额，不需要 mctx 为无界价值设计的缩放；
+                             # 缩放会把几乎相同的 Q 拉开成 0..σ 的满幅差异，使目标变成"噪声最大的那个动作"的近似 one-hot
+# AlphaGo 叶节点估值 V(s_L) = (1 - λ) * v_θ(s_L) + λ * z_L。0 = AlphaGo Zero（只用价值网络，不 rollout）
+mcts_rollout_lambda: 0.0
+mcts_rollout_policy: 'heuristic'  # choices: 'heuristic', 'random'（splendor/bots.py）
+mcts_max_search_depth: 64
+# 每次网络评估前随机置换可互换的槽位（市场牌 / 贵族 / 预留牌），AlphaGo Zero 的随机对称变换。
+# 现在的网络结构对这些置换严格不变（见 rl/splendor_model.py），开启没有作用，只多花时间
+mcts_random_symmetry: False
+
+# ---------------------------------------------------------------------------- model
+model_param_dict:
+    device: 'auto'   # auto: cuda > mps > cpu
+    # 每个实体（市场牌、预留牌、贵族）是一个 token（各字段 embedding 之和），其余字段各一个 token：290 个字段 -> 102 个 token。
+    # 同组槽位共享位置 embedding，加上指针式动作头，网络对槽位置换严格等变：同一局面换个摆放顺序不会被当成新局面
+    embedding_dim: 256
+    transformer_head_dim: 64   # embedding_dim 须能被它整除
+    num_layers: 6
+    dropout: 0.1
+    # embedding（字段 + 位置之和）初始化的总幅度，内容与位置各占一半方差。
+    # auto = 一个 pre-norm 子层写入残差流的幅度 sqrt(1/18)≈0.236；null = PyTorch 默认 N(0, 1)
+    embedding_init_rms: auto
+    dim_feedforward: 1024
+    # 'high' = float32 矩阵乘法走 TF32 张量核心；null = 不设置
+    float32_matmul_precision: high
+    # batch 不小于此值时推理用 bfloat16 自动混合精度（小 batch 受 kernel 启动开销限制，bf16 反而更慢）；null = 不用
+    inference_bf16_min_batch: 64
+    # 推理进程用 CUDA Graphs 预先录制这些 batch 大小的前向（实际 batch 向上补齐到最近一档）；最大一档应不小于 predict_batch_size
+    inference_cuda_graph_batch_sizes: [8, 16, 24, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576]
+    batch_size: 256
+    # AdamW；权重衰减（解耦）只作用于矩阵和 embedding，不作用于 bias / LayerNorm
+    learning_rate: 0.00005   # R005：3e-5 -> 5e-5（新字段的嵌入从随机开始）
+    lr_warmup_steps: 100
+    # R001：学习率 = learning_rate x 预热 x lr_schedule（按本实验的训练步数，rl/splendor_model.lr_factor）。
+    # 每一步训练前写入优化器，续训时由 config 决定，不从 checkpoint 恢复。分段线性：4000 步降到 1/4，10000 步降到 1/10
+    lr_schedule: {type: piecewise, points: [[0, 1.0], [6000, 0.5], [12000, 0.3]]}   # R005：5e-5 -> 2.5e-5 -> 1.5e-5
+    weight_decay: 0.1
+    adam_betas: [0.9, 0.99]
+    grad_clip_norm: 1.0
+    # 价值头：N_PLAYERS + 1 类（各座位获胜 / 无人获胜）的 softmax 交叉熵；平局为四个座位各 0.25，"无人获胜"不再有目标
+    # （保留该类以兼容旧 checkpoint）。截断局的样本不计入价值损失。权重同 MuZero 的 0.25
+    value_loss_weight: 1.0   # R002：0.25 -> 1.0（共享主干此前主要由策略损失塑造）
+    # 训练样本随机置换槽位。网络已对置换严格不变，开启没有作用
+    train_symmetry_augmentation: False
+    # 回放池约为最近 20 个 iteration 的数据（每个 iteration 约 1024 局 x 5 = 5120 条）
+    transition_buffer_len: 150000   # R001：约 12 个 iteration 的数据
+    num_inference_per_step: 2000   # show prediction result per steps
+    num_data_print_per_inference: 3
+
+# ============================================================================ 最终模型（models/splendor_final，2026-11-07）
+# 权重：R007 第 80 个 iteration（experiments/auto_r007/checkpoints/weights_iteration_00080.pth）。
+# 部署搜索 = 以下三项（独立基准用本文件 + benchmark_splendor.py --sims 512）：
+#   eval_num_mcts_simulation_per_step: 512
+#   eval_mcts_max_num_considered_actions: 8
+#   eval_mcts_opponent_policy: prior
+# 上面的 eval_num_mcts_simulation_per_step 128 是训练中评估用的，部署时用 512。
