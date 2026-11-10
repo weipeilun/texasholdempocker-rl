@@ -2,6 +2,8 @@
 let state = null;
 let renderedVersion = -1;
 let lastFrameSeq = -1;
+let armFrameSeq = "";
+let armImageURL = null;
 let setupDirty = false;
 let localError = null;
 
@@ -159,21 +161,71 @@ function renderManual(g) {
     : "";
 }
 
+function renderArm() {
+  const arm = state.arm;
+  $("arm-panel").classList.toggle("hidden", !arm);
+  if (!arm) return;
+  $("arm-camera-toggle").disabled = !arm.control;
+  $("arm-camera-toggle").textContent = arm.running ? "关闭机械臂相机" : "打开机械臂相机";
+  $("arm-auto-toggle").disabled = !arm.control || (!arm.auto && (
+    !arm.running || !state.frame.time || !arm.vision_configured || !state.vision.enabled));
+  $("arm-auto-toggle").textContent = arm.auto ? "停止自动取景" : "启用机械臂自动取景";
+  const labels = {clear: "清楚", cropped: "出画", blocked: "被遮挡", unreadable: "看不清", unknown: "待确认", retained: "已保留"};
+  const coverage = Object.entries(arm.coverage).map(([region, value]) => `${region} ${labels[value]}`);
+  const messages = [arm.message, arm.error, coverage.join(" · ")];
+  if (arm.running && !arm.vision_configured) messages.push("请在设置中配置视觉模型后开始识别");
+  $("arm-status").textContent = messages.filter(Boolean).join(" · ");
+}
+
+async function pollArmPreview() {
+  try {
+    if (state?.arm?.running) {
+      const r = await fetch(`/api/arm/frame.jpg?after=${armFrameSeq}`);
+      if (r.status === 200) {
+        const blob = await r.blob();
+        if (state?.arm?.running) {
+          if (armImageURL) URL.revokeObjectURL(armImageURL);
+          armImageURL = URL.createObjectURL(blob);
+          armFrameSeq = r.headers.get("X-Frame-Seq") || "";
+          $("preview").src = armImageURL;
+          $("preview").classList.remove("hidden");
+        }
+      }
+    }
+  } catch (e) {
+    // The regular state poll reports connection and camera errors.
+  } finally {
+    setTimeout(pollArmPreview, state?.arm?.running ? 160 : 500);
+  }
+}
+
 function renderVision() {
   const v = state.vision;
   const f = state.frame;
   const age = f.time ? Math.round(state.now - f.time) : null;
   $("frame-info").textContent = f.time ? `${f.source || ""} · ${age} 秒前 · ${Math.round(f.bytes / 1024)} KB` : "没有画面";
-  if (f.seq !== lastFrameSeq && f.seq > 0) {
-    lastFrameSeq = f.seq;
-    $("preview").src = `/api/frame.jpg?seq=${f.seq}`;
+  renderArm();
+  if (!state.arm?.running) {
+    if (armImageURL) {
+      URL.revokeObjectURL(armImageURL);
+      armImageURL = null;
+      armFrameSeq = "";
+      lastFrameSeq = -1;
+    }
+    $("preview").classList.toggle("hidden", !f.time);
+    if (f.time && f.seq !== lastFrameSeq) {
+      lastFrameSeq = f.seq;
+      $("preview").src = `/api/frame.jpg?seq=${f.seq}`;
+    }
+  } else if (!f.time) {
+    $("preview").classList.add("hidden");
   }
   const last = v.last;
   let line = v.enabled ? "自动识别：开" : "自动识别：已暂停";
   if (v.busy) line += " · 识别中…";
   if (last) {
     line += last.ok
-      ? ` · 上次识别 <span class="ok">成功</span> ${timeText(last.time)}（${last.meta.model}，${last.meta.latency} 秒）`
+      ? ` · 上次识别 <span class="ok">成功</span> ${timeText(last.time)}（${esc(last.meta.model)}，${last.meta.latency} 秒）`
       : ` · 上次识别 <span class="bad">失败</span> ${timeText(last.time)}：${esc(last.error)}`;
   }
   if (state.owner) line += ` · 使用 ${esc(state.owner)} 的视觉设置`;
@@ -183,7 +235,8 @@ function renderVision() {
   $("vision-status").innerHTML = line;
   $("vision-toggle").textContent = v.enabled ? "暂停自动识别" : "恢复自动识别";
   const g = state.game;
-  $("reading").textContent = g && g.reading ? JSON.stringify(g.reading, null, 1) : "（还没有识别结果）";
+  const reading = g?.reading || state.arm?.reading;
+  $("reading").textContent = reading ? JSON.stringify(reading, null, 1) : "（还没有识别结果）";
 }
 
 function render() {
@@ -238,6 +291,8 @@ async function poll() {
     renderedVersion = -1;
     render();
   };
+  $("arm-camera-toggle").onclick = () => act(state.arm.running ? "/api/arm/stop" : "/api/arm/start");
+  $("arm-auto-toggle").onclick = () => act("/api/arm/auto", { enabled: !state.arm.auto });
   $("vision-now").onclick = () => act("/api/vision/now");
   $("vision-toggle").onclick = () => act("/api/vision/toggle", { enabled: !state.vision.enabled });
   $("use-my-vision").onclick = () => act("/api/game/use-my-vision");
@@ -256,4 +311,5 @@ async function poll() {
     if (confirm("撤销上一步？实体桌面也需要恢复到上一步的局面。")) act("/api/game/undo");
   };
   poll();
+  pollArmPreview();
 })();

@@ -133,7 +133,7 @@ class OfflineSession:
     def begin_from_reading(self):
         with self.lock:
             r = self.reading
-            if r is None or r.market is None or r.nobles is None:
+            if r is None or r.market is None or r.nobles is None or not self.reading_meta.get("usable", True):
                 raise ValueError("还没有完整识别出桌面的牌和贵族")
             if any(c in (None, UNKNOWN) for row in r.market for c in row):
                 raise ValueError("桌面上还有未识别的牌，请手动选择")
@@ -144,8 +144,9 @@ class OfflineSession:
         """a new reading of the table (TableState) from the vision model"""
         with self.lock:
             self.reading, self.reading_time, self.reading_meta = t, self.clock(), meta or {}
-            key = t.key()
-            self._repeat = self._repeat + 1 if key == self._last_key else 1
+            usable = self.reading_meta.get("usable", True)
+            key = t.key() if usable else None
+            self._repeat = (self._repeat + 1 if key == self._last_key else 1) if usable else 0
             self._last_key = key
             if not t.visible or t.issues:
                 text = "摄像头画面不完整或有看不清的地方" if not t.visible else "识别提示"
@@ -156,7 +157,7 @@ class OfflineSession:
             if self.phase == "setup":
                 self._setup_reading(t)
                 return
-            if self.phase != "play":
+            if self.phase != "play" or not usable:
                 return
             problems = validate(t, current_player=self.game.current_player)
             if problems:

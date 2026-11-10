@@ -61,6 +61,15 @@ class TableTest(unittest.TestCase):
         self.assertTrue(matches(table_of(g), read(g)))
         self.assertEqual(read(g).key(), table_of(g).key())
 
+    def test_bank_is_derived_from_four_complete_player_counts(self):
+        data = vision_json(new_game(random.Random(2)))
+        data["bank"] = [0] * 6  # stacked bank is ignored even if a model tries to count it
+        data["players"][0]["tokens"]["white"] = 2
+        data["players"][3]["tokens"]["gold"] = 1
+        self.assertEqual(normalize_vision(data).bank, [5, 7, 7, 7, 7, 4])
+        data["players"][3]["tokens"]["gold"] = None
+        self.assertIsNone(normalize_vision(data).bank)
+
     def test_near_card_and_unknown(self):
         g = new_game(random.Random(2))
         data = vision_json(g)
@@ -136,7 +145,7 @@ class SessionTest(unittest.TestCase):
         show(s, truth)
         s.begin_from_reading()
         bad = truth.clone()
-        bad.players[2].tokens[0] += 1   # a token appears from nowhere: totals broken
+        bad.players[2].tokens[0] = 8   # player counts alone exceed the supply
         show(s, bad)
         self.assertIn("reading_rules", s.alerts)
         bad = truth.clone()

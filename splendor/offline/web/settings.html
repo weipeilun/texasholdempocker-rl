@@ -14,8 +14,24 @@
   <main>
     <div id="msg" class="alert hidden"></div>
     <section class="panel">
-      <h2>接入 <small>OpenAI 或兼容 OpenAI 接口的中转服务（Chat Completions + 图片输入）。设置保存在服务器上，仅本账号使用</small></h2>
+      <h2>视觉模型</h2>
       <div class="form-grid">
+        <label for="vision_provider">接入方式</label>
+        <select id="vision_provider">
+          <option value="api">API Key（OpenAI 或兼容接口）</option>
+          <option value="chatgpt">ChatGPT 账号</option>
+        </select>
+      </div>
+      <div id="chatgpt-fields" class="form-grid hidden">
+        <label for="chatgpt-model">模型</label>
+        <select id="chatgpt-model"><option value="gpt-6.1-terra">GPT‑6.1 Terra</option></select>
+        <label>ChatGPT 登录</label>
+        <div class="row">
+          <button id="chatgpt-login">登录 ChatGPT</button>
+          <span id="chatgpt-status" class="small" role="status"></span>
+        </div>
+      </div>
+      <div id="api-fields" class="form-grid">
         <label for="base_url">API 地址</label>
         <input id="base_url" type="url" placeholder="https://api.openai.com/v1" />
         <label for="api_key">API Key</label>
@@ -30,6 +46,8 @@
           <input id="model" type="text" placeholder="或直接填写模型名" style="flex:1" />
           <button id="load_models">从接口读取模型列表</button>
         </div>
+      </div>
+      <div class="form-grid">
         <label>连接测试</label>
         <div class="row"><button id="test">保存并测试连接</button><span id="test_result" class="muted small"></span></div>
       </div>
@@ -88,7 +106,31 @@
       $("model_select").innerHTML = all.map((m) => `<option value="${esc(m)}"${m === current ? " selected" : ""}>${esc(m)}</option>`).join("");
       $("model").value = current || "";
     }
+    let chatgpt = { available: false, connected: false, signing_in: false };
+
+    function renderProvider() {
+      const selected = $("vision_provider").value === "chatgpt";
+      $("api-fields").classList.toggle("hidden", selected);
+      $("chatgpt-fields").classList.toggle("hidden", !selected);
+      $("vision_provider").querySelector('option[value="chatgpt"]').disabled = !chatgpt.available;
+      $("chatgpt-login").disabled = !chatgpt.available || chatgpt.signing_in;
+      $("chatgpt-login").textContent = chatgpt.connected ? "使用当前 ChatGPT 账号" : "登录 ChatGPT";
+      $("chatgpt-status").textContent = !chatgpt.available ? "请在支持 ChatGPT 登录的本机控制台使用管理员账号"
+        : chatgpt.signing_in ? "请在打开的 OpenAI 登录页完成登录"
+        : chatgpt.error || (chatgpt.connected ? "已检测到这台 Mac 的 ChatGPT 登录" : "请使用与 ChatGPT App 相同的账号");
+    }
+
+    async function pollChatGPT() {
+      while (chatgpt.signing_in) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        chatgpt = await api("/api/chatgpt");
+        renderProvider();
+      }
+    }
+
     function load(s) {
+      $("vision_provider").value = s.vision_provider || "api";
+      renderProvider();
       for (const k of FIELDS) $(k).value = s[k] === null || s[k] === undefined ? "" : s[k];
       $("hint_expected").checked = !!s.hint_expected;
       for (let i = 0; i < 4; i++) $("layout" + i).value = (s.layout || [])[i] || "";
@@ -98,14 +140,16 @@
       fillModels([], s.model);
     }
     function collect() {
-      const out = {};
+      const out = { vision_provider: $("vision_provider").value };
       for (const k of FIELDS) out[k] = $(k).value;
       for (const k of ["interval", "image_max_side", "jpeg_quality", "timeout"]) out[k] = +out[k];
       out.hint_expected = $("hint_expected").checked;
       out.layout = [0, 1, 2, 3].map((i) => $("layout" + i).value);
       out.model = $("model").value.trim() || $("model_select").value;
-      if ($("api_key").value) out.api_key = $("api_key").value.trim();
-      if ($("clear_api_key").checked) out.clear_api_key = true;
+      if (out.vision_provider === "api") {
+        if ($("api_key").value) out.api_key = $("api_key").value.trim();
+        if ($("clear_api_key").checked) out.clear_api_key = true;
+      }
       return out;
     }
     async function save() {
@@ -117,7 +161,28 @@
       await loadCards();
       const me = await api("/api/me");
       $("user").textContent = me.user;
-      load(await api("/api/settings"));
+      const settings = await api("/api/settings");
+      chatgpt = await api("/api/chatgpt");
+      load(settings);
+      if (chatgpt.available && !settings.api_key_set && settings.vision_provider === "api") {
+        $("vision_provider").value = "chatgpt";
+        renderProvider();
+      }
+      $("vision_provider").onchange = renderProvider;
+      $("chatgpt-login").onclick = async () => {
+        $("chatgpt-login").disabled = true;
+        try {
+          chatgpt = await api("/api/chatgpt/login", {});
+          renderProvider();
+          await pollChatGPT();
+          if (chatgpt.connected && $("vision_provider").value === "chatgpt") {
+            await save();
+            message("已连接 ChatGPT 并启用 GPT‑6.1 Terra", true);
+          }
+        } catch (e) { message(e.message); }
+        finally { renderProvider(); }
+      };
+      if (chatgpt.signing_in) pollChatGPT().catch(e => message(e.message));
       $("model_select").onchange = () => ($("model").value = $("model_select").value);
       $("save").onclick = async () => {
         try { await save(); message("已保存", true); } catch (e) { message(e.message); }
@@ -133,8 +198,12 @@
       $("test").onclick = async () => {
         $("test_result").textContent = "测试中…";
         try {
-          await save();
+          const saved = await save();
           const r = await api("/api/models");
+          if (saved.vision_provider === "chatgpt") {
+            $("test_result").textContent = "已连接本机 ChatGPT，当前模型 GPT‑6.1 Terra。可用下方「试识别」验证画面。";
+            return;
+          }
           const model = $("model").value;
           const has = r.models.includes(model);
           $("test_result").textContent = `连接成功，接口提供 ${r.models.length} 个模型；` + (has ? `包含 ${model}` : `列表里没有 ${model}（中转服务可能仍支持，请用“试识别”确认）`);

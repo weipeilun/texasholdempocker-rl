@@ -129,6 +129,8 @@ class Store:
             if key == "api_key" and not value:
                 continue                    # an empty field keeps the stored key (use clear_api_key)
             current[key] = value
+        if current["vision_provider"] not in ("api", "chatgpt"):
+            raise ValueError("请选择有效的视觉模型接入方式")
         if updates.get("clear_api_key"):
             current["api_key"] = ""
         for key, lo, hi in (("interval", 2, 120), ("image_max_side", 512, 4096), ("jpeg_quality", 50, 100),

@@ -164,8 +164,16 @@ class HttpTest(unittest.TestCase):
         # an illegal move on the table: alert, state unchanged
         before = self.state()["game"]["state"]
         bad = truth.clone()
-        for c in range(4):
-            bad.players[bad.current_player].tokens[c] += 1
+        # Change the wrong seat's tokens while preserving the physical totals,
+        # even when an earlier turn emptied one of the bank's colours.
+        tokens = bad.players[(bad.current_player + 1) % 4].tokens
+        if any(tokens):
+            c = next(i for i, count in enumerate(tokens) if count)
+            tokens[c] -= 1
+            bad.bank[c] += 1
+        else:
+            c = next(i for i, count in enumerate(bad.bank) if count)
+            tokens[c] += 1
             bad.bank[c] -= 1
         self.fake.truth = bad
         s = self.wait(lambda s: any(a["key"] == "unexplained" for a in s["game"]["alerts"]), timeout=40)

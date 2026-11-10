@@ -157,11 +157,14 @@ def matches(expected, observed):
 def validate(observed, current_player=None):
     """rule violations visible in one reading alone (wrong totals, a card twice, ...): a misreading or a bad table"""
     problems = []
-    if observed.bank is not None and all(s.tokens is not None for s in observed.seats):
-        for c in range(6):
-            total = observed.bank[c] + sum(s.tokens[c] for s in observed.seats)
-            if total != TOTALS[c]:
-                problems.append(f"{CN[c]}筹码总数为 {total}，应为 {TOTALS[c]}（银行加四位玩家）")
+    for c, available in enumerate(TOTALS):
+        players_total = sum(s.tokens[c] for s in observed.seats if s.tokens is not None)
+        if players_total > available:
+            problems.append(f"玩家持有 {players_total} 枚{CN[c]}筹码，超过总量 {available} 枚")
+        elif observed.bank is not None and all(s.tokens is not None for s in observed.seats):
+            total = observed.bank[c] + players_total
+            if total != available:
+                problems.append(f"{CN[c]}筹码总数为 {total}，应为 {available}（银行加四位玩家）")
     if observed.bank is not None and any(v < 0 for v in observed.bank):
         problems.append("银行筹码数为负")
     seen = []
@@ -214,6 +217,19 @@ def _counts(value, n):
     return out
 
 
+def _player_tokens(value):
+    """A deduction needs an explicit count for every colour."""
+    if isinstance(value, dict):
+        counts = {_color(key): count for key, count in value.items()}
+        if set(counts) != set(range(6)) or len(value) != 6:
+            return None
+        value = [counts[i] for i in range(6)]
+    if (not isinstance(value, (list, tuple)) or len(value) != 6
+            or any(type(count) is not int or count < 0 for count in value)):
+        return None
+    return list(value)
+
+
 def match_card(desc, level=None, exclude=()):
     """(card id or UNKNOWN or None, note). desc: {"color", "points", "cost": {...}, "level"?}; None = empty slot"""
     if desc is None or desc == "empty" or (isinstance(desc, dict) and desc.get("empty")):
@@ -255,7 +271,7 @@ def match_noble(desc):
     return best, f"贵族要求（{cost_text(cost)}）按最接近的 {noble_text(best)} 处理"
 
 
-def normalize_vision(data):
+def normalize_vision(data, *, strict=False):
     """vision model JSON (see vision.SCHEMA_TEXT) -> TableState; unreadable parts become None / UNKNOWN"""
     if not isinstance(data, dict):
         raise ValueError("识别结果不是 JSON 对象")
@@ -266,7 +282,6 @@ def normalize_vision(data):
         t.confidence = None if data.get("confidence") is None else float(data["confidence"])
     except (TypeError, ValueError):
         t.confidence = None
-    t.bank = _counts(data.get("bank"), 6)
     market = data.get("market")
     if isinstance(market, dict):
         rows = [market.get(str(level)) or market.get(level) or market.get(f"level{level}") for level in (1, 2, 3)]
@@ -283,9 +298,14 @@ def normalize_vision(data):
                 if cell == UNKNOWN:
                     out.append(UNKNOWN)
                     continue
-                cid, note = match_card(cell, level + 1)
+                try:
+                    cid, note = match_card(cell, level + 1)
+                except (TypeError, ValueError):
+                    cid, note = UNKNOWN, "发展卡等级读不清"
                 if note:
                     t.issues.append(note)
+                if strict and (note or (cid not in (None, UNKNOWN) and CARDS[cid].level != level + 1)):
+                    cid = UNKNOWN
                 out.append(cid)
             t.market.append(out)
     if isinstance(data.get("nobles"), list):
@@ -294,9 +314,12 @@ def normalize_vision(data):
             nid, note = match_noble(desc)
             if note:
                 t.issues.append(note)
+                if strict:
+                    ids = None
+                    break
             if nid:
                 ids.append(nid)
-        t.nobles = sorted(ids)
+        t.nobles = None if ids is None else sorted(ids)
     players = data.get("players")
     if isinstance(players, list):
         for k, p in enumerate(players[:4]):
@@ -310,7 +333,7 @@ def normalize_vision(data):
             if not 0 <= i < 4:
                 continue
             s = t.seats[i]
-            s.tokens = _counts(p.get("tokens"), 6)
+            s.tokens = _player_tokens(p.get("tokens"))
             s.bonuses = _counts(p.get("cards") or p.get("bonuses"), 5)
             if isinstance(p.get("reserved"), list):
                 ids = []
@@ -318,6 +341,8 @@ def normalize_vision(data):
                     cid, note = match_card(desc)
                     if note:
                         t.issues.append(f"玩家{i + 1} 预留牌：{note}")
+                        if strict:
+                            cid = UNKNOWN
                     if cid not in (None, UNKNOWN):
                         ids.append(cid)
                     elif cid == UNKNOWN:
@@ -330,9 +355,21 @@ def normalize_vision(data):
                     nid, note = match_noble(desc)
                     if note:
                         t.issues.append(f"玩家{i + 1}：{note}")
+                        if strict:
+                            ids = None
+                            break
                     if nid:
                         ids.append(nid)
-                s.nobles = sorted(ids)
+                s.nobles = None if ids is None else sorted(ids)
+    unreadable_seats = [str(i + 1) for i, seat in enumerate(t.seats) if seat.tokens is None]
+    if unreadable_seats:
+        t.issues.append(f"玩家{'、'.join(unreadable_seats)}的筹码未读全，暂不推算银行")
+    else:
+        bank = [total - sum(seat.tokens[i] for seat in t.seats) for i, total in enumerate(TOTALS)]
+        if min(bank) >= 0:
+            t.bank = bank
+        else:
+            t.issues.append("玩家持有的筹码超过总量，无法推算银行")
     return t
 
 

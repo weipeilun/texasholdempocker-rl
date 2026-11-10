@@ -47,7 +47,7 @@
           <h2>公共牌桌 <small id="turn-label"></small></h2>
           <div id="nobles" class="nobles"></div>
           <div id="market"></div>
-          <h2 style="margin-top:12px">银行</h2>
+          <h2 style="margin-top:12px">银行 <small>按玩家持有量推算</small></h2>
           <div id="bank" class="bank"></div>
         </section>
         <section class="panel">
@@ -62,7 +62,15 @@
       <div>
         <section class="panel">
           <h2>摄像头与识别 <small id="frame-info"></small></h2>
-          <img id="preview" class="preview" alt="摄像头画面" />
+          <div id="arm-panel" class="hidden">
+            <div class="row">
+              <button id="arm-camera-toggle">打开机械臂相机</button>
+              <button id="arm-auto-toggle">启用机械臂自动取景</button>
+              <small>自动扫描期间请先保持桌面不动</small>
+            </div>
+            <div id="arm-status" class="status-line" aria-live="polite"></div>
+          </div>
+          <img id="preview" class="preview hidden" alt="摄像头画面" />
           <div class="status-line" id="vision-status"></div>
           <div class="row" style="margin-top:8px">
             <button id="vision-now">立即识别</button>
